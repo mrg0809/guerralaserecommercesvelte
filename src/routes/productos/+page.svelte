@@ -56,14 +56,6 @@
 		loadProducts();
 	}
 
-	$effect(() => {
-		// Reactive search filter
-		if (searchTerm) {
-			// This is a simple client-side filter
-			// For production, you might want to use Supabase's text search
-		}
-	});
-
 	let filteredProducts = $derived(
 		searchTerm
 			? products.filter((p) => p.name.toLowerCase().includes(searchTerm.toLowerCase()))

@@ -85,7 +85,9 @@
 		});
 	}
 
+	// Reload orders when filter changes
 	$effect(() => {
+		void filterStatus; // Track filterStatus changes
 		loadOrders();
 	});
 </script>
