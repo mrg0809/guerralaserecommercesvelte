@@ -223,7 +223,7 @@
 				</button>
 			</div>
 
-			<form on:submit|preventDefault={saveCategory} class="p-6 space-y-4">
+			<form onsubmit={(e) => { e.preventDefault(); saveCategory(); }} class="p-6 space-y-4">
 				<div>
 					<label class="block text-sm font-semibold mb-2">Nombre *</label>
 					<input

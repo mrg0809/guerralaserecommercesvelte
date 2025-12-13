@@ -134,7 +134,7 @@
 		<div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
 			<!-- Checkout Form -->
 			<div class="lg:col-span-2">
-				<form on:submit|preventDefault={submitOrder} class="space-y-6">
+				<form onsubmit={(e) => { e.preventDefault(); submitOrder(); }} class="space-y-6">
 					<!-- Customer Info -->
 					<div class="bg-white rounded-lg shadow-md p-6">
 						<h2 class="text-2xl font-bold mb-4">Información de Contacto</h2>
