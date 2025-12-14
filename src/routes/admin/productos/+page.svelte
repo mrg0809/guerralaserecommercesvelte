@@ -2,13 +2,21 @@
 	import { onMount } from 'svelte';
 	import { supabase } from '$lib/supabaseClient';
 	import { formatPrice, generateSlug } from '$lib/utils';
-	import type { Product, Category } from '$lib/types';
+	import type { Product, Category, ProductSpecification, Discount, Tag } from '$lib/types';
 
 	let products: Product[] = $state([]);
 	let categories: Category[] = $state([]);
+	let discounts: Discount[] = $state([]);
+	let allTags: Tag[] = $state([]);
 	let loading = $state(true);
 	let showModal = $state(false);
 	let editingProduct = $state<Product | null>(null);
+	let categoryHierarchy: Record<string, string> = $state({});
+	let specifications: ProductSpecification[] = $state([]);
+	let newSpec = $state({ key: '', value: '', data_type: 'text' });
+	let selectedDiscounts: string[] = $state([]);
+	let selectedTags: string[] = $state([]);
+	let newTagName = $state('');
 	
 	let formData = $state({
 		name: '',
@@ -26,6 +34,8 @@
 	onMount(async () => {
 		await loadProducts();
 		await loadCategories();
+		await loadDiscounts();
+		await loadTags();
 	});
 
 	async function loadProducts() {
@@ -45,6 +55,41 @@
 		const { data } = await supabase.from('categories').select('*').eq('is_active', true);
 		if (data) {
 			categories = data;
+			buildCategoryHierarchy();
+		}
+	}
+
+	function buildCategoryHierarchy() {
+		categoryHierarchy = {};
+		categories.forEach(cat => {
+			if (cat.parent_id) {
+				const parent = categories.find(c => c.id === cat.parent_id);
+				if (parent) {
+					categoryHierarchy[cat.id] = `${parent.name} → ${cat.name}`;
+				}
+			} else {
+				categoryHierarchy[cat.id] = cat.name;
+			}
+		});
+	}
+
+	async function loadDiscounts() {
+		const { data } = await supabase
+			.from('discounts')
+			.select('*')
+			.eq('is_active', true)
+			.order('name');
+
+		if (data) {
+			discounts = data;
+		}
+	}
+
+	async function loadTags() {
+		const { data } = await supabase.from('tags').select('*').order('name');
+
+		if (data) {
+			allTags = data;
 		}
 	}
 
@@ -63,6 +108,9 @@
 				stock_quantity: product.stock_quantity,
 				sku: product.sku || ''
 			};
+			loadProductSpecifications(product.id);
+			loadProductDiscounts(product.id);
+			loadProductTags(product.id);
 		} else {
 			editingProduct = null;
 			formData = {
@@ -77,8 +125,96 @@
 				stock_quantity: 0,
 				sku: ''
 			};
+			specifications = [];
+			selectedDiscounts = [];
+			selectedTags = [];
 		}
+		newSpec = { key: '', value: '', data_type: 'text' };
+		newTagName = '';
 		showModal = true;
+	}
+
+	async function loadProductDiscounts(productId: string) {
+		const { data } = await supabase
+			.from('product_discounts')
+			.select('discount_id')
+			.eq('product_id', productId);
+
+		if (data) {
+			selectedDiscounts = data.map(d => d.discount_id);
+		}
+	}
+
+	async function loadProductTags(productId: string) {
+		const { data } = await supabase
+			.from('product_tags')
+			.select('tag_id')
+			.eq('product_id', productId);
+
+		if (data) {
+			selectedTags = data.map(t => t.tag_id);
+		}
+	}
+
+	async function loadProductSpecifications(productId: string) {
+		const { data } = await supabase
+			.from('product_specifications')
+			.select('*')
+			.eq('product_id', productId);
+
+		if (data) {
+			specifications = data;
+		}
+	}
+
+	async function addSpecification() {
+		if (!newSpec.key || !newSpec.value) {
+			alert('Por favor completa clave y valor de la especificación');
+			return;
+		}
+
+		if (!editingProduct) {
+			alert('Primero debes crear el producto');
+			return;
+		}
+
+		try {
+			const { data, error } = await supabase
+				.from('product_specifications')
+				.insert([
+					{
+						product_id: editingProduct.id,
+						specification_key: newSpec.key,
+						specification_value: newSpec.value,
+						data_type: newSpec.data_type
+					}
+				])
+				.select();
+
+			if (error) throw error;
+
+			if (data) {
+				specifications = [...specifications, ...data];
+				newSpec = { key: '', value: '', data_type: 'text' };
+			}
+		} catch (error: any) {
+			alert('Error al agregar especificación: ' + error.message);
+		}
+	}
+
+	async function removeSpecification(specId: string) {
+		try {
+			const { error } = await supabase
+				.from('product_specifications')
+				.delete()
+				.eq('id', specId);
+
+			if (error) throw error;
+
+			specifications = specifications.filter(s => s.id !== specId);
+		} catch (error: any) {
+			alert('Error al eliminar especificación: ' + error.message);
+		}
 	}
 
 	function closeModal() {
@@ -94,6 +230,8 @@
 
 	async function saveProduct() {
 		try {
+			let productId: string;
+
 			if (editingProduct) {
 				const { error } = await supabase
 					.from('products')
@@ -101,16 +239,83 @@
 					.eq('id', editingProduct.id);
 
 				if (error) throw error;
+				productId = editingProduct.id;
 			} else {
-				const { error } = await supabase.from('products').insert([formData]);
+				const { data, error } = await supabase
+					.from('products')
+					.insert([formData])
+					.select();
 
 				if (error) throw error;
+				if (!data || data.length === 0) throw new Error('No se pudo crear el producto');
+				productId = data[0].id;
 			}
+
+			// Guardar descuentos
+			await saveProductDiscounts(productId);
+
+			// Guardar etiquetas
+			await saveProductTags(productId);
 
 			closeModal();
 			await loadProducts();
 		} catch (error: any) {
 			alert('Error al guardar producto: ' + error.message);
+		}
+	}
+
+	async function saveProductDiscounts(productId: string) {
+		// Eliminar descuentos existentes
+		await supabase.from('product_discounts').delete().eq('product_id', productId);
+
+		// Agregar nuevos descuentos seleccionados
+		if (selectedDiscounts.length > 0) {
+			const discountInserts = selectedDiscounts.map(discountId => ({
+				product_id: productId,
+				discount_id: discountId
+			}));
+
+			await supabase.from('product_discounts').insert(discountInserts);
+		}
+	}
+
+	async function saveProductTags(productId: string) {
+		// Eliminar tags existentes
+		await supabase.from('product_tags').delete().eq('product_id', productId);
+
+		// Agregar nuevas tags seleccionadas
+		if (selectedTags.length > 0) {
+			const tagInserts = selectedTags.map(tagId => ({
+				product_id: productId,
+				tag_id: tagId
+			}));
+
+			await supabase.from('product_tags').insert(tagInserts);
+		}
+	}
+
+	async function createNewTag() {
+		if (!newTagName.trim()) {
+			alert('Por favor ingresa un nombre para la etiqueta');
+			return;
+		}
+
+		try {
+			const slug = generateSlug(newTagName);
+			const { data, error } = await supabase
+				.from('tags')
+				.insert([{ name: newTagName, slug }])
+				.select();
+
+			if (error) throw error;
+
+			if (data && data.length > 0) {
+				allTags = [...allTags, data[0]];
+				selectedTags = [...selectedTags, data[0].id];
+				newTagName = '';
+			}
+		} catch (error: any) {
+			alert('Error al crear etiqueta: ' + error.message);
 		}
 	}
 
@@ -227,6 +432,12 @@
 								>
 									Editar
 								</button>
+								<a
+									href="/admin/productos/{product.id}/especificaciones"
+									class="text-purple-600 hover:text-purple-800 mr-3"
+								>
+									Specs
+								</a>
 								<button
 									onclick={() => deleteProduct(product.id)}
 									class="text-red-600 hover:text-red-800"
@@ -327,8 +538,8 @@
 							class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
 						>
 							<option value="">Sin categoría</option>
-							{#each categories as category}
-								<option value={category.id}>{category.name}</option>
+							{#each Object.entries(categoryHierarchy) as [id, label]}
+								<option value={id}>{label}</option>
 							{/each}
 						</select>
 					</div>
@@ -343,6 +554,100 @@
 					</div>
 				</div>
 
+				<!-- Descuentos -->
+				<div>
+					<label class="block text-sm font-semibold mb-2">Descuentos Aplicables</label>
+					<div class="border border-gray-300 rounded-lg p-3 max-h-40 overflow-y-auto">
+						{#if discounts.length === 0}
+							<p class="text-sm text-gray-500">No hay descuentos disponibles</p>
+						{:else}
+							{#each discounts as discount}
+								<label class="flex items-center gap-2 py-1">
+									<input
+										type="checkbox"
+										value={discount.id}
+										checked={selectedDiscounts.includes(discount.id)}
+										onchange={(e) => {
+											if (e.currentTarget.checked) {
+												selectedDiscounts = [...selectedDiscounts, discount.id];
+											} else {
+												selectedDiscounts = selectedDiscounts.filter(d => d !== discount.id);
+											}
+										}}
+										class="w-4 h-4"
+									/>
+									<span class="text-sm">
+										{discount.name} ({discount.discount_type === 'percentage' ? discount.discount_value + '%' : '$' + discount.discount_value})
+									</span>
+								</label>
+							{/each}
+						{/if}
+					</div>
+				</div>
+
+				<!-- Etiquetas -->
+				<div>
+					<label class="block text-sm font-semibold mb-2">Etiquetas</label>
+					<div class="border border-gray-300 rounded-lg p-3">
+						<div class="flex flex-wrap gap-2 mb-3">
+							{#if selectedTags.length === 0}
+								<p class="text-sm text-gray-500">Sin etiquetas</p>
+							{:else}
+								{#each selectedTags as tagId}
+									{@const tag = allTags.find(t => t.id === tagId)}
+									{#if tag}
+										<span class="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm flex items-center gap-1">
+											{tag.name}
+											<button
+												type="button"
+												onclick={() => {
+													selectedTags = selectedTags.filter(t => t !== tagId);
+												}}
+												class="hover:text-blue-900"
+											>
+												✕
+											</button>
+										</span>
+									{/if}
+								{/each}
+							{/if}
+						</div>
+
+						<div class="border-t pt-3">
+							<p class="text-xs font-semibold mb-2">Seleccionar etiquetas:</p>
+							<div class="flex flex-wrap gap-2 mb-3 max-h-32 overflow-y-auto">
+								{#each allTags.filter(t => !selectedTags.includes(t.id)) as tag}
+									<button
+										type="button"
+										onclick={() => {
+											selectedTags = [...selectedTags, tag.id];
+										}}
+										class="bg-gray-100 text-gray-700 px-3 py-1 rounded-full text-sm hover:bg-gray-200"
+									>
+										+ {tag.name}
+									</button>
+								{/each}
+							</div>
+
+							<div class="flex gap-2">
+								<input
+									type="text"
+									bind:value={newTagName}
+									placeholder="Nueva etiqueta..."
+									class="flex-1 px-3 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+								/>
+								<button
+									type="button"
+									onclick={createNewTag}
+									class="bg-green-600 text-white px-4 py-1 rounded text-sm hover:bg-green-700"
+								>
+									Crear
+								</button>
+							</div>
+						</div>
+					</div>
+				</div>
+
 				<div class="flex gap-4">
 					<label class="flex items-center gap-2">
 						<input type="checkbox" bind:checked={formData.is_active} class="w-4 h-4" />
@@ -354,6 +659,79 @@
 						<span class="text-sm">Producto Destacado</span>
 					</label>
 				</div>
+
+				{#if editingProduct}
+					<div class="border-t pt-6 mt-6">
+						<h3 class="text-lg font-semibold mb-4">Especificaciones del Producto</h3>
+						
+						{#if specifications.length > 0}
+							<div class="mb-4 space-y-2">
+								{#each specifications as spec}
+									<div class="flex items-center justify-between bg-gray-50 p-3 rounded-lg">
+										<div class="flex-1">
+											<p class="font-medium text-sm">{spec.specification_key}</p>
+											<p class="text-sm text-gray-600">{spec.specification_value} ({spec.data_type})</p>
+										</div>
+										<button
+											type="button"
+											onclick={() => removeSpecification(spec.id)}
+											class="text-red-600 hover:text-red-800 ml-4"
+										>
+											✕
+										</button>
+									</div>
+								{/each}
+							</div>
+						{/if}
+
+						<div class="space-y-3 bg-blue-50 p-4 rounded-lg">
+							<div>
+								<label class="block text-sm font-semibold mb-1">Clave de Especificación</label>
+								<input
+									type="text"
+									bind:value={newSpec.key}
+									placeholder="Ej: Potencia, Velocidad, Voltaje"
+									class="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+								/>
+							</div>
+
+							<div>
+								<label class="block text-sm font-semibold mb-1">Valor</label>
+								<input
+									type="text"
+									bind:value={newSpec.value}
+									placeholder="Ej: 40W, 100mm/s, 110V"
+									class="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+								/>
+							</div>
+
+							<div>
+								<label class="block text-sm font-semibold mb-1">Tipo de Dato</label>
+								<select
+									bind:value={newSpec.data_type}
+									class="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+								>
+									<option value="text">Texto</option>
+									<option value="number">Número</option>
+									<option value="boolean">Sí/No</option>
+									<option value="select">Seleccionar</option>
+								</select>
+							</div>
+
+							<button
+								type="button"
+								onclick={addSpecification}
+								class="w-full bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition text-sm font-medium"
+							>
+								+ Agregar Especificación
+							</button>
+						</div>
+					</div>
+				{:else}
+					<div class="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-sm text-yellow-800">
+						💡 Primero crea el producto para agregar especificaciones
+					</div>
+				{/if}
 
 				<div class="flex gap-4 pt-4">
 					<button

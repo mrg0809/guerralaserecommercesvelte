@@ -288,6 +288,75 @@ export type Database = {
 					updated_at?: string;
 				};
 			};
+			product_specifications: {
+				Row: {
+					id: string;
+					product_id: string;
+					specification_key: string;
+					specification_value: string;
+					data_type: string;
+					created_at: string;
+					updated_at: string;
+				};
+				Insert: {
+					id?: string;
+					product_id: string;
+					specification_key: string;
+					specification_value: string;
+					data_type?: string;
+					created_at?: string;
+					updated_at?: string;
+				};
+				Update: {
+					id?: string;
+					product_id?: string;
+					specification_key?: string;
+					specification_value?: string;
+					data_type?: string;
+					created_at?: string;
+					updated_at?: string;
+				};
+			};
+			tags: {
+				Row: {
+					id: string;
+					name: string;
+					slug: string;
+					created_at: string;
+				};
+				Insert: {
+					id?: string;
+					name: string;
+					slug: string;
+					created_at?: string;
+				};
+				Update: {
+					id?: string;
+					name?: string;
+					slug?: string;
+					created_at?: string;
+				};
+			};
+			product_tags: {
+				Row: {
+					id: string;
+					product_id: string;
+					tag_id: string;
+					created_at: string;
+				};
+				Insert: {
+					id?: string;
+					product_id: string;
+					tag_id: string;
+					created_at?: string;
+				};
+				Update: {
+					id?: string;
+					product_id?: string;
+					tag_id?: string;
+					created_at?: string;
+				};
+			};
 			order_items: {
 				Row: {
 					id: string;

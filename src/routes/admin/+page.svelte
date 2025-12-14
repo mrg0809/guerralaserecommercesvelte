@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, type Snippet } from 'svelte';
+	import { goto } from '$app/navigation';
 	import { supabase } from '$lib/supabaseClient';
 
 	let stats = $state({
@@ -9,7 +10,21 @@
 		pendingOrders: 0
 	});
 
+	let isAuthorized = $state(false);
+
 	onMount(async () => {
+		// Check if user is logged in
+		const {
+			data: { session }
+		} = await supabase.auth.getSession();
+
+		if (!session) {
+			goto('/login');
+			return;
+		}
+
+		isAuthorized = true;
+
 		// Get stats
 		const [products, categories, orders, pending] = await Promise.all([
 			supabase.from('products').select('id', { count: 'exact', head: true }),

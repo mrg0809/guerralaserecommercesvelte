@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
 	import { supabase } from '$lib/supabaseClient';
 	import { generateSlug } from '$lib/utils';
 	import type { Category } from '$lib/types';
@@ -8,6 +9,8 @@
 	let loading = $state(true);
 	let showModal = $state(false);
 	let editingCategory = $state<Category | null>(null);
+	let searchTerm = $state('');
+	let expandedCategories = $state<Record<string, boolean>>({});
 
 	let formData = $state({
 		name: '',
@@ -15,10 +18,21 @@
 		description: '',
 		image_url: '',
 		display_order: 0,
-		is_active: true
+		is_active: true,
+		parent_id: null as string | null
 	});
 
 	onMount(async () => {
+		// Check if user is logged in
+		const {
+			data: { session }
+		} = await supabase.auth.getSession();
+
+		if (!session) {
+			goto('/login');
+			return;
+		}
+
 		await loadCategories();
 	});
 
@@ -44,7 +58,8 @@
 				description: category.description || '',
 				image_url: category.image_url || '',
 				display_order: category.display_order,
-				is_active: category.is_active
+				is_active: category.is_active,
+				parent_id: category.parent_id
 			};
 		} else {
 			editingCategory = null;
@@ -54,7 +69,8 @@
 				description: '',
 				image_url: '',
 				display_order: 0,
-				is_active: true
+				is_active: true,
+				parent_id: null
 			};
 		}
 		showModal = true;
@@ -67,59 +83,147 @@
 
 	function updateSlug() {
 		if (formData.name && !editingCategory) {
-			formData.slug = generateSlug(formData.name);
+			let baseSlug = generateSlug(formData.name);
+			
+			// Si tiene padre, agregar el slug del padre al inicio para hacerlo único
+			if (formData.parent_id) {
+				const parent = categories.find(c => c.id === formData.parent_id);
+				if (parent) {
+					baseSlug = `${parent.slug}-${baseSlug}`;
+				}
+			}
+			
+			formData.slug = baseSlug;
 		}
 	}
 
 	async function saveCategory() {
 		try {
-			if (editingCategory) {
-				const { error } = await supabase
-					.from('categories')
-					.update(formData)
-					.eq('id', editingCategory.id);
+				const { data: sess } = await supabase.auth.getSession();
+				const payload = {
+					...formData,
+					parent_id: formData.parent_id || null
+				};
+				const res = await fetch('/admin/categorias', {
+					method: 'POST',
+					headers: {
+						'Content-Type': 'application/json',
+						...(sess?.session?.access_token ? { Authorization: `Bearer ${sess.session.access_token}` } : {})
+					},
+					body: JSON.stringify(
+						editingCategory
+							? { op: 'update', id: editingCategory.id, payload }
+							: { op: 'create', payload }
+					)
+				});
+				const out = await res.json();
+				if (!out.ok) throw new Error(out.error || 'Error desconocido');
 
-				if (error) throw error;
-			} else {
-				const { error } = await supabase.from('categories').insert([formData]);
-
-				if (error) throw error;
+				closeModal();
+				await loadCategories();
+			} catch (error: any) {
+				console.error('Error al guardar categoría:', error);
+				alert('Error al guardar categoría: ' + error.message);
 			}
-
-			closeModal();
-			await loadCategories();
-		} catch (error: any) {
-			alert('Error al guardar categoría: ' + error.message);
-		}
 	}
 
 	async function deleteCategory(id: string) {
 		if (!confirm('¿Estás seguro de eliminar esta categoría?')) return;
 
 		try {
-			const { error } = await supabase.from('categories').delete().eq('id', id);
-
-			if (error) throw error;
+			const { data: sess } = await supabase.auth.getSession();
+			const res = await fetch('/admin/categorias', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+					...(sess?.session?.access_token ? { Authorization: `Bearer ${sess.session.access_token}` } : {})
+				},
+				body: JSON.stringify({ op: 'delete', id })
+			});
+			const out = await res.json();
+			if (!out.ok) throw new Error(out.error || 'Error desconocido');
 
 			await loadCategories();
 		} catch (error: any) {
+			console.error('Error al eliminar categoría:', error);
 			alert('Error al eliminar categoría: ' + error.message);
 		}
 	}
 
 	async function toggleActive(category: Category) {
 		try {
-			const { error } = await supabase
-				.from('categories')
-				.update({ is_active: !category.is_active })
-				.eq('id', category.id);
-
-			if (error) throw error;
+			const { data: sess } = await supabase.auth.getSession();
+			const res = await fetch('/admin/categorias', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+					...(sess?.session?.access_token ? { Authorization: `Bearer ${sess.session.access_token}` } : {})
+				},
+				body: JSON.stringify({ op: 'toggle', id: category.id, payload: { is_active: !category.is_active } })
+			});
+			const out = await res.json();
+			if (!out.ok) throw new Error(out.error || 'Error desconocido');
 
 			await loadCategories();
 		} catch (error: any) {
+			console.error('Error al actualizar categoría:', error);
 			alert('Error al actualizar categoría: ' + error.message);
 		}
+	}
+
+	function getParentCategory(parentId: string | null): Category | undefined {
+		return categories.find(c => c.id === parentId);
+	}
+
+	function getChildCategories(parentId: string): Category[] {
+		return categories.filter(c => c.parent_id === parentId).sort((a, b) => {
+			if (a.display_order !== b.display_order) {
+				return a.display_order - b.display_order;
+			}
+			return a.name.localeCompare(b.name);
+		});
+	}
+
+	function getRootCategories(): Category[] {
+		return categories.filter(c => !c.parent_id).sort((a, b) => {
+			if (a.display_order !== b.display_order) {
+				return a.display_order - b.display_order;
+			}
+			return a.name.localeCompare(b.name);
+		});
+	}
+
+	function toggleExpand(categoryId: string) {
+		expandedCategories[categoryId] = !expandedCategories[categoryId];
+	}
+
+	function filterCategories(searchText: string): Category[] {
+		if (!searchText.trim()) return categories;
+		const lower = searchText.toLowerCase();
+		return categories.filter(
+			c => c.name.toLowerCase().includes(lower) || c.slug.toLowerCase().includes(lower)
+		);
+	}
+
+	function getFilteredRootCategories(): Category[] {
+		const filtered = filterCategories(searchTerm);
+		return filtered.filter(c => !c.parent_id).sort((a, b) => {
+			if (a.display_order !== b.display_order) {
+				return a.display_order - b.display_order;
+			}
+			return a.name.localeCompare(b.name);
+		});
+	}
+
+	function getDepth(category: Category): number {
+		let depth = 0;
+		let current = category;
+		while (current.parent_id) {
+			depth++;
+			current = categories.find(c => c.id === current.parent_id) || current;
+			if (current === category) break; // Evitar ciclos
+		}
+		return depth;
 	}
 </script>
 
@@ -139,11 +243,21 @@
 			</a>
 			<button
 				onclick={() => openModal()}
-				class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+				class="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition"
 			>
 				+ Nueva Categoría
 			</button>
 		</div>
+	</div>
+
+	<!-- Buscador -->
+	<div class="mb-8">
+		<input
+			type="text"
+			bind:value={searchTerm}
+			placeholder="Buscar categoría por nombre o slug..."
+			class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+		/>
 	</div>
 
 	{#if loading}
@@ -155,55 +269,168 @@
 			<p class="text-xl text-gray-600 mb-4">No hay categorías registradas</p>
 			<button
 				onclick={() => openModal()}
-				class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+				class="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition"
 			>
 				Crear Primera Categoría
 			</button>
 		</div>
 	{:else}
-		<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-			{#each categories as category}
-				<div class="bg-white rounded-lg shadow-md overflow-hidden">
-					{#if category.image_url}
-						<img src={category.image_url} alt={category.name} class="w-full h-48 object-cover" />
-					{:else}
-						<div class="w-full h-48 bg-gray-200 flex items-center justify-center">
-							<span class="text-gray-400">Sin imagen</span>
-						</div>
-					{/if}
-					<div class="p-4">
-						<div class="flex items-start justify-between mb-2">
-							<div>
-								<h3 class="text-xl font-bold">{category.name}</h3>
-								<p class="text-sm text-gray-600">{category.slug}</p>
+		<div class="space-y-2">
+			{#each getFilteredRootCategories() as rootCategory}
+				{@const hasChildren = getChildCategories(rootCategory.id).length > 0}
+				{@const isExpanded = expandedCategories[rootCategory.id] || false}
+				{@const depth = getDepth(rootCategory)}
+				{@const colors = ['blue', 'green', 'purple', 'orange']}
+				{@const colorClass = colors[depth % colors.length]}
+				{@const colorMap = {
+					blue: 'text-blue-600',
+					green: 'text-green-600',
+					purple: 'text-purple-600',
+					orange: 'text-orange-600'
+				}}
+				{@const badgeMap = {
+					blue: 'bg-blue-100 text-blue-800',
+					green: 'bg-green-100 text-green-700',
+					purple: 'bg-purple-100 text-purple-700',
+					orange: 'bg-orange-100 text-orange-700'
+				}}
+
+				<!-- Categoría Padre -->
+				<div class="bg-white rounded-lg shadow p-4 border-l-4" style="border-color: rgb({
+					colorClass === 'blue' ? '59, 130, 246' :
+					colorClass === 'green' ? '22, 163, 74' :
+					colorClass === 'purple' ? '168, 85, 247' :
+					'249, 115, 22'
+				})">
+					<div class="flex items-center justify-between">
+						<div class="flex-1 flex items-center gap-3">
+							{#if hasChildren}
+								<button
+									onclick={() => toggleExpand(rootCategory.id)}
+									class="px-2 py-1 text-lg font-bold text-gray-600 hover:bg-gray-100 rounded transition"
+								>
+									{isExpanded ? '▼' : '▶'}
+								</button>
+							{:else}
+								<div class="px-2"></div>
+							{/if}
+							{#if rootCategory.image_url}
+								<img src={rootCategory.image_url} alt={rootCategory.name} class="w-10 h-10 object-cover rounded" />
+							{:else}
+								<div class="w-10 h-10 bg-gray-200 rounded flex items-center justify-center text-gray-400 text-xs">Img</div>
+							{/if}
+							<div class="flex-1">
+								<h4 class="font-semibold {colorMap[colorClass]}">{rootCategory.name}</h4>
+								<p class="text-xs text-gray-600">{rootCategory.slug}</p>
+								<span class="inline-block mt-1 px-2 py-0.5 {badgeMap[colorClass]} text-xs rounded">Padre</span>
 							</div>
+						</div>
+						<div class="flex items-center gap-2">
 							<button
-								onclick={() => toggleActive(category)}
-								class="px-2 py-1 rounded text-xs {category.is_active
+								onclick={() => toggleActive(rootCategory)}
+								class="px-2 py-1 rounded text-xs {rootCategory.is_active
 									? 'bg-green-100 text-green-800'
 									: 'bg-red-100 text-red-800'}"
 							>
-								{category.is_active ? 'Activo' : 'Inactivo'}
+								{rootCategory.is_active ? 'Activo' : 'Inactivo'}
 							</button>
-						</div>
-						{#if category.description}
-							<p class="text-gray-600 text-sm mb-4">{category.description}</p>
-						{/if}
-						<div class="flex gap-2">
 							<button
-								onclick={() => openModal(category)}
-								class="flex-1 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition"
+								onclick={() => openModal(rootCategory)}
+								class="px-3 py-1 bg-red-600 text-white rounded text-xs hover:bg-red-700 transition"
 							>
 								Editar
 							</button>
 							<button
-								onclick={() => deleteCategory(category.id)}
-								class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition"
+								onclick={() => deleteCategory(rootCategory.id)}
+								class="px-3 py-1 bg-red-600 text-white rounded text-xs hover:bg-red-700 transition"
 							>
 								Eliminar
 							</button>
 						</div>
 					</div>
+
+					<!-- Hijas (colapsables) -->
+					{#if hasChildren && isExpanded}
+						<div class="mt-4 space-y-2 ml-4 border-l-2 border-gray-200 pl-4">
+							{#each getChildCategories(rootCategory.id) as childCat}
+								{@const childDepth = getDepth(childCat)}
+								{@const childColor = colors[childDepth % colors.length]}
+								{@const childHasChildren = getChildCategories(childCat.id).length > 0}
+								{@const childIsExpanded = expandedCategories[childCat.id] || false}
+
+								<div class="bg-gray-50 rounded p-3">
+									<div class="flex items-center justify-between">
+										<div class="flex-1 flex items-center gap-2">
+											{#if childHasChildren}
+												<button
+													onclick={() => toggleExpand(childCat.id)}
+													class="px-1 py-0 text-sm font-bold text-gray-600 hover:bg-gray-100 rounded transition"
+												>
+													{childIsExpanded ? '▼' : '▶'}
+												</button>
+											{:else}
+												<div class="px-1"></div>
+											{/if}
+											{#if childCat.image_url}
+												<img src={childCat.image_url} alt={childCat.name} class="w-8 h-8 object-cover rounded" />
+											{:else}
+												<div class="w-8 h-8 bg-gray-200 rounded flex items-center justify-center text-gray-400 text-xs">Im</div>
+											{/if}
+											<div class="flex-1 min-w-0">
+												<h5 class="font-semibold text-sm {colorMap[childColor]} truncate">{childCat.name}</h5>
+												<p class="text-xs text-gray-600 truncate">{childCat.slug}</p>
+											</div>
+										</div>
+										<div class="flex items-center gap-1 flex-shrink-0">
+											<button
+												onclick={() => toggleActive(childCat)}
+												class="px-1.5 py-0.5 rounded text-xs {childCat.is_active
+													? 'bg-green-100 text-green-800'
+													: 'bg-red-100 text-red-800'}"
+											>
+												{childCat.is_active ? 'Act' : 'Ina'}
+											</button>
+											<button
+												onclick={() => openModal(childCat)}
+												class="px-2 py-0.5 bg-red-600 text-white rounded text-xs hover:bg-red-700 transition"
+											>
+												Edit
+											</button>
+											<button
+												onclick={() => deleteCategory(childCat.id)}
+												class="px-2 py-0.5 bg-red-600 text-white rounded text-xs hover:bg-red-700 transition"
+											>
+												Del
+											</button>
+										</div>
+									</div>
+
+									<!-- Nietos (si hay) -->
+									{#if childHasChildren && childIsExpanded}
+										<div class="mt-2 space-y-1 ml-3 text-xs">
+											{#each getChildCategories(childCat.id) as grandchildCat}
+												<div class="bg-white p-2 rounded border-l-2 border-gray-300">
+													<div class="flex items-center justify-between">
+														<span class="font-medium truncate">{grandchildCat.name}</span>
+														<div class="flex gap-0.5">
+															<button
+																onclick={() => toggleActive(grandchildCat)}
+																class="px-1 py-0.5 rounded text-xs {grandchildCat.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}"
+															>
+																{grandchildCat.is_active ? 'Act' : 'Ina'}
+															</button>
+															<button onclick={() => openModal(grandchildCat)} class="px-1.5 py-0.5 bg-blue-500 text-white rounded">Edit</button>
+															<button onclick={() => deleteCategory(grandchildCat.id)} class="px-1.5 py-0.5 bg-red-500 text-white rounded">Del</button>
+														</div>
+													</div>
+												</div>
+											{/each}
+										</div>
+									{/if}
+								</div>
+							{/each}
+						</div>
+					{/if}
 				</div>
 			{/each}
 		</div>
@@ -252,6 +479,22 @@
 						rows="4"
 						class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
 					></textarea>
+				</div>
+
+				<div>
+					<label class="block text-sm font-semibold mb-2">Categoría Padre</label>
+					<select
+						bind:value={formData.parent_id}
+						onchange={updateSlug}
+						class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+					>
+						<option value="">Ninguna</option>
+						{#each categories as cat}
+							{#if !editingCategory || cat.id !== editingCategory.id}
+								<option value={cat.id}>{cat.name}</option>
+							{/if}
+						{/each}
+					</select>
 				</div>
 
 				<div>

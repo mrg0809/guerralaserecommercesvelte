@@ -38,6 +38,24 @@
 
 		loading = false;
 	});
+
+	function getChildCategories(parentId: string): Category[] {
+		return categories.filter(c => c.parent_id === parentId).sort((a, b) => {
+			if (a.display_order !== b.display_order) {
+				return a.display_order - b.display_order;
+			}
+			return a.name.localeCompare(b.name);
+		});
+	}
+
+	function getRootCategories(): Category[] {
+		return categories.filter(c => !c.parent_id).sort((a, b) => {
+			if (a.display_order !== b.display_order) {
+				return a.display_order - b.display_order;
+			}
+			return a.name.localeCompare(b.name);
+		});
+	}
 </script>
 
 <svelte:head>
@@ -49,13 +67,13 @@
 </svelte:head>
 
 <!-- Hero Banner -->
-<section class="bg-gradient-to-r from-blue-700 to-blue-900 text-white py-20">
+<section class="bg-gradient-to-r from-blue-900 via-blue-700 to-red-600 text-white py-20">
 	<div class="container mx-auto px-4 text-center">
 		<h1 class="text-5xl font-bold mb-6">Máquinas Láser de Alta Precisión</h1>
 		<p class="text-xl mb-8">La mejor tecnología para corte y grabado láser</p>
 		<a
 			href="/productos"
-			class="bg-white text-blue-900 px-8 py-3 rounded-lg font-semibold hover:bg-gray-100 transition inline-block"
+			class="bg-red-600 text-white px-8 py-3 rounded-lg font-semibold hover:bg-red-700 transition inline-block shadow-lg"
 		>
 			Ver Productos
 		</a>
@@ -67,23 +85,36 @@
 	<section class="py-16 bg-gray-50">
 		<div class="container mx-auto px-4">
 			<h2 class="text-3xl font-bold mb-8 text-center">Nuestras Categorías</h2>
+			
+			<!-- Grid de categorías padre -->
 			<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-				{#each categories as category}
+				{#each getRootCategories() as category}
 					<a
 						href="/categorias/{category.slug}"
-						class="bg-white rounded-lg shadow-md p-6 hover:shadow-xl transition"
+						class="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition"
 					>
 						{#if category.image_url}
 							<img
 								src={category.image_url}
 								alt={category.name}
-								class="w-full h-48 object-cover rounded-lg mb-4"
+								class="w-full h-48 object-cover"
 							/>
+						{:else}
+							<div class="w-full h-48 bg-gray-200 flex items-center justify-center">
+								<span class="text-gray-400">Sin imagen</span>
+							</div>
 						{/if}
-						<h3 class="text-xl font-bold mb-2">{category.name}</h3>
-						{#if category.description}
-							<p class="text-gray-600">{category.description}</p>
-						{/if}
+						<div class="p-4">
+							<h3 class="text-xl font-bold mb-2">{category.name}</h3>
+							{#if category.description}
+								<p class="text-gray-600 mb-4">{category.description}</p>
+							{/if}
+							{#if getChildCategories(category.id).length > 0}
+								<div class="text-sm text-blue-600">
+									{getChildCategories(category.id).length} subcategoría{getChildCategories(category.id).length > 1 ? 's' : ''}
+								</div>
+							{/if}
+						</div>
 					</a>
 				{/each}
 			</div>

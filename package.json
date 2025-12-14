@@ -24,6 +24,7 @@
 		"vite": "^7.2.6"
 	},
 	"dependencies": {
-		"@supabase/supabase-js": "^2.87.1"
+		"@supabase/supabase-js": "^2.87.1",
+		"@supabase/auth-helpers-sveltekit": "latest"
 	}
 }
