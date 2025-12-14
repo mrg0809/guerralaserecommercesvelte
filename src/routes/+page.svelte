@@ -2,11 +2,14 @@
 	import { onMount } from 'svelte';
 	import { supabase } from '$lib/supabaseClient';
 	import { formatPrice } from '$lib/utils';
+	import { getBannerVideoUrl } from '$lib/storage';
 	import type { Product, Category, ProductMedia } from '$lib/types';
 
 	let featuredProducts: (Product & { media?: ProductMedia[]; category?: Category })[] = $state([]);
 	let categories: Category[] = $state([]);
 	let loading = $state(true);
+	
+	const bannerVideoUrl = getBannerVideoUrl();
 
 	onMount(async () => {
 		// Load featured products
@@ -56,6 +59,13 @@
 			return a.name.localeCompare(b.name);
 		});
 	}
+
+	// Obtener la categoría Maquinaria y sus subcategorías
+	function getMaquinariaSubcategories(): Category[] {
+		const maquinaria = categories.find(c => c.slug === 'maquinaria' || c.name.toLowerCase().includes('maquinaria'));
+		if (!maquinaria) return [];
+		return getChildCategories(maquinaria.id);
+	}
 </script>
 
 <svelte:head>
@@ -66,29 +76,42 @@
 	/>
 </svelte:head>
 
-<!-- Hero Banner -->
-<section class="bg-gradient-to-r from-blue-900 via-blue-700 to-red-600 text-white py-20">
-	<div class="container mx-auto px-4 text-center">
-		<h1 class="text-5xl font-bold mb-6">Máquinas Láser de Alta Precisión</h1>
-		<p class="text-xl mb-8">La mejor tecnología para corte y grabado láser</p>
-		<a
-			href="/productos"
-			class="bg-red-600 text-white px-8 py-3 rounded-lg font-semibold hover:bg-red-700 transition inline-block shadow-lg"
-		>
-			Ver Productos
-		</a>
+<!-- Hero Banner with Video -->
+<section class="relative w-full h-[500px] overflow-hidden">
+	<!-- Video de fondo -->
+	<video
+		autoplay
+		loop
+		muted
+		playsinline
+		class="absolute inset-0 w-full h-full object-cover"
+	>
+		<source
+			src={bannerVideoUrl}
+			type="video/mp4"
+		/>
+		Tu navegador no soporta el elemento de video.
+	</video>
+
+	<!-- Overlay azul translúcido para dar tono azulado al video -->
+	<div class="absolute inset-0 bg-blue-900 bg-opacity-30"></div>
+
+	<!-- Contenido del banner -->
+	<div class="relative z-10 container mx-auto px-4 h-full flex flex-col items-center justify-center text-center text-white">
+		<h1 class="text-5xl md:text-6xl font-bold mb-6 drop-shadow-lg">ESPECIALISTAS EN VENTA DE MAQUINARIA</h1>
+		<p class="text-xl md:text-2xl drop-shadow-lg">En corte de metales, corte laser co2, fibra óptica, plasma, router, etc.</p>
 	</div>
 </section>
 
 <!-- Categories Section -->
-{#if categories.length > 0}
+{#if getMaquinariaSubcategories().length > 0}
 	<section class="py-16 bg-gray-50">
 		<div class="container mx-auto px-4">
-			<h2 class="text-3xl font-bold mb-8 text-center">Nuestras Categorías</h2>
+			<h2 class="text-3xl font-bold mb-8 text-center">Nuestras Máquinas</h2>
 			
-			<!-- Grid de categorías padre -->
-			<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-				{#each getRootCategories() as category}
+			<!-- Grid de subcategorías de Maquinaria -->
+			<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+				{#each getMaquinariaSubcategories() as category}
 					<a
 						href="/categorias/{category.slug}"
 						class="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition"
@@ -108,11 +131,6 @@
 							<h3 class="text-xl font-bold mb-2">{category.name}</h3>
 							{#if category.description}
 								<p class="text-gray-600 mb-4">{category.description}</p>
-							{/if}
-							{#if getChildCategories(category.id).length > 0}
-								<div class="text-sm text-blue-600">
-									{getChildCategories(category.id).length} subcategoría{getChildCategories(category.id).length > 1 ? 's' : ''}
-								</div>
 							{/if}
 						</div>
 					</a>

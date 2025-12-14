@@ -3,6 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { supabase } from '$lib/supabaseClient';
 	import { generateSlug } from '$lib/utils';
+	import { getProductImageUrl } from '$lib/storage';
 	import type { Category } from '$lib/types';
 
 	let categories: Category[] = $state([]);
@@ -11,6 +12,9 @@
 	let editingCategory = $state<Category | null>(null);
 	let searchTerm = $state('');
 	let expandedCategories = $state<Record<string, boolean>>({});
+	let uploadingImage = $state(false);
+	let selectedFile: File | null = $state(null);
+	let imagePreview = $state('');
 
 	let formData = $state({
 		name: '',
@@ -61,6 +65,7 @@
 				is_active: category.is_active,
 				parent_id: category.parent_id
 			};
+			imagePreview = category.image_url || '';
 		} else {
 			editingCategory = null;
 			formData = {
@@ -72,13 +77,93 @@
 				is_active: true,
 				parent_id: null
 			};
+			imagePreview = '';
 		}
+		selectedFile = null;
 		showModal = true;
 	}
 
 	function closeModal() {
 		showModal = false;
 		editingCategory = null;
+		selectedFile = null;
+		imagePreview = '';
+	}
+
+	function handleFileSelect(event: Event) {
+		const input = event.target as HTMLInputElement;
+		if (input.files && input.files[0]) {
+			selectedFile = input.files[0];
+			
+			// Validar tipo de archivo
+			const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
+			if (!validTypes.includes(selectedFile.type)) {
+				alert('Por favor selecciona una imagen válida (JPG, PNG, WEBP o GIF)');
+				selectedFile = null;
+				input.value = '';
+				return;
+			}
+			
+			// Validar tamaño (max 5MB)
+			if (selectedFile.size > 5 * 1024 * 1024) {
+				alert('La imagen no debe superar los 5MB');
+				selectedFile = null;
+				input.value = '';
+				return;
+			}
+			
+			// Crear preview
+			const reader = new FileReader();
+			reader.onload = (e) => {
+				imagePreview = e.target?.result as string;
+			};
+			reader.readAsDataURL(selectedFile);
+		}
+	}
+
+	async function uploadImage(): Promise<string | null> {
+		if (!selectedFile) return null;
+		
+		uploadingImage = true;
+		try {
+			// Generar nombre único para el archivo
+			const timestamp = Date.now();
+			const randomStr = Math.random().toString(36).substring(7);
+			const fileExt = selectedFile.name.split('.').pop();
+			const fileName = `categories/${formData.slug || 'category'}-${timestamp}-${randomStr}.${fileExt}`;
+			
+			// Subir archivo al bucket
+			const { data, error } = await supabase.storage
+				.from('product-images')
+				.upload(fileName, selectedFile, {
+					cacheControl: '3600',
+					upsert: false
+				});
+			
+			if (error) {
+				console.error('Error uploading image:', error);
+				throw new Error('Error al subir la imagen: ' + error.message);
+			}
+			
+			// Obtener URL pública
+			const publicUrl = getProductImageUrl(fileName);
+			return publicUrl;
+		} catch (error: any) {
+			console.error('Error uploading image:', error);
+			alert('Error al subir la imagen: ' + error.message);
+			return null;
+		} finally {
+			uploadingImage = false;
+		}
+	}
+
+	function removeImage() {
+		selectedFile = null;
+		imagePreview = '';
+		formData.image_url = '';
+		// Reset file input
+		const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+		if (fileInput) fileInput.value = '';
 	}
 
 	function updateSlug() {
@@ -99,6 +184,17 @@
 
 	async function saveCategory() {
 		try {
+				// Si hay una imagen seleccionada, subirla primero
+				if (selectedFile) {
+					const uploadedUrl = await uploadImage();
+					if (uploadedUrl) {
+						formData.image_url = uploadedUrl;
+					} else {
+						alert('No se pudo subir la imagen. ¿Deseas continuar sin imagen?');
+						return;
+					}
+				}
+				
 				const { data: sess } = await supabase.auth.getSession();
 				const payload = {
 					...formData,
@@ -498,13 +594,53 @@
 				</div>
 
 				<div>
-					<label class="block text-sm font-semibold mb-2">URL de Imagen</label>
-					<input
-						type="url"
-						bind:value={formData.image_url}
-						placeholder="https://ejemplo.com/imagen.jpg"
-						class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-					/>
+					<label class="block text-sm font-semibold mb-2">Imagen de Categoría</label>
+					
+					<!-- Preview de imagen actual o seleccionada -->
+					{#if imagePreview}
+						<div class="mb-3 relative">
+							<img src={imagePreview} alt="Preview" class="w-full h-48 object-cover rounded-lg border-2 border-gray-300" />
+							<button
+								type="button"
+								onclick={removeImage}
+								class="absolute top-2 right-2 bg-red-600 text-white px-3 py-1 rounded-lg hover:bg-red-700 transition text-sm"
+							>
+								Eliminar Imagen
+							</button>
+						</div>
+					{/if}
+					
+					<!-- Input para subir nueva imagen -->
+					<div class="border-2 border-dashed border-gray-300 rounded-lg p-4 hover:border-blue-500 transition">
+						<input
+							type="file"
+							accept="image/jpeg,image/jpg,image/png,image/webp,image/gif"
+							onchange={handleFileSelect}
+							class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+						/>
+						<p class="text-xs text-gray-500 mt-2">
+							Formatos aceptados: JPG, PNG, WEBP, GIF. Tamaño máximo: 5MB
+						</p>
+					</div>
+					
+					<!-- Opción de URL manual (avanzado) -->
+					<details class="mt-3">
+						<summary class="text-sm text-gray-600 cursor-pointer hover:text-blue-600">
+							Usar URL externa (avanzado)
+						</summary>
+						<input
+							type="url"
+							bind:value={formData.image_url}
+							placeholder="https://ejemplo.com/imagen.jpg"
+							class="w-full mt-2 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+							onchange={() => {
+								if (formData.image_url) {
+									imagePreview = formData.image_url;
+									selectedFile = null;
+								}
+							}}
+						/>
+					</details>
 				</div>
 
 				<div>
@@ -527,14 +663,16 @@
 				<div class="flex gap-4 pt-4">
 					<button
 						type="submit"
-						class="flex-1 bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition"
+						disabled={uploadingImage}
+						class="flex-1 bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition disabled:bg-gray-400 disabled:cursor-not-allowed"
 					>
-						{editingCategory ? 'Actualizar' : 'Crear'} Categoría
+						{uploadingImage ? 'Subiendo imagen...' : editingCategory ? 'Actualizar' : 'Crear'} Categoría
 					</button>
 					<button
 						type="button"
 						onclick={closeModal}
-						class="px-6 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg transition"
+						disabled={uploadingImage}
+						class="px-6 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg transition disabled:bg-gray-100 disabled:cursor-not-allowed"
 					>
 						Cancelar
 					</button>
