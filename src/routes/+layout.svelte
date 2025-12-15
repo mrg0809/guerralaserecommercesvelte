@@ -110,6 +110,30 @@
 		}
 		showWA = false;
 	}
+
+	// Mobile menu state and handlers
+	let showMobileMenu = $state(false);
+	function toggleMobileMenu() {
+		showMobileMenu = !showMobileMenu;
+	}
+
+	// Mobile drawer accordion state
+	let openRoots = $state<Record<string, boolean>>({});
+	let openChildren = $state<Record<string, boolean>>({});
+
+	function toggleRoot(id: string) {
+		openRoots[id] = !openRoots[id];
+		if (!openRoots[id]) {
+			// collapse children when root closes
+			for (const child of getChildCategories(id)) {
+				delete openChildren[child.id];
+			}
+		}
+	}
+
+	function toggleChild(id: string) {
+		openChildren[id] = !openChildren[id];
+	}
 </script>
 
 <svelte:head>
@@ -127,13 +151,13 @@
 					</a>
 				</div>
 
-				<!-- Category Navigation (Center) -->
-				<div class="flex items-center gap-1 flex-1 justify-center px-4">
+				<!-- Category Navigation (Center) Desktop with dropdowns -->
+				<div class="hidden md:flex items-center gap-1 flex-1 justify-center px-4">
 					{#each getRootCategories() as rootCategory}
 						<div class="relative group">
 							<a
 								href="/categorias/{rootCategory.slug}"
-								class="px-3 py-2 font-semibold text-gray-700 hover:text-white hover:bg-red-600 transition-all rounded-md flex items-center gap-1.5 whitespace-nowrap text-sm"
+								class="px-3 py-2 font-semibold text-gray-700 hover:text-white hover:bg-red-600 transition-all rounded-md whitespace-nowrap text-sm flex items-center gap-1.5"
 							>
 								{rootCategory.name}
 								{#if getChildCategories(rootCategory.id).length > 0}
@@ -143,7 +167,6 @@
 								{/if}
 							</a>
 
-							<!-- Dropdown Menu (hasta 4 niveles) -->
 							{#if getChildCategories(rootCategory.id).length > 0}
 								<div class="absolute left-0 mt-1 w-64 bg-white rounded-lg shadow-2xl border border-gray-200 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200">
 									<div class="py-2">
@@ -161,7 +184,6 @@
 													{/if}
 												</a>
 
-												<!-- Level 3 submenu -->
 												{#if getChildCategories(level2Cat.id).length > 0}
 													<div class="absolute left-full top-0 ml-1 w-64 bg-white rounded-lg shadow-2xl border border-gray-200 opacity-0 invisible group-hover/level2:opacity-100 group-hover/level2:visible transition-all duration-200">
 														<div class="py-2">
@@ -179,7 +201,6 @@
 																		{/if}
 																	</a>
 
-																	<!-- Level 4 submenu -->
 																	{#if getChildCategories(level3Cat.id).length > 0}
 																		<div class="absolute left-full top-0 ml-1 w-64 bg-white rounded-lg shadow-2xl border border-gray-200 opacity-0 invisible group-hover/level3:opacity-100 group-hover/level3:visible transition-all duration-200">
 																			<div class="py-2">
@@ -190,23 +211,29 @@
 																					>
 																						{level4Cat.name}
 																					</a>
-																				{/each}
-																			</div>
+																			{/each}
 																		</div>
-																	{/if}
-																</div>
-															{/each}
-														</div>
+																	</div>
+																{/if}
+															</div>
+														{/each}
 													</div>
-												{/if}
-											</div>
-										{/each}
-									</div>
+												</div>
+											{/if}
+										</div>
+									{/each}
 								</div>
-							{/if}
-						</div>
+							</div>
+						{/if}
+					</div>
 					{/each}
 				</div>
+
+				<button onclick={toggleMobileMenu} class="md:hidden p-2 rounded-lg hover:bg-gray-100 text-blue-900" aria-label="Abrir menú" title="Menú">
+					<svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+					</svg>
+				</button>
 
 				<!-- Search and Cart Icons (Right) - Esquina superior derecha -->
 				<div class="flex items-center gap-2 flex-shrink-0 min-w-fit">
@@ -241,6 +268,82 @@
 				</div>
 			</div>
 		</nav>
+
+		<!-- Mobile menu drawer -->
+		{#if showMobileMenu}
+			<div class="md:hidden fixed inset-0 z-50">
+				<div class="absolute inset-0 bg-black/30" onclick={() => (showMobileMenu = false)}></div>
+				<div class="absolute left-0 top-0 bottom-0 w-80 max-w-[85vw] bg-white shadow-2xl border-r border-gray-200">
+					<div class="flex items-center justify-between px-4 py-3 border-b">
+						<div class="flex items-center gap-2">
+							<img src="/logorectangular.png" alt="Guerra Láser" class="h-8" />
+							<span class="font-bold">Categorías</span>
+						</div>
+						<button class="p-2 rounded hover:bg-gray-100" onclick={() => (showMobileMenu = false)} aria-label="Cerrar">
+							<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+							</svg>
+						</button>
+					</div>
+
+					<div class="px-2 py-2 overflow-y-auto h-full">
+						<ul class="space-y-1">
+							{#each getRootCategories() as root}
+								<li class="border border-gray-100 rounded-md">
+									<div class="flex items-center justify-between px-3 py-2">
+										<a href="/categorias/{root.slug}" class="font-medium hover:text-red-600">{root.name}</a>
+										{#if getChildCategories(root.id).length > 0}
+											<button
+												onclick={() => toggleRoot(root.id)}
+												class="p-1 rounded hover:bg-gray-100"
+												aria-label="Mostrar subcategorías"
+											>
+												<svg class={`w-4 h-4 transition-transform ${openRoots[root.id] ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+													<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+												</svg>
+											</button>
+										{/if}
+									</div>
+
+									{#if getChildCategories(root.id).length > 0 && openRoots[root.id]}
+										<ul class="pl-4 pr-2 pb-2 space-y-1">
+											{#each getChildCategories(root.id) as child}
+												<li class="border-l border-gray-100 pl-3">
+													<div class="flex items-center justify-between">
+														<a href="/categorias/{child.slug}" class="block py-1 text-sm hover:text-red-600">{child.name}</a>
+														{#if getChildCategories(child.id).length > 0}
+															<button
+																onclick={() => toggleChild(child.id)}
+																class="p-1 rounded hover:bg-gray-100"
+																aria-label="Mostrar subcategorías"
+															>
+																<svg class={`w-4 h-4 transition-transform ${openChildren[child.id] ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+																	<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+																</svg>
+															</button>
+														{/if}
+													</div>
+
+													{#if getChildCategories(child.id).length > 0 && openChildren[child.id]}
+														<ul class="pl-3 pr-1 pb-1 space-y-1">
+															{#each getChildCategories(child.id) as grand}
+																<li>
+																	<a href="/categorias/{grand.slug}" class="block py-1 text-sm hover:text-red-600">{grand.name}</a>
+																</li>
+															{/each}
+														</ul>
+													{/if}
+												</li>
+											{/each}
+										</ul>
+									{/if}
+								</li>
+							{/each}
+						</ul>
+					</div>
+				</div>
+			</div>
+		{/if}
 
 		<!-- Search Bar -->
 		{#if showSearch}
