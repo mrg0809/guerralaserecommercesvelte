@@ -2,7 +2,8 @@
 	import { onMount } from 'svelte';
 	import { supabase } from '$lib/supabaseClient';
 	import { formatPrice, generateSlug } from '$lib/utils';
-	import type { Product, Category, ProductSpecification, Discount, Tag } from '$lib/types';
+	import { getProductImageUrl } from '$lib/storage';
+	import type { Product, Category, ProductSpecification, Discount, Tag, ProductMedia } from '$lib/types';
 
 	let products: Product[] = $state([]);
 	let categories: Category[] = $state([]);
@@ -17,6 +18,12 @@
 	let selectedDiscounts: string[] = $state([]);
 	let selectedTags: string[] = $state([]);
 	let newTagName = $state('');
+	
+	// Variables para gestión de imágenes
+	let productImages: ProductMedia[] = $state([]);
+	let uploadingImages = $state(false);
+	let selectedFiles: File[] = $state([]);
+	let imagePreviews: string[] = $state([]);
 	
 	let formData = $state({
 		name: '',
@@ -111,6 +118,7 @@
 			loadProductSpecifications(product.id);
 			loadProductDiscounts(product.id);
 			loadProductTags(product.id);
+			loadProductImages(product.id);
 		} else {
 			editingProduct = null;
 			formData = {
@@ -128,9 +136,12 @@
 			specifications = [];
 			selectedDiscounts = [];
 			selectedTags = [];
+			productImages = [];
 		}
 		newSpec = { key: '', value: '', data_type: 'text' };
 		newTagName = '';
+		selectedFiles = [];
+		imagePreviews = [];
 		showModal = true;
 	}
 
@@ -154,6 +165,175 @@
 		if (data) {
 			selectedTags = data.map(t => t.tag_id);
 		}
+	}
+
+	async function loadProductImages(productId: string) {
+		const { data } = await supabase
+			.from('product_media')
+			.select('*')
+			.eq('product_id', productId)
+			.order('display_order');
+
+		if (data) {
+			productImages = data;
+		}
+	}
+
+	function handleImageSelect(event: Event) {
+		const input = event.target as HTMLInputElement;
+		if (input.files) {
+			const files = Array.from(input.files);
+			
+			// Validar cada archivo
+			const validFiles: File[] = [];
+			const validPreviews: string[] = [];
+			
+			for (const file of files) {
+				// Validar tipo
+				const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
+				if (!validTypes.includes(file.type)) {
+					alert(`El archivo ${file.name} no es una imagen válida (JPG, PNG, WEBP o GIF)`);
+					continue;
+				}
+				
+				// Validar tamaño (max 5MB)
+				if (file.size > 5 * 1024 * 1024) {
+					alert(`El archivo ${file.name} supera los 5MB`);
+					continue;
+				}
+				
+				validFiles.push(file);
+				
+				// Crear preview
+				const reader = new FileReader();
+				reader.onload = (e) => {
+					validPreviews.push(e.target?.result as string);
+					if (validPreviews.length === validFiles.length) {
+						imagePreviews = [...imagePreviews, ...validPreviews];
+					}
+				};
+				reader.readAsDataURL(file);
+			}
+			
+			selectedFiles = [...selectedFiles, ...validFiles];
+		}
+	}
+
+	async function uploadProductImages(productId: string): Promise<boolean> {
+		if (selectedFiles.length === 0) return true;
+		
+		uploadingImages = true;
+		try {
+			const uploadPromises = selectedFiles.map(async (file, index) => {
+				// Generar nombre único
+				const timestamp = Date.now();
+				const randomStr = Math.random().toString(36).substring(7);
+				const fileExt = file.name.split('.').pop();
+				const fileName = `products/${formData.slug || 'product'}-${timestamp}-${randomStr}.${fileExt}`;
+				
+				// Subir archivo
+				const { data, error } = await supabase.storage
+					.from('product-images')
+					.upload(fileName, file, {
+						cacheControl: '3600',
+						upsert: false
+					});
+				
+				if (error) throw error;
+				
+				// Obtener URL pública
+				const publicUrl = getProductImageUrl(fileName);
+				
+				// Guardar en product_media
+				const displayOrder = productImages.length + index;
+				const isPrimary = productImages.length === 0 && index === 0;
+				
+				const { error: mediaError } = await supabase
+					.from('product_media')
+					.insert({
+						product_id: productId,
+						url: publicUrl,
+						media_type: 'image',
+						is_primary: isPrimary,
+						display_order: displayOrder
+					});
+				
+				if (mediaError) throw mediaError;
+			});
+			
+			await Promise.all(uploadPromises);
+			return true;
+		} catch (error: any) {
+			console.error('Error uploading images:', error);
+			alert('Error al subir imágenes: ' + error.message);
+			return false;
+		} finally {
+			uploadingImages = false;
+		}
+	}
+
+	async function removeProductImage(imageId: string, imageUrl: string) {
+		if (!confirm('¿Estás seguro de eliminar esta imagen?')) return;
+		
+		try {
+			// Extraer el path del archivo de la URL
+			const urlParts = imageUrl.split('/product-images/');
+			if (urlParts.length === 2) {
+				const filePath = urlParts[1];
+				
+				// Eliminar del storage
+				const { error: storageError } = await supabase.storage
+					.from('product-images')
+					.remove([filePath]);
+				
+				if (storageError) console.error('Error deleting from storage:', storageError);
+			}
+			
+			// Eliminar de la base de datos
+			const { error } = await supabase
+				.from('product_media')
+				.delete()
+				.eq('id', imageId);
+			
+			if (error) throw error;
+			
+			productImages = productImages.filter(img => img.id !== imageId);
+		} catch (error: any) {
+			alert('Error al eliminar imagen: ' + error.message);
+		}
+	}
+
+	async function setPrimaryImage(imageId: string) {
+		if (!editingProduct) return;
+		
+		try {
+			// Quitar primary de todas las imágenes
+			await supabase
+				.from('product_media')
+				.update({ is_primary: false })
+				.eq('product_id', editingProduct.id);
+			
+			// Establecer la nueva imagen primaria
+			const { error } = await supabase
+				.from('product_media')
+				.update({ is_primary: true })
+				.eq('id', imageId);
+			
+			if (error) throw error;
+			
+			// Actualizar estado local
+			productImages = productImages.map(img => ({
+				...img,
+				is_primary: img.id === imageId
+			}));
+		} catch (error: any) {
+			alert('Error al establecer imagen principal: ' + error.message);
+		}
+	}
+
+	function removePreviewImage(index: number) {
+		selectedFiles = selectedFiles.filter((_, i) => i !== index);
+		imagePreviews = imagePreviews.filter((_, i) => i !== index);
 	}
 
 	async function loadProductSpecifications(productId: string) {
@@ -220,6 +400,9 @@
 	function closeModal() {
 		showModal = false;
 		editingProduct = null;
+		selectedFiles = [];
+		imagePreviews = [];
+		productImages = [];
 	}
 
 	function updateSlug() {
@@ -249,6 +432,14 @@
 				if (error) throw error;
 				if (!data || data.length === 0) throw new Error('No se pudo crear el producto');
 				productId = data[0].id;
+			}
+
+			// Subir imágenes nuevas
+			if (selectedFiles.length > 0) {
+				const uploadSuccess = await uploadProductImages(productId);
+				if (!uploadSuccess) {
+					alert('El producto se guardó pero hubo errores al subir algunas imágenes');
+				}
 			}
 
 			// Guardar descuentos
@@ -648,6 +839,96 @@
 					</div>
 				</div>
 
+				<!-- Gestión de Imágenes -->
+				<div class="border-t pt-4">
+					<label class="block text-sm font-semibold mb-3">Imágenes del Producto</label>
+					
+					<!-- Imágenes existentes (para productos editándose) -->
+					{#if editingProduct && productImages.length > 0}
+						<div class="mb-4">
+							<p class="text-sm text-gray-600 mb-2">Imágenes actuales:</p>
+							<div class="grid grid-cols-3 gap-3">
+								{#each productImages as image}
+									<div class="relative group">
+										<img 
+											src={image.url} 
+											alt="Imagen del producto" 
+											class="w-full h-32 object-cover rounded-lg border-2 {image.is_primary ? 'border-blue-500' : 'border-gray-300'}"
+										/>
+										{#if image.is_primary}
+											<span class="absolute top-1 left-1 bg-blue-500 text-white text-xs px-2 py-1 rounded">
+												Principal
+											</span>
+										{:else}
+											<button
+												type="button"
+												onclick={() => setPrimaryImage(image.id)}
+												class="absolute top-1 left-1 bg-gray-800 bg-opacity-75 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition"
+											>
+												Hacer Principal
+											</button>
+										{/if}
+										<button
+											type="button"
+											onclick={() => removeProductImage(image.id, image.url)}
+											class="absolute top-1 right-1 bg-red-600 text-white w-6 h-6 rounded-full opacity-0 group-hover:opacity-100 transition flex items-center justify-center"
+										>
+											×
+										</button>
+									</div>
+								{/each}
+							</div>
+						</div>
+					{/if}
+					
+					<!-- Preview de nuevas imágenes -->
+					{#if imagePreviews.length > 0}
+						<div class="mb-4">
+							<p class="text-sm text-gray-600 mb-2">Nuevas imágenes a subir:</p>
+							<div class="grid grid-cols-3 gap-3">
+								{#each imagePreviews as preview, index}
+									<div class="relative group">
+										<img 
+											src={preview} 
+											alt="Preview" 
+											class="w-full h-32 object-cover rounded-lg border-2 border-green-300"
+										/>
+										<span class="absolute top-1 left-1 bg-green-500 text-white text-xs px-2 py-1 rounded">
+											Nueva
+										</span>
+										<button
+											type="button"
+											onclick={() => removePreviewImage(index)}
+											class="absolute top-1 right-1 bg-red-600 text-white w-6 h-6 rounded-full opacity-0 group-hover:opacity-100 transition flex items-center justify-center"
+										>
+											×
+										</button>
+									</div>
+								{/each}
+							</div>
+						</div>
+					{/if}
+					
+					<!-- Input para agregar más imágenes -->
+					<div class="border-2 border-dashed border-gray-300 rounded-lg p-4 hover:border-blue-500 transition">
+						<input
+							type="file"
+							accept="image/jpeg,image/jpg,image/png,image/webp,image/gif"
+							multiple
+							onchange={handleImageSelect}
+							class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+						/>
+						<p class="text-xs text-gray-500 mt-2">
+							Puedes seleccionar múltiples imágenes. Formatos: JPG, PNG, WEBP, GIF. Máx: 5MB cada una.
+						</p>
+						{#if productImages.length === 0 && imagePreviews.length === 0}
+							<p class="text-xs text-orange-600 mt-1">
+								⚠️ La primera imagen será la imagen principal del producto
+							</p>
+						{/if}
+					</div>
+				</div>
+
 				<div class="flex gap-4">
 					<label class="flex items-center gap-2">
 						<input type="checkbox" bind:checked={formData.is_active} class="w-4 h-4" />
@@ -736,14 +1017,16 @@
 				<div class="flex gap-4 pt-4">
 					<button
 						type="submit"
-						class="flex-1 bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition"
+						disabled={uploadingImages}
+						class="flex-1 bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition disabled:bg-gray-400 disabled:cursor-not-allowed"
 					>
-						{editingProduct ? 'Actualizar' : 'Crear'} Producto
+						{uploadingImages ? 'Subiendo imágenes...' : editingProduct ? 'Actualizar' : 'Crear'} Producto
 					</button>
 					<button
 						type="button"
 						onclick={closeModal}
-						class="px-6 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg transition"
+						disabled={uploadingImages}
+						class="px-6 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg transition disabled:bg-gray-100 disabled:cursor-not-allowed"
 					>
 						Cancelar
 					</button>

@@ -90,6 +90,25 @@ product-images/
 - ✅ Preview en tiempo real
 - ✅ URL generada automáticamente
 
+#### Para Productos
+1. Ve a la sección de Administración → Productos
+2. Haz clic en "Nuevo Producto" o "Editar" en uno existente
+3. En el formulario, busca la sección "Imágenes del Producto"
+4. Haz clic en "Seleccionar archivo" y elige una o varias imágenes
+5. Las imágenes se subirán automáticamente al bucket en `products/` cuando guardes
+6. Puedes agregar múltiples imágenes al mismo producto
+
+**Características:**
+- ✅ Soporte para múltiples imágenes por producto
+- ✅ Subida automática al bucket
+- ✅ Validación de tipo de archivo (JPG, PNG, WEBP, GIF)
+- ✅ Límite de tamaño: 5MB por imagen
+- ✅ Preview en tiempo real de todas las imágenes
+- ✅ La primera imagen es automáticamente la principal
+- ✅ Puedes cambiar la imagen principal con un clic
+- ✅ Eliminar imágenes individualmente
+- ✅ URLs generadas automáticamente
+
 ### Desde el Panel de Supabase
 1. Ve a Storage en el panel de Supabase
 2. Selecciona el bucket `product-images`

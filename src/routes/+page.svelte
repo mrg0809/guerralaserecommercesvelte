@@ -3,13 +3,18 @@
 	import { supabase } from '$lib/supabaseClient';
 	import { formatPrice } from '$lib/utils';
 	import { getBannerVideoUrl } from '$lib/storage';
-	import type { Product, Category, ProductMedia } from '$lib/types';
+	import type { Product, Category, ProductMedia, TestimonialVideo } from '$lib/types';
 
 	let featuredProducts: (Product & { media?: ProductMedia[]; category?: Category })[] = $state([]);
 	let categories: Category[] = $state([]);
 	let loading = $state(true);
 	
 	const bannerVideoUrl = getBannerVideoUrl();
+	
+	// Variables para el carrusel de videos
+	let currentVideoIndex = $state(0);
+	let autoplayInterval: number | null = null;
+	let testimonialVideos: TestimonialVideo[] = $state([]);
 
 	onMount(async () => {
 		// Load featured products
@@ -39,8 +44,55 @@
 			categories = cats;
 		}
 
+		// Load testimonial videos from database
+		const { data: videos } = await supabase
+			.from('testimonial_videos')
+			.select('*')
+			.eq('is_active', true)
+			.order('display_order');
+
+		if (videos) {
+			testimonialVideos = videos;
+		}
+
 		loading = false;
+		
+		// Iniciar autoplay del carrusel de videos si hay videos
+		if (testimonialVideos.length > 0) {
+			startVideoCarousel();
+		}
+		
+		// Limpiar interval al desmontar
+		return () => {
+			if (autoplayInterval) {
+				clearInterval(autoplayInterval);
+			}
+		};
 	});
+	
+	function startVideoCarousel() {
+		// Cambiar video cada 5 segundos
+		autoplayInterval = setInterval(() => {
+			nextVideo();
+		}, 5000);
+	}
+	
+	function nextVideo() {
+		currentVideoIndex = (currentVideoIndex + 1) % testimonialVideos.length;
+	}
+	
+	function prevVideo() {
+		currentVideoIndex = (currentVideoIndex - 1 + testimonialVideos.length) % testimonialVideos.length;
+	}
+	
+	function goToVideo(index: number) {
+		currentVideoIndex = index;
+		// Reiniciar autoplay
+		if (autoplayInterval) {
+			clearInterval(autoplayInterval);
+		}
+		startVideoCarousel();
+	}
 
 	function getChildCategories(parentId: string): Category[] {
 		return categories.filter(c => c.parent_id === parentId).sort((a, b) => {
@@ -187,6 +239,162 @@
 	<section class="py-16">
 		<div class="container mx-auto px-4 text-center">
 			<p class="text-xl text-gray-600">No hay productos destacados en este momento.</p>
+		</div>
+	</section>
+{/if}
+
+<!-- Video Testimonials Carousel -->
+{#if testimonialVideos.length > 0}
+	<section class="py-16 bg-gradient-to-br from-blue-50 to-indigo-50">
+		<div class="container mx-auto px-4">
+			<div class="text-center mb-12">
+				<h2 class="text-4xl font-bold mb-4 text-gray-800">Clientes Satisfechos</h2>
+				<p class="text-xl text-gray-600">Mira lo que nuestros clientes han logrado con nuestras máquinas</p>
+			</div>
+			
+			<div class="relative max-w-5xl mx-auto">
+				<!-- Carrusel Principal -->
+				<div class="relative bg-white rounded-2xl shadow-2xl overflow-hidden">
+					<!-- Video Container -->
+					<div class="aspect-video bg-black">
+						{#each testimonialVideos as video, index}
+							{#if index === currentVideoIndex}
+								<div class="w-full h-full animate-fadeIn">
+									<iframe
+										src={video.video_url}
+										title={video.title}
+										class="w-full h-full"
+										frameborder="0"
+										allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+										allowfullscreen
+									></iframe>
+								</div>
+							{/if}
+						{/each}
+					</div>
+					
+					<!-- Video Title -->
+					<div class="p-6 bg-gradient-to-r from-blue-600 to-indigo-600 text-white">
+						<h3 class="text-xl font-bold text-center">
+							{testimonialVideos[currentVideoIndex].title}
+						</h3>
+						{#if testimonialVideos[currentVideoIndex].description}
+							<p class="text-sm text-blue-100 text-center mt-2">
+								{testimonialVideos[currentVideoIndex].description}
+							</p>
+						{/if}
+					</div>
+				</div>
+				
+				<!-- Navigation Arrows -->
+				{#if testimonialVideos.length > 1}
+					<button
+						onclick={prevVideo}
+						class="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-4 md:-translate-x-12 bg-white hover:bg-blue-600 text-gray-800 hover:text-white w-12 h-12 rounded-full shadow-lg flex items-center justify-center transition-all duration-300 group"
+						aria-label="Video anterior"
+					>
+						<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+						</svg>
+					</button>
+					
+					<button
+						onclick={nextVideo}
+						class="absolute right-0 top-1/2 -translate-y-1/2 translate-x-4 md:translate-x-12 bg-white hover:bg-blue-600 text-gray-800 hover:text-white w-12 h-12 rounded-full shadow-lg flex items-center justify-center transition-all duration-300 group"
+						aria-label="Video siguiente"
+					>
+						<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+						</svg>
+					</button>
+					
+					<!-- Dots Navigation -->
+					<div class="flex justify-center gap-3 mt-8">
+						{#each testimonialVideos as video, index}
+							<button
+								onclick={() => goToVideo(index)}
+								class="transition-all duration-300 {index === currentVideoIndex 
+									? 'w-12 h-3 bg-blue-600' 
+									: 'w-3 h-3 bg-gray-300 hover:bg-blue-400'} rounded-full"
+								aria-label="Ir al video {index + 1}"
+							></button>
+						{/each}
+					</div>
+					
+					<!-- Thumbnails Preview (Desktop only) -->
+					{#if testimonialVideos.length > 1}
+						<div class="hidden lg:grid grid-cols-{Math.min(testimonialVideos.length, 4)} gap-4 mt-8">
+							{#each testimonialVideos.slice(0, 4) as video, index}
+								<button
+									onclick={() => goToVideo(index)}
+									class="relative group overflow-hidden rounded-lg transition-all duration-300 {index === currentVideoIndex ? 'ring-4 ring-blue-600 scale-105' : 'hover:scale-105'}"
+								>
+									<div class="aspect-video bg-gray-200 relative">
+										{#if video.thumbnail_url}
+											<img 
+												src={video.thumbnail_url} 
+												alt={video.title}
+												class="w-full h-full object-cover"
+											/>
+										{:else}
+											<div class="w-full h-full flex items-center justify-center bg-gradient-to-br from-purple-400 to-pink-400">
+												<svg class="w-12 h-12 text-white" fill="currentColor" viewBox="0 0 24 24">
+													<path d="M8 5v14l11-7z"/>
+												</svg>
+											</div>
+										{/if}
+										
+										<!-- Play Icon Overlay -->
+										<div class="absolute inset-0 bg-black bg-opacity-30 flex items-center justify-center group-hover:bg-opacity-50 transition-all">
+											<div class="w-12 h-12 bg-white bg-opacity-90 rounded-full flex items-center justify-center">
+												<svg class="w-6 h-6 text-blue-600 ml-1" fill="currentColor" viewBox="0 0 24 24">
+													<path d="M8 5v14l11-7z"/>
+												</svg>
+											</div>
+										</div>
+										
+										{#if index === currentVideoIndex}
+											<div class="absolute inset-0 border-4 border-blue-600 pointer-events-none"></div>
+										{/if}
+									</div>
+									<p class="text-xs text-center mt-2 font-medium text-gray-700 group-hover:text-blue-600 transition-colors line-clamp-2">
+										{video.title}
+									</p>
+								</button>
+							{/each}
+						</div>
+					{/if}
+				{/if}
+			</div>
+			
+			<!-- Social Proof -->
+			<div class="text-center mt-12">
+				<p class="text-gray-600 mb-4">¿Quieres compartir tu experiencia?</p>
+				<div class="flex justify-center gap-4">
+					<a 
+						href="https://www.youtube.com/@TuCanalYouTube" 
+						target="_blank"
+						rel="noopener noreferrer"
+						class="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg font-semibold transition inline-flex items-center gap-2"
+					>
+						<svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+							<path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+						</svg>
+						YouTube
+					</a>
+					<a 
+						href="https://www.tiktok.com/@TuUsuarioTikTok" 
+						target="_blank"
+						rel="noopener noreferrer"
+						class="bg-black hover:bg-gray-800 text-white px-6 py-3 rounded-lg font-semibold transition inline-flex items-center gap-2"
+					>
+						<svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+							<path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 5 20.1a6.34 6.34 0 0 0 10.86-4.43v-7a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-1-.1z"/>
+						</svg>
+						TikTok
+					</a>
+				</div>
+			</div>
 		</div>
 	</section>
 {/if}
