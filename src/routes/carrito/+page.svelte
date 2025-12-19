@@ -9,21 +9,28 @@
 		cartItems = items;
 	});
 
-	function updateQuantity(productId: string, quantity: number, variantId?: string) {
+	function updateQuantity(productId: string, quantity: number, variantId?: string, bundleId?: string) {
 		if (quantity <= 0) {
-			cart.removeItem(productId, variantId);
+			cart.removeItem(productId, variantId, bundleId);
 		} else {
-			cart.updateQuantity(productId, quantity, variantId);
+			cart.updateQuantity(productId, quantity, variantId, bundleId);
 		}
 	}
 
-	function removeItem(productId: string, variantId?: string) {
-		cart.removeItem(productId, variantId);
+	function removeItem(productId: string, variantId?: string, bundleId?: string) {
+		cart.removeItem(productId, variantId, bundleId);
 	}
 
 	let subtotal = $derived(
 		cartItems.reduce((sum, item) => {
-			const price = item.variant ? item.variant.price : item.product.base_price;
+			let price = 0;
+			if (item.bundle) {
+				price = item.bundle.bundle_price;
+			} else if (item.variant) {
+				price = item.variant.price;
+			} else {
+				price = item.product.base_price;
+			}
 			return sum + price * item.quantity;
 		}, 0)
 	);
@@ -59,7 +66,7 @@
 			<div class="lg:col-span-2">
 				<div class="bg-white rounded-lg shadow-md">
 					{#each cartItems as item, index}
-						{@const price = item.variant ? item.variant.price : item.product.base_price}
+						{@const price = item.bundle ? item.bundle.bundle_price : (item.variant ? item.variant.price : item.product.base_price)}
 						{@const image =
 							item.media?.find((m) => m.is_primary)?.url || item.media?.[0]?.url}
 
@@ -84,7 +91,29 @@
 									>
 										{item.product.name}
 									</a>
-									{#if item.variant}
+									{#if item.bundle}
+										<p class="text-blue-600 text-sm font-semibold">📦 Paquete: {item.bundle.name}</p>
+										{#if item.bundle.items && item.bundle.items.length > 0}
+											<div class="text-xs text-gray-600 mt-1">
+												<p class="font-medium">Incluye:</p>
+												<ul class="list-disc list-inside ml-2">
+													{#each item.bundle.items as bundleItem}
+														<li>
+															{bundleItem.quantity}x {bundleItem.products?.name || 'Producto'}
+															{#if bundleItem.product_variants}
+																({bundleItem.product_variants.name})
+															{/if}
+														</li>
+													{/each}
+												</ul>
+											</div>
+										{/if}
+										{#if item.bundle.savings > 0}
+											<p class="text-green-600 text-xs mt-1">
+												✓ Ahorras {formatPrice(item.bundle.savings)}
+											</p>
+										{/if}
+									{:else if item.variant}
 										<p class="text-gray-600 text-sm">{item.variant.name}</p>
 									{/if}
 									<p class="text-blue-600 font-semibold mt-1">{formatPrice(price)}</p>
@@ -98,7 +127,8 @@
 												updateQuantity(
 													item.product.id,
 													item.quantity - 1,
-													item.variant?.id
+													item.variant?.id,
+													item.bundle?.id
 												)}
 											class="w-8 h-8 bg-gray-200 hover:bg-gray-300 rounded"
 										>
@@ -110,7 +140,8 @@
 												updateQuantity(
 													item.product.id,
 													item.quantity + 1,
-													item.variant?.id
+													item.variant?.id,
+													item.bundle?.id
 												)}
 											class="w-8 h-8 bg-gray-200 hover:bg-gray-300 rounded"
 										>
@@ -118,7 +149,7 @@
 										</button>
 									</div>
 									<button
-										onclick={() => removeItem(item.product.id, item.variant?.id)}
+										onclick={() => removeItem(item.product.id, item.variant?.id, item.bundle?.id)}
 										class="text-red-600 hover:text-red-700 text-sm"
 									>
 										Eliminar

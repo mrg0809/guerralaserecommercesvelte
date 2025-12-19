@@ -10,6 +10,8 @@ export type Tag = Database['public']['Tables']['tags']['Row'];
 export type ProductTag = Database['public']['Tables']['product_tags']['Row'];
 export type Order = Database['public']['Tables']['orders']['Row'];
 export type OrderItem = Database['public']['Tables']['order_items']['Row'];
+export type ProductBundle = Database['public']['Tables']['product_bundles']['Row'];
+export type BundleItem = Database['public']['Tables']['bundle_items']['Row'];
 
 // Tipo para videos testimoniales
 export interface TestimonialVideo {
@@ -28,15 +30,27 @@ export interface TestimonialVideo {
 export interface CartItem {
 	product: Product;
 	variant?: ProductVariant;
+	bundle?: ProductBundle;
 	quantity: number;
 	media?: ProductMedia[];
+}
+
+export interface BundleWithItems extends ProductBundle {
+	items?: Array<BundleItem & {
+		product?: Product;
+		variant?: ProductVariant;
+	}>;
+	totalValue?: number;
+	savings?: number;
 }
 
 export interface ProductWithDetails extends Product {
 	category?: Category;
 	variants?: ProductVariant[];
+	bundles?: BundleWithItems[];
 	media?: ProductMedia[];
 	specifications?: ProductSpecification[];
 	discounts?: Discount[];
 	tags?: Tag[];
 }
+

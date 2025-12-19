@@ -5,6 +5,7 @@
 
 	let { data }: { data: PageData } = $props();
 	let selectedVariant = $state<any>(null);
+	let selectedBundle = $state<any>(null);
 	let selectedImage = $state('');
 	let quantity = $state(1);
 	let addedToCart = $state(false);
@@ -27,6 +28,12 @@
 	let currentUrl = $derived(typeof window !== 'undefined' ? window.location.href : '');
 	let shareText = $derived(data.product.short_description || data.product.name);
 	let finalPrice = $derived.by(() => {
+		// Si hay un bundle seleccionado, usar el precio del bundle
+		if (selectedBundle) {
+			return selectedBundle.bundle_price;
+		}
+
+		// Si no, calcular el precio normal con descuentos
 		if (!data.product.discounts || data.product.discounts.length === 0) {
 			return selectedVariant?.price || data.product.base_price || 0;
 		}
@@ -42,6 +49,11 @@
 	});
 
 	let stock = $derived.by(() => {
+		// Si hay un bundle seleccionado, usar el stock del bundle
+		if (selectedBundle) {
+			return selectedBundle.stock_quantity || 0;
+		}
+
 		// Intentar obtener stock de la variante seleccionada
 		const variantStock = selectedVariant?.stock_quantity;
 		if (typeof variantStock === 'number' && variantStock >= 0) {
@@ -70,11 +82,22 @@
 		selectedImage = url;
 	}
 
+	function selectBundle(bundle: any) {
+		selectedBundle = bundle;
+		selectedVariant = null; // Deseleccionar variantes cuando se selecciona un bundle
+	}
+
+	function selectVariant(variant: any) {
+		selectedVariant = variant;
+		selectedBundle = null; // Deseleccionar bundles cuando se selecciona una variante
+	}
+
 	async function addToCart() {
 		if (stock === 0) return;
 		cart.addItem({
 			product: data.product,
 			variant: selectedVariant || undefined,
+			bundle: selectedBundle || undefined,
 			quantity,
 			media: data.product.media
 		});
@@ -208,12 +231,72 @@
 					<div class="flex flex-wrap gap-2">
 						{#each data.product.variants as variant}
 							<button
-								onclick={() => (selectedVariant = variant)}
+								onclick={() => selectVariant(variant)}
 								class="px-4 py-2 rounded-lg border-2 transition {selectedVariant?.id === variant.id
 									? 'border-blue-600 bg-blue-50'
 									: 'border-gray-300 hover:border-blue-400'}"
 							>
 								{variant.name}
+							</button>
+						{/each}
+					</div>
+				</div>
+			{/if}
+
+			<!-- Bundles/Paquetes -->
+			{#if data.product.bundles && data.product.bundles.length > 0}
+				<div class="mb-6">
+					<p class="block text-sm font-semibold mb-3">Paquetes Disponibles:</p>
+					<div class="space-y-3">
+						{#each data.product.bundles as bundle}
+							<button
+								onclick={() => selectBundle(bundle)}
+								class="w-full text-left p-4 rounded-lg border-2 transition {selectedBundle?.id === bundle.id
+									? 'border-blue-600 bg-blue-50'
+									: 'border-gray-300 hover:border-blue-400'}"
+							>
+								<div class="flex justify-between items-start">
+									<div class="flex-1">
+										<div class="font-semibold text-lg mb-1">{bundle.name}</div>
+										{#if bundle.description}
+											<p class="text-sm text-gray-600 mb-2">{bundle.description}</p>
+										{/if}
+										
+										<!-- Lista de items incluidos -->
+										<div class="text-sm text-gray-700">
+											<p class="font-medium mb-1">Incluye:</p>
+											<ul class="list-disc list-inside space-y-1">
+												{#each bundle.items || [] as item}
+													<li>
+														{item.quantity}x {item.products?.name || 'Producto'}
+														{#if item.product_variants}
+															({item.product_variants.name})
+														{/if}
+													</li>
+												{/each}
+											</ul>
+										</div>
+									</div>
+									
+									<div class="ml-4 text-right">
+										<div class="text-2xl font-bold text-blue-600">
+											{formatPrice(bundle.bundle_price)}
+										</div>
+										{#if bundle.savings > 0}
+											<div class="text-sm text-green-600 font-medium">
+												Ahorras {formatPrice(bundle.savings)}
+											</div>
+											<div class="text-xs text-gray-500 line-through">
+												Valor: {formatPrice(bundle.totalValue)}
+											</div>
+										{/if}
+										{#if bundle.savingsPercentage > 0}
+											<span class="inline-block mt-1 bg-green-500 text-white px-2 py-1 rounded text-xs font-semibold">
+												-{bundle.savingsPercentage.toFixed(0)}%
+											</span>
+										{/if}
+									</div>
+								</div>
 							</button>
 						{/each}
 					</div>

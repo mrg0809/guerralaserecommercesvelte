@@ -19,7 +19,8 @@ function createCartStore() {
 				const existingIndex = items.findIndex(
 					(i) =>
 						i.product.id === item.product.id &&
-						(!item.variant || i.variant?.id === item.variant?.id)
+						(!item.variant || i.variant?.id === item.variant?.id) &&
+						(!item.bundle || i.bundle?.id === item.bundle?.id)
 				);
 
 				if (existingIndex >= 0) {
@@ -34,11 +35,15 @@ function createCartStore() {
 
 				return items;
 			}),
-		removeItem: (productId: string, variantId?: string) =>
+		removeItem: (productId: string, variantId?: string, bundleId?: string) =>
 			update((items) => {
 				const filtered = items.filter(
 					(i) =>
-						!(i.product.id === productId && (!variantId || i.variant?.id === variantId))
+						!(
+							i.product.id === productId &&
+							(!variantId || i.variant?.id === variantId) &&
+							(!bundleId || i.bundle?.id === bundleId)
+						)
 				);
 
 				if (typeof window !== 'undefined') {
@@ -47,11 +52,13 @@ function createCartStore() {
 
 				return filtered;
 			}),
-		updateQuantity: (productId: string, quantity: number, variantId?: string) =>
+		updateQuantity: (productId: string, quantity: number, variantId?: string, bundleId?: string) =>
 			update((items) => {
 				const item = items.find(
 					(i) =>
-						i.product.id === productId && (!variantId || i.variant?.id === variantId)
+						i.product.id === productId &&
+						(!variantId || i.variant?.id === variantId) &&
+						(!bundleId || i.bundle?.id === bundleId)
 				);
 
 				if (item) {
@@ -74,3 +81,4 @@ function createCartStore() {
 }
 
 export const cart = createCartStore();
+

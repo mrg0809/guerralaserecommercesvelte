@@ -31,6 +31,40 @@ export const load: PageLoad = async ({ params }) => {
 		})
 		.map((pd: any) => pd.discounts);
 
+	// Get bundles for this product
+	const { data: bundles } = await supabase
+		.from('product_bundles')
+		.select(`
+			*,
+			bundle_items (
+				*,
+				products (*),
+				product_variants (*)
+			)
+		`)
+		.eq('product_id', productData.id)
+		.eq('is_active', true)
+		.order('display_order');
+
+	// Calculate bundle savings and total value
+	const bundlesWithCalculations = (bundles || []).map((bundle: any) => {
+		const items = bundle.bundle_items || [];
+		const totalValue = items.reduce((sum: number, item: any) => {
+			const itemPrice = item.product_variants?.price || item.products?.base_price || 0;
+			return sum + itemPrice * item.quantity;
+		}, 0);
+		const savings = totalValue - bundle.bundle_price;
+		const savingsPercentage = totalValue > 0 ? (savings / totalValue) * 100 : 0;
+
+		return {
+			...bundle,
+			items: bundle.bundle_items,
+			totalValue,
+			savings,
+			savingsPercentage
+		};
+	});
+
 	// Sort variants by price (lowest first)
 	const sortedVariants = (productData.product_variants || []).sort(
 		(a: any, b: any) => (a.price || 0) - (b.price || 0)
@@ -41,6 +75,7 @@ export const load: PageLoad = async ({ params }) => {
 			...productData,
 			media: productData.product_media,
 			variants: sortedVariants,
+			bundles: bundlesWithCalculations,
 			category: productData.categories,
 			discounts: activeDiscounts || []
 		}

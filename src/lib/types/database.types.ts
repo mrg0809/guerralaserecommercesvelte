@@ -395,6 +395,79 @@ export type Database = {
 					created_at?: string;
 				};
 			};
+			product_bundles: {
+				Row: {
+					id: string;
+					product_id: string;
+					name: string;
+					description: string | null;
+					sku: string | null;
+					bundle_price: number;
+					discount_percentage: number;
+					stock_quantity: number;
+					is_active: boolean;
+					display_order: number;
+					created_at: string;
+					updated_at: string;
+				};
+				Insert: {
+					id?: string;
+					product_id: string;
+					name: string;
+					description?: string | null;
+					sku?: string | null;
+					bundle_price: number;
+					discount_percentage?: number;
+					stock_quantity?: number;
+					is_active?: boolean;
+					display_order?: number;
+					created_at?: string;
+					updated_at?: string;
+				};
+				Update: {
+					id?: string;
+					product_id?: string;
+					name?: string;
+					description?: string | null;
+					sku?: string | null;
+					bundle_price?: number;
+					discount_percentage?: number;
+					stock_quantity?: number;
+					is_active?: boolean;
+					display_order?: number;
+					created_at?: string;
+					updated_at?: string;
+				};
+			};
+			bundle_items: {
+				Row: {
+					id: string;
+					bundle_id: string;
+					product_id: string;
+					variant_id: string | null;
+					quantity: number;
+					display_order: number;
+					created_at: string;
+				};
+				Insert: {
+					id?: string;
+					bundle_id: string;
+					product_id: string;
+					variant_id?: string | null;
+					quantity?: number;
+					display_order?: number;
+					created_at?: string;
+				};
+				Update: {
+					id?: string;
+					bundle_id?: string;
+					product_id?: string;
+					variant_id?: string | null;
+					quantity?: number;
+					display_order?: number;
+					created_at?: string;
+				};
+			};
 		};
 		Functions: {
 			get_product_details: {
