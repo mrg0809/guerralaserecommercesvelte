@@ -31,11 +31,16 @@ export const load: PageLoad = async ({ params }) => {
 		})
 		.map((pd: any) => pd.discounts);
 
+	// Sort variants by price (lowest first)
+	const sortedVariants = (productData.product_variants || []).sort(
+		(a: any, b: any) => (a.price || 0) - (b.price || 0)
+	);
+
 	return {
 		product: {
 			...productData,
 			media: productData.product_media,
-			variants: productData.product_variants,
+			variants: sortedVariants,
 			category: productData.categories,
 			discounts: activeDiscounts || []
 		}

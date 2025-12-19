@@ -1,8 +1,8 @@
 <script lang="ts">
-	import { formatPrice } from '$lib/utils';
-	import type { PageData } from './$types';
+    import { formatPrice } from '$lib/utils';
+    import type { PageData } from './$types';
 
-	let { data }: { data: PageData } = $props();
+    let { data }: { data: PageData } = $props();
 </script>
 
 <svelte:head>
@@ -44,6 +44,8 @@
 		<span class="mx-2">/</span>
 		<span class="text-gray-600">{data.category.name}</span>
 	</nav>
+
+
 
 	<!-- Products -->
 	{#if data.products.length === 0}
