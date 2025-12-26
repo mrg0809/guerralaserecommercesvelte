@@ -2,6 +2,7 @@
 	import { supabase } from '$lib/supabaseClient';
 	import { parseExcelFile, validateProductRow, downloadTemplate, parseSpecifications, parseTags, type ProductImportRow, type ImportResult } from '$lib/excelImport';
 	import type { Category } from '$lib/types';
+	import * as XLSX from 'xlsx';
 
 	let file = $state<File | null>(null);
 	let importing = $state(false);
@@ -10,6 +11,10 @@
 	let importResult = $state<ImportResult | null>(null);
 	let categories = $state<Category[]>([]);
 	let previewMode = $state(true);
+	
+	// Variables para exportación
+	let exporting = $state(false);
+	let exportCategoryId = $state('');
 
 	// Computed values for stats
 	let validCount = $derived(parsedProducts.filter((p, i) => validateProductRow(p, i + 2).valid).length);
@@ -25,6 +30,18 @@
 			.select('*')
 			.order('name');
 		if (data) categories = data;
+	}
+
+	// Función para obtener todas las categorías hijas (recursivo)
+	function getChildCategoryIds(categoryId: string): string[] {
+		const childIds: string[] = [categoryId];
+		const children = categories.filter(c => c.parent_id === categoryId);
+		
+		for (const child of children) {
+			childIds.push(...getChildCategoryIds(child.id));
+		}
+		
+		return childIds;
 	}
 
 	function handleFileChange(e: Event) {
@@ -288,11 +305,197 @@
 		const input = document.querySelector('input[type="file"]') as HTMLInputElement;
 		if (input) input.value = '';
 	}
+
+	async function exportProducts() {
+		exporting = true;
+		try {
+			// Build query
+			let query = supabase
+				.from('products')
+				.select('*, categories(slug, name), product_specifications(*), product_tags(tags(name)), product_variants(*)')
+				.order('created_at', { ascending: false });
+
+			// Filter by category if selected (include child categories)
+			if (exportCategoryId) {
+				const categoryIds = getChildCategoryIds(exportCategoryId);
+				query = query.in('category_id', categoryIds);
+			}
+
+			const { data: products, error } = await query;
+
+			if (error) throw error;
+			if (!products || products.length === 0) {
+				alert('No hay productos para exportar');
+				return;
+			}
+
+			// Prepare data for Excel
+			const exportData: any[] = [];
+
+			for (const product of products) {
+				// Base product row
+				const baseRow = {
+					nombre: product.name,
+					slug: product.slug,
+					descripcion_corta: product.short_description || '',
+					descripcion_larga: product.long_description || '',
+					precio_base: product.base_price,
+					categoria_slug: product.categories?.slug || '',
+					sku: product.sku || '',
+					stock: product.stock_quantity || 0,
+					especificaciones: product.product_specifications?.map((s: any) => `${s.spec_key}:${s.spec_value}`).join('|') || '',
+					etiquetas: product.product_tags?.map((pt: any) => pt.tags?.name).filter(Boolean).join(',') || '',
+					activo: product.is_active,
+					destacado: product.is_featured,
+					variante_nombre: '',
+					variante_sku: '',
+					variante_precio: '',
+					variante_stock: '',
+					producto_padre: ''
+				};
+
+				exportData.push(baseRow);
+
+				// Add variant rows
+				if (product.product_variants && product.product_variants.length > 0) {
+					for (const variant of product.product_variants) {
+						exportData.push({
+							nombre: '',
+							slug: '',
+							descripcion_corta: '',
+							descripcion_larga: '',
+							precio_base: '',
+							categoria_slug: '',
+							sku: '',
+							stock: '',
+							especificaciones: '',
+							etiquetas: '',
+							activo: '',
+							destacado: '',
+							variante_nombre: variant.name || '',
+							variante_sku: variant.sku || '',
+							variante_precio: variant.price || 0,
+							variante_stock: variant.stock_quantity || 0,
+							producto_padre: product.sku || ''
+						});
+					}
+				}
+			}
+
+			// Create workbook
+			const worksheet = XLSX.utils.json_to_sheet(exportData);
+			const workbook = XLSX.utils.book_new();
+			XLSX.utils.book_append_sheet(workbook, worksheet, 'Productos');
+
+			// Set column widths
+			worksheet['!cols'] = [
+				{ wch: 30 }, // nombre
+				{ wch: 20 }, // slug
+				{ wch: 30 }, // descripcion_corta
+				{ wch: 40 }, // descripcion_larga
+				{ wch: 12 }, // precio_base
+				{ wch: 20 }, // categoria_slug
+				{ wch: 15 }, // sku
+				{ wch: 10 }, // stock
+				{ wch: 40 }, // especificaciones
+				{ wch: 30 }, // etiquetas
+				{ wch: 10 }, // activo
+				{ wch: 10 }, // destacado
+				{ wch: 20 }, // variante_nombre
+				{ wch: 15 }, // variante_sku
+				{ wch: 12 }, // variante_precio
+				{ wch: 10 }, // variante_stock
+				{ wch: 15 }  // producto_padre
+			];
+
+			// Generate filename
+			const categoryName = exportCategoryId 
+				? categories.find(c => c.id === exportCategoryId)?.name || 'categoria'
+				: 'todos';
+			const timestamp = new Date().toISOString().slice(0, 10);
+			const filename = `productos_${categoryName}_${timestamp}.xlsx`;
+
+			// Download
+			XLSX.writeFile(workbook, filename);
+			
+			alert(`${products.length} productos exportados exitosamente`);
+		} catch (error) {
+			alert('Error al exportar: ' + (error as Error).message);
+			console.error(error);
+		} finally {
+			exporting = false;
+		}
+	}
+
 </script>
 
 <div class="container mx-auto px-4 py-8 max-w-7xl">
 	<div class="mb-8">
-		<h1 class="text-3xl font-bold text-gray-900 mb-2">Importar Productos Masivamente</h1>
+		<h1 class="text-3xl font-bold text-gray-900 mb-2">Importar/Exportar Productos</h1>
+		<p class="text-gray-600">Gestiona productos masivamente mediante archivos Excel</p>
+	</div>
+
+	<!-- Export Section -->
+	<div class="mb-8 bg-white rounded-lg shadow-md border border-gray-200">
+		<div class="border-b border-gray-200 bg-gradient-to-r from-green-50 to-emerald-50 px-6 py-4">
+			<h2 class="text-xl font-bold text-gray-900 flex items-center gap-2">
+				<svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+				</svg>
+				Exportar Productos
+			</h2>
+			<p class="text-gray-600 text-sm mt-1">Descarga los productos existentes para editar masivamente</p>
+		</div>
+		
+		<div class="p-6">
+			<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+				<div>
+					<label class="block text-sm font-medium text-gray-700 mb-2">
+						Filtrar por categoría (opcional)
+					</label>
+					<select
+						bind:value={exportCategoryId}
+						class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+					>
+						<option value="">Todas las categorías</option>
+						{#each categories as category}
+							<option value={category.id}>{category.name}</option>
+						{/each}
+					</select>
+				</div>
+			</div>
+
+			<button
+				onclick={exportProducts}
+				disabled={exporting}
+				class="w-full sm:w-auto bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white px-6 py-3 rounded-lg font-bold transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+			>
+				{#if exporting}
+					<svg class="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+						<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+						<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+					</svg>
+					Exportando...
+				{:else}
+					<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+					</svg>
+					Exportar a Excel
+				{/if}
+			</button>
+
+			<p class="text-xs text-gray-600 mt-3">
+				💡 El archivo exportado incluye productos con sus variantes, especificaciones y etiquetas. Puedes editarlo y reimportarlo.
+			</p>
+		</div>
+	</div>
+
+	<!-- Divider -->
+	<div class="my-8 border-t-2 border-gray-300"></div>
+
+	<!-- Import Section -->
+	<div class="mb-8">
+		<h2 class="text-2xl font-bold text-gray-900 mb-2">Importar Productos</h2>
 		<p class="text-gray-600">Sube un archivo Excel con múltiples productos para importar en bulk</p>
 	</div>
 

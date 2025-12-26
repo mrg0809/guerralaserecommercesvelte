@@ -19,6 +19,13 @@
 	let selectedTags: string[] = $state([]);
 	let newTagName = $state('');
 	
+	// Variables de paginación y filtros
+	let searchQuery = $state('');
+	let selectedCategoryFilter = $state('');
+	let currentPage = $state(1);
+	let itemsPerPage = $state(20);
+	let totalProducts = $state(0);
+	
 	// Variables para gestión de imágenes
 	let productImages: ProductMedia[] = $state([]);
 	let uploadingImages = $state(false);
@@ -57,6 +64,55 @@
 	});
 
 	let activeTab = $state<'general' | 'variants' | 'specs'>('general');
+
+	// Función para obtener todas las categorías hijas (recursivo)
+	function getChildCategoryIds(categoryId: string): string[] {
+		const childIds: string[] = [categoryId];
+		const children = categories.filter(c => c.parent_id === categoryId);
+		
+		for (const child of children) {
+			childIds.push(...getChildCategoryIds(child.id));
+		}
+		
+		return childIds;
+	}
+
+	// Computed: productos filtrados y paginados
+	let filteredProducts = $derived.by(() => {
+		let filtered = products;
+
+		// Filtrar por búsqueda (nombre o SKU)
+		if (searchQuery.trim()) {
+			const query = searchQuery.toLowerCase();
+			filtered = filtered.filter(p => 
+				p.name.toLowerCase().includes(query) || 
+				(p.sku && p.sku.toLowerCase().includes(query))
+			);
+		}
+
+		// Filtrar por categoría (incluye categorías hijas)
+		if (selectedCategoryFilter) {
+			const categoryIds = getChildCategoryIds(selectedCategoryFilter);
+			filtered = filtered.filter(p => p.category_id && categoryIds.includes(p.category_id));
+		}
+
+		return filtered;
+	});
+
+	let paginatedProducts = $derived.by(() => {
+		const start = (currentPage - 1) * itemsPerPage;
+		const end = start + itemsPerPage;
+		return filteredProducts.slice(start, end);
+	});
+
+	let totalPages = $derived(Math.ceil(filteredProducts.length / itemsPerPage));
+
+	// Reset a página 1 cuando cambian los filtros
+	$effect(() => {
+		searchQuery;
+		selectedCategoryFilter;
+		currentPage = 1;
+	});
 
 	onMount(async () => {
 		await loadProducts();
@@ -650,6 +706,67 @@
 		</div>
 	</div>
 
+	<!-- Filtros y búsqueda -->
+	{#if !loading && products.length > 0}
+		<div class="bg-white rounded-lg shadow-md p-4 mb-6">
+			<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+				<!-- Búsqueda -->
+				<div class="md:col-span-2">
+					<label class="block text-sm font-medium mb-2">Buscar por nombre o SKU</label>
+					<input
+						type="text"
+						bind:value={searchQuery}
+						placeholder="Escribe para buscar..."
+						class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+					/>
+				</div>
+
+				<!-- Filtro por categoría -->
+				<div>
+					<label class="block text-sm font-medium mb-2">Filtrar por categoría</label>
+					<select
+						bind:value={selectedCategoryFilter}
+						class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+					>
+						<option value="">Todas las categorías</option>
+						{#each categories as category}
+							<option value={category.id}>
+								{categoryHierarchy[category.id] || category.name}
+							</option>
+						{/each}
+					</select>
+				</div>
+			</div>
+
+			<!-- Resultados y items por página -->
+			<div class="flex justify-between items-center mt-4 pt-4 border-t">
+				<p class="text-sm text-gray-600">
+					Mostrando {paginatedProducts.length} de {filteredProducts.length} productos
+					{#if searchQuery || selectedCategoryFilter}
+						<button
+							onclick={() => { searchQuery = ''; selectedCategoryFilter = ''; }}
+							class="ml-2 text-blue-600 hover:underline"
+						>
+							Limpiar filtros
+						</button>
+					{/if}
+				</p>
+				<div class="flex items-center gap-2">
+					<label class="text-sm text-gray-600">Items por página:</label>
+					<select
+						bind:value={itemsPerPage}
+						class="px-3 py-1 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+					>
+						<option value={10}>10</option>
+						<option value={20}>20</option>
+						<option value={50}>50</option>
+						<option value={100}>100</option>
+					</select>
+				</div>
+			</div>
+		</div>
+	{/if}
+
 	{#if loading}
 		<div class="text-center py-12">
 			<p class="text-xl text-gray-600">Cargando productos...</p>
@@ -662,6 +779,16 @@
 				class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
 			>
 				Crear Primer Producto
+			</button>
+		</div>
+	{:else if filteredProducts.length === 0}
+		<div class="bg-gray-50 rounded-lg p-8 text-center">
+			<p class="text-xl text-gray-600 mb-4">No se encontraron productos con los filtros aplicados</p>
+			<button
+				onclick={() => { searchQuery = ''; selectedCategoryFilter = ''; }}
+				class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+			>
+				Limpiar filtros
 			</button>
 		</div>
 	{:else}
@@ -679,7 +806,7 @@
 					</tr>
 				</thead>
 				<tbody>
-					{#each products as product}
+					{#each paginatedProducts as product}
 						<tr class="border-t hover:bg-gray-50">
 							<td class="px-4 py-3">
 								<div>
@@ -727,6 +854,59 @@
 					{/each}
 				</tbody>
 			</table>
+
+			<!-- Paginación -->
+			{#if totalPages > 1}
+				<div class="px-4 py-4 border-t bg-gray-50 flex justify-between items-center">
+					<div class="text-sm text-gray-600">
+						Página {currentPage} de {totalPages}
+					</div>
+					<div class="flex gap-2">
+						<button
+							onclick={() => currentPage = 1}
+							disabled={currentPage === 1}
+							class="px-3 py-1 border rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+						>
+							«
+						</button>
+						<button
+							onclick={() => currentPage = currentPage - 1}
+							disabled={currentPage === 1}
+							class="px-3 py-1 border rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+						>
+							‹ Anterior
+						</button>
+						
+						<!-- Números de página -->
+						{#each Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+							const startPage = Math.max(1, Math.min(currentPage - 2, totalPages - 4));
+							return startPage + i;
+						}) as pageNum}
+							<button
+								onclick={() => currentPage = pageNum}
+								class="px-3 py-1 border rounded-lg hover:bg-gray-100 {currentPage === pageNum ? 'bg-blue-600 text-white hover:bg-blue-700' : ''}"
+							>
+								{pageNum}
+							</button>
+						{/each}
+
+						<button
+							onclick={() => currentPage = currentPage + 1}
+							disabled={currentPage === totalPages}
+							class="px-3 py-1 border rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+						>
+							Siguiente ›
+						</button>
+						<button
+							onclick={() => currentPage = totalPages}
+							disabled={currentPage === totalPages}
+							class="px-3 py-1 border rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+						>
+							»
+						</button>
+					</div>
+				</div>
+			{/if}
 		</div>
 	{/if}
 </div>
