@@ -1,5 +1,4 @@
 import { supabase } from './supabaseClient';
-import { supabaseServer } from './supabaseServer';
 import type { ProductSpecification } from './types';
 
 /**
@@ -97,7 +96,7 @@ export async function addProductSpecification(
 	productId: string,
 	specification: Omit<ProductSpecification, 'id' | 'created_at' | 'updated_at'>
 ): Promise<ProductSpecification | null> {
-	const { data, error } = await supabaseServer
+	const { data, error } = await supabase
 		.from('product_specifications')
 		.insert([
 			{
@@ -125,7 +124,7 @@ export async function updateProductSpecification(
 	specificationId: string,
 	updates: Partial<ProductSpecification>
 ): Promise<ProductSpecification | null> {
-	const { data, error } = await supabaseServer
+	const { data, error } = await supabase
 		.from('product_specifications')
 		.update(updates)
 		.eq('id', specificationId)
@@ -144,7 +143,7 @@ export async function updateProductSpecification(
  * Delete specification (requires authentication)
  */
 export async function deleteProductSpecification(specificationId: string): Promise<boolean> {
-	const { error } = await supabaseServer
+	const { error } = await supabase
 		.from('product_specifications')
 		.delete()
 		.eq('id', specificationId);

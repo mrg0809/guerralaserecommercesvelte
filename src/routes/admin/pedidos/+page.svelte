@@ -203,8 +203,9 @@
 			<div class="p-6 space-y-6">
 				<!-- Order Status -->
 				<div>
-					<label class="block text-sm font-semibold mb-2">Estado del Pedido</label>
+					<label class="block text-sm font-semibold mb-2" for="order-status-select">Estado del Pedido</label>
 					<select
+						id="order-status-select"
 						value={selectedOrder.status}
 						onchange={(e) => updateOrderStatus(selectedOrder!.id, e.currentTarget.value)}
 						class="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"

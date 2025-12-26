@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { goto, page } from '$app/navigation';
+	import { goto } from '$app/navigation';
+	import { page } from '$app/stores';
 	import { supabase } from '$lib/supabaseClient';
-	import { supabaseServer } from '$lib/supabaseServer';
 	import { getProductSpecifications } from '$lib/specifications';
 	import type { Product, ProductSpecification } from '$lib/types';
 
@@ -65,7 +65,7 @@
 		try {
 			if (editingSpec) {
 				// Update
-				const { error } = await supabaseServer
+				const { error } = await supabase
 					.from('product_specifications')
 					.update({
 						specification_key: formData.specification_key,
@@ -77,7 +77,7 @@
 				if (error) throw error;
 			} else {
 				// Insert
-				const { error } = await supabaseServer
+				const { error } = await supabase
 					.from('product_specifications')
 					.insert([
 						{
@@ -112,7 +112,7 @@
 		if (!confirm('¿Eliminar esta especificación?')) return;
 
 		try {
-			const { error } = await supabaseServer
+			const { error } = await supabase
 				.from('product_specifications')
 				.delete()
 				.eq('id', id);
@@ -230,10 +230,11 @@
 
 				<div class="space-y-4">
 					<div>
-						<label class="block text-sm font-medium text-gray-700 mb-2">
+						<label class="block text-sm font-medium text-gray-700 mb-2" for="specification-key">
 							Clave (ej: Potencia, Velocidad)
 						</label>
 						<input
+							id="specification-key"
 							type="text"
 							bind:value={formData.specification_key}
 							placeholder="Nombre del atributo"
@@ -242,10 +243,11 @@
 					</div>
 
 					<div>
-						<label class="block text-sm font-medium text-gray-700 mb-2">
+						<label class="block text-sm font-medium text-gray-700 mb-2" for="specification-value">
 							Valor (ej: 40W, 100mm/s)
 						</label>
 						<input
+							id="specification-value"
 							type="text"
 							bind:value={formData.specification_value}
 							placeholder="Valor del atributo"
@@ -254,10 +256,11 @@
 					</div>
 
 					<div>
-						<label class="block text-sm font-medium text-gray-700 mb-2">
+						<label class="block text-sm font-medium text-gray-700 mb-2" for="specification-type">
 							Tipo de Dato
 						</label>
 						<select
+							id="specification-type"
 							bind:value={formData.data_type}
 							class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-600"
 						>

@@ -345,8 +345,8 @@
 				<div class="space-y-4">
 					<!-- Producto -->
 					<div>
-						<label class="block font-semibold mb-2">Producto Principal *</label>
-						<select bind:value={selectedProductId} class="w-full border rounded-lg px-4 py-2">
+						<label class="block font-semibold mb-2" for="bundle-product">Producto Principal *</label>
+						<select id="bundle-product" bind:value={selectedProductId} class="w-full border rounded-lg px-4 py-2">
 							<option value="">Selecciona un producto</option>
 							{#each products as product}
 								<option value={product.id}>{product.name}</option>
@@ -356,8 +356,9 @@
 
 					<!-- Nombre -->
 					<div>
-						<label class="block font-semibold mb-2">Nombre del Bundle *</label>
+						<label class="block font-semibold mb-2" for="bundle-name">Nombre del Bundle *</label>
 						<input
+							id="bundle-name"
 							type="text"
 							bind:value={bundleName}
 							placeholder="ej: Kit Completo"
@@ -367,8 +368,9 @@
 
 					<!-- Descripción -->
 					<div>
-						<label class="block font-semibold mb-2">Descripción</label>
+						<label class="block font-semibold mb-2" for="bundle-description">Descripción</label>
 						<textarea
+							id="bundle-description"
 							bind:value={bundleDescription}
 							placeholder="Descripción del bundle"
 							class="w-full border rounded-lg px-4 py-2"
@@ -379,8 +381,9 @@
 					<!-- Precio y Stock -->
 					<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
 						<div>
-							<label class="block font-semibold mb-2">Precio del Bundle *</label>
+							<label class="block font-semibold mb-2" for="bundle-price">Precio del Bundle *</label>
 							<input
+								id="bundle-price"
 								type="number"
 								bind:value={bundlePrice}
 								step="0.01"
@@ -389,8 +392,9 @@
 							/>
 						</div>
 						<div>
-							<label class="block font-semibold mb-2">Stock</label>
+							<label class="block font-semibold mb-2" for="bundle-stock">Stock</label>
 							<input
+								id="bundle-stock"
 								type="number"
 								bind:value={bundleStock}
 								min="0"
@@ -398,8 +402,9 @@
 							/>
 						</div>
 						<div>
-							<label class="block font-semibold mb-2">SKU (opcional)</label>
+							<label class="block font-semibold mb-2" for="bundle-sku">SKU (opcional)</label>
 							<input
+								id="bundle-sku"
 								type="text"
 								bind:value={bundleSku}
 								placeholder="BUNDLE-001"

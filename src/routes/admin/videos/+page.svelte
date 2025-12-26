@@ -344,7 +344,7 @@
 
 			<form onsubmit={(e) => { e.preventDefault(); saveVideo(); }} class="p-6 space-y-4">
 				<div>
-					<label class="block text-sm font-semibold mb-2">Tipo de Video *</label>
+					<p class="block text-sm font-semibold mb-2">Tipo de Video *</p>
 					<div class="flex gap-4">
 						<label class="flex items-center gap-2">
 							<input
@@ -380,8 +380,9 @@
 				</div>
 
 				<div>
-					<label class="block text-sm font-semibold mb-2">URL del Video *</label>
+					<label class="block text-sm font-semibold mb-2" for="video-url">URL del Video *</label>
 					<input
+						id="video-url"
 						type="text"
 						bind:value={formData.video_url}
 						onblur={autoFillFields}
@@ -401,8 +402,9 @@
 				</div>
 
 				<div>
-					<label class="block text-sm font-semibold mb-2">Título *</label>
+					<label class="block text-sm font-semibold mb-2" for="video-title">Título *</label>
 					<input
+						id="video-title"
 						type="text"
 						bind:value={formData.title}
 						required
@@ -412,8 +414,9 @@
 				</div>
 
 				<div>
-					<label class="block text-sm font-semibold mb-2">Descripción</label>
+					<label class="block text-sm font-semibold mb-2" for="video-description">Descripción</label>
 					<textarea
+						id="video-description"
 						bind:value={formData.description}
 						rows="3"
 						placeholder="Descripción opcional del testimonio"
@@ -423,8 +426,9 @@
 
 				{#if formData.video_type === 'youtube'}
 					<div>
-						<label class="block text-sm font-semibold mb-2">URL del Thumbnail</label>
+						<label class="block text-sm font-semibold mb-2" for="video-thumbnail-url">URL del Thumbnail</label>
 						<input
+							id="video-thumbnail-url"
 							type="text"
 							bind:value={formData.thumbnail_url}
 							placeholder="Se genera automáticamente para YouTube"
@@ -437,8 +441,9 @@
 				{/if}
 
 				<div>
-					<label class="block text-sm font-semibold mb-2">Orden de Visualización</label>
+					<label class="block text-sm font-semibold mb-2" for="video-display-order">Orden de Visualización</label>
 					<input
+						id="video-display-order"
 						type="number"
 						bind:value={formData.display_order}
 						min="0"

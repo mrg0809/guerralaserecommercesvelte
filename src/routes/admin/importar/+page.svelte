@@ -450,10 +450,11 @@
 		<div class="p-6">
 			<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
 				<div>
-					<label class="block text-sm font-medium text-gray-700 mb-2">
+					<label class="block text-sm font-medium text-gray-700 mb-2" for="export-category-select">
 						Filtrar por categoría (opcional)
 					</label>
 					<select
+						id="export-category-select"
 						bind:value={exportCategoryId}
 						class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
 					>

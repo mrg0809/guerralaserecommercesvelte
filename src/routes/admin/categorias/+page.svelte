@@ -548,8 +548,9 @@
 
 			<form onsubmit={(e) => { e.preventDefault(); saveCategory(); }} class="p-6 space-y-4">
 				<div>
-					<label class="block text-sm font-semibold mb-2">Nombre *</label>
+					<label class="block text-sm font-semibold mb-2" for="category-name">Nombre *</label>
 					<input
+						id="category-name"
 						type="text"
 						bind:value={formData.name}
 						onblur={updateSlug}
@@ -559,8 +560,9 @@
 				</div>
 
 				<div>
-					<label class="block text-sm font-semibold mb-2">Slug *</label>
+					<label class="block text-sm font-semibold mb-2" for="category-slug">Slug *</label>
 					<input
+						id="category-slug"
 						type="text"
 						bind:value={formData.slug}
 						required
@@ -569,8 +571,9 @@
 				</div>
 
 				<div>
-					<label class="block text-sm font-semibold mb-2">Descripción</label>
+					<label class="block text-sm font-semibold mb-2" for="category-description">Descripción</label>
 					<textarea
+						id="category-description"
 						bind:value={formData.description}
 						rows="4"
 						class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -578,8 +581,9 @@
 				</div>
 
 				<div>
-					<label class="block text-sm font-semibold mb-2">Categoría Padre</label>
+					<label class="block text-sm font-semibold mb-2" for="category-parent">Categoría Padre</label>
 					<select
+						id="category-parent"
 						bind:value={formData.parent_id}
 						onchange={updateSlug}
 						class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -594,7 +598,7 @@
 				</div>
 
 				<div>
-					<label class="block text-sm font-semibold mb-2">Imagen de Categoría</label>
+					<p class="block text-sm font-semibold mb-2">Imagen de Categoría</p>
 					
 					<!-- Preview de imagen actual o seleccionada -->
 					{#if imagePreview}
@@ -644,8 +648,9 @@
 				</div>
 
 				<div>
-					<label class="block text-sm font-semibold mb-2">Orden de Visualización</label>
+					<label class="block text-sm font-semibold mb-2" for="category-display-order">Orden de Visualización</label>
 					<input
+						id="category-display-order"
 						type="number"
 						bind:value={formData.display_order}
 						min="0"

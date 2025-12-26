@@ -712,8 +712,9 @@
 			<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
 				<!-- Búsqueda -->
 				<div class="md:col-span-2">
-					<label class="block text-sm font-medium mb-2">Buscar por nombre o SKU</label>
+					<label class="block text-sm font-medium mb-2" for="product-search">Buscar por nombre o SKU</label>
 					<input
+						id="product-search"
 						type="text"
 						bind:value={searchQuery}
 						placeholder="Escribe para buscar..."
@@ -723,8 +724,9 @@
 
 				<!-- Filtro por categoría -->
 				<div>
-					<label class="block text-sm font-medium mb-2">Filtrar por categoría</label>
+					<label class="block text-sm font-medium mb-2" for="product-category-filter">Filtrar por categoría</label>
 					<select
+						id="product-category-filter"
 						bind:value={selectedCategoryFilter}
 						class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
 					>
@@ -752,8 +754,9 @@
 					{/if}
 				</p>
 				<div class="flex items-center gap-2">
-					<label class="text-sm text-gray-600">Items por página:</label>
+					<label class="text-sm text-gray-600" for="items-per-page">Items por página:</label>
 					<select
+						id="items-per-page"
 						bind:value={itemsPerPage}
 						class="px-3 py-1 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
 					>
@@ -965,8 +968,9 @@
 						<!-- PESTAÑA GENERAL -->
 						<div class="space-y-4">
 							<div>
-								<label class="block text-sm font-semibold mb-2">Nombre *</label>
+								<label class="block text-sm font-semibold mb-2" for="product-name">Nombre *</label>
 								<input
+									id="product-name"
 									type="text"
 									bind:value={formData.name}
 									onblur={updateSlug}
@@ -976,8 +980,9 @@
 							</div>
 
 							<div>
-								<label class="block text-sm font-semibold mb-2">Slug *</label>
+								<label class="block text-sm font-semibold mb-2" for="product-slug">Slug *</label>
 								<input
+									id="product-slug"
 									type="text"
 									bind:value={formData.slug}
 									required
@@ -986,8 +991,9 @@
 							</div>
 
 							<div>
-								<label class="block text-sm font-semibold mb-2">Descripción Corta</label>
+								<label class="block text-sm font-semibold mb-2" for="product-short-description">Descripción Corta</label>
 								<input
+									id="product-short-description"
 									type="text"
 									bind:value={formData.short_description}
 									class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -995,8 +1001,9 @@
 							</div>
 
 							<div>
-								<label class="block text-sm font-semibold mb-2">Descripción</label>
+								<label class="block text-sm font-semibold mb-2" for="product-description">Descripción</label>
 								<textarea
+									id="product-description"
 									bind:value={formData.description}
 									rows="4"
 									class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -1005,8 +1012,9 @@
 
 							<div class="grid grid-cols-2 gap-4">
 								<div>
-									<label class="block text-sm font-semibold mb-2">Precio Base *</label>
+									<label class="block text-sm font-semibold mb-2" for="product-base-price">Precio Base *</label>
 									<input
+										id="product-base-price"
 										type="number"
 										bind:value={formData.base_price}
 										step="0.01"
@@ -1017,8 +1025,9 @@
 								</div>
 
 								<div>
-									<label class="block text-sm font-semibold mb-2">Stock</label>
+									<label class="block text-sm font-semibold mb-2" for="product-stock">Stock</label>
 									<input
+										id="product-stock"
 										type="number"
 										bind:value={formData.stock_quantity}
 										min="0"
@@ -1029,8 +1038,9 @@
 
 							<div class="grid grid-cols-2 gap-4">
 								<div>
-									<label class="block text-sm font-semibold mb-2">Categoría</label>
+									<label class="block text-sm font-semibold mb-2" for="product-category">Categoría</label>
 									<select
+										id="product-category"
 										bind:value={formData.category_id}
 										class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
 									>
@@ -1042,8 +1052,9 @@
 								</div>
 
 								<div>
-									<label class="block text-sm font-semibold mb-2">SKU</label>
+									<label class="block text-sm font-semibold mb-2" for="product-sku">SKU</label>
 									<input
+										id="product-sku"
 										type="text"
 										bind:value={formData.sku}
 										class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -1053,7 +1064,7 @@
 
 							<!-- Descuentos -->
 							<div>
-								<label class="block text-sm font-semibold mb-2">Descuentos Aplicables</label>
+								<p class="block text-sm font-semibold mb-2">Descuentos Aplicables</p>
 								<div class="border border-gray-300 rounded-lg p-3 max-h-40 overflow-y-auto">
 									{#if discounts.length === 0}
 										<p class="text-sm text-gray-500">No hay descuentos disponibles</p>
@@ -1084,7 +1095,7 @@
 
 							<!-- Etiquetas -->
 							<div>
-								<label class="block text-sm font-semibold mb-2">Etiquetas</label>
+								<p class="block text-sm font-semibold mb-2">Etiquetas</p>
 								<div class="border border-gray-300 rounded-lg p-3">
 									<div class="flex flex-wrap gap-2 mb-3">
 										{#if selectedTags.length === 0}
@@ -1147,7 +1158,7 @@
 
 							<!-- Gestión de Imágenes -->
 							<div class="border-t pt-4">
-								<label class="block text-sm font-semibold mb-3">Imágenes del Producto</label>
+								<p class="block text-sm font-semibold mb-3">Imágenes del Producto</p>
 								
 								<!-- Imágenes existentes (para productos editándose) -->
 								{#if editingProduct && productImages.length > 0}
@@ -1336,11 +1347,12 @@
 
 							<div class="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-4">
 								<h4 class="font-semibold text-sm text-blue-900">Agregar Nueva Variante</h4>
-								
+							
 								<div class="grid grid-cols-1 md:grid-cols-2 gap-3">
 									<div>
-										<label class="block text-sm font-semibold mb-1">Nombre de Variante *</label>
+										<label class="block text-sm font-semibold mb-1" for="new-variant-name">Nombre de Variante *</label>
 										<input
+											id="new-variant-name"
 											type="text"
 											bind:value={newVariant.name}
 											placeholder="Ej: 100W, Talla M, Rojo"
@@ -1348,8 +1360,9 @@
 										/>
 									</div>
 									<div>
-										<label class="block text-sm font-semibold mb-1">SKU *</label>
+										<label class="block text-sm font-semibold mb-1" for="new-variant-sku">SKU *</label>
 										<input
+											id="new-variant-sku"
 											type="text"
 											bind:value={newVariant.sku}
 											placeholder="SKU único de la variante"
@@ -1360,8 +1373,9 @@
 
 								<div class="grid grid-cols-1 md:grid-cols-3 gap-3">
 									<div>
-										<label class="block text-sm font-semibold mb-1">Precio</label>
+										<label class="block text-sm font-semibold mb-1" for="new-variant-price">Precio</label>
 										<input
+											id="new-variant-price"
 											type="number"
 											bind:value={newVariant.price}
 											min="0"
@@ -1371,8 +1385,9 @@
 										/>
 									</div>
 									<div>
-										<label class="block text-sm font-semibold mb-1">Stock</label>
+										<label class="block text-sm font-semibold mb-1" for="new-variant-stock">Stock</label>
 										<input
+											id="new-variant-stock"
 											type="number"
 											bind:value={newVariant.stock_quantity}
 											min="0"
@@ -1432,10 +1447,11 @@
 
 									<div class="space-y-3 bg-blue-50 p-4 rounded-lg border border-blue-200">
 										<h4 class="font-semibold text-sm text-blue-900">Agregar Nueva Especificación</h4>
-										
+								
 										<div>
-											<label class="block text-sm font-semibold mb-1">Clave de Especificación *</label>
+											<label class="block text-sm font-semibold mb-1" for="new-spec-key">Clave de Especificación *</label>
 											<input
+												id="new-spec-key"
 												type="text"
 												bind:value={newSpec.key}
 												placeholder="Ej: Potencia, Velocidad, Voltaje"
@@ -1444,8 +1460,9 @@
 										</div>
 
 										<div>
-											<label class="block text-sm font-semibold mb-1">Valor *</label>
+											<label class="block text-sm font-semibold mb-1" for="new-spec-value">Valor *</label>
 											<input
+												id="new-spec-value"
 												type="text"
 												bind:value={newSpec.value}
 												placeholder="Ej: 40W, 100mm/s, 110V"
@@ -1454,8 +1471,9 @@
 										</div>
 
 										<div>
-											<label class="block text-sm font-semibold mb-1">Tipo de Dato</label>
+											<label class="block text-sm font-semibold mb-1" for="new-spec-type">Tipo de Dato</label>
 											<select
+												id="new-spec-type"
 												bind:value={newSpec.data_type}
 												class="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
 											>
