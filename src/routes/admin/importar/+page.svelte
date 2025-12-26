@@ -335,23 +335,26 @@
 			for (const product of products) {
 				// Base product row
 				const baseRow = {
-					nombre: product.name,
-					slug: product.slug,
-					descripcion_corta: product.short_description || '',
-					descripcion_larga: product.long_description || '',
-					precio_base: product.base_price,
-					categoria_slug: product.categories?.slug || '',
-					sku: product.sku || '',
-					stock: product.stock_quantity || 0,
-					especificaciones: product.product_specifications?.map((s: any) => `${s.spec_key}:${s.spec_value}`).join('|') || '',
-					etiquetas: product.product_tags?.map((pt: any) => pt.tags?.name).filter(Boolean).join(',') || '',
-					activo: product.is_active,
-					destacado: product.is_featured,
-					variante_nombre: '',
-					variante_sku: '',
-					variante_precio: '',
-					variante_stock: '',
-					producto_padre: ''
+					'Nombre': product.name,
+					'Slug': product.slug,
+					'Descripción Corta': product.short_description || '',
+					'Descripción Larga': product.long_description || '',
+					'Precio': product.base_price,
+					'Categoría': product.categories?.slug || '',
+					'SKU': product.sku || '',
+					'Stock': product.stock_quantity || 0,
+					'Especificaciones': product.product_specifications?.map((s: any) => `${s.spec_key}:${s.spec_value}`).join('|') || '',
+					'Etiquetas': product.product_tags?.map((pt: any) => pt.tags?.name).filter(Boolean).join(',') || '',
+					'Descuento %': 0,
+					'Descuento Inicio': '',
+					'Descuento Fin': '',
+					'Activo': product.is_active ? 'Sí' : 'No',
+					'Destacado': product.is_featured ? 'Sí' : 'No',
+					'Producto Padre': '',
+					'Variante': '',
+					'Variante SKU': '',
+					'Variante Precio': '',
+					'Variante Stock': ''
 				};
 
 				exportData.push(baseRow);
@@ -360,23 +363,26 @@
 				if (product.product_variants && product.product_variants.length > 0) {
 					for (const variant of product.product_variants) {
 						exportData.push({
-							nombre: '',
-							slug: '',
-							descripcion_corta: '',
-							descripcion_larga: '',
-							precio_base: '',
-							categoria_slug: '',
-							sku: '',
-							stock: '',
-							especificaciones: '',
-							etiquetas: '',
-							activo: '',
-							destacado: '',
-							variante_nombre: variant.name || '',
-							variante_sku: variant.sku || '',
-							variante_precio: variant.price || 0,
-							variante_stock: variant.stock_quantity || 0,
-							producto_padre: product.sku || ''
+							'Nombre': '',
+							'Slug': '',
+							'Descripción Corta': '',
+							'Descripción Larga': '',
+							'Precio': '',
+							'Categoría': '',
+							'SKU': '',
+							'Stock': '',
+							'Especificaciones': '',
+							'Etiquetas': '',
+							'Descuento %': '',
+							'Descuento Inicio': '',
+							'Descuento Fin': '',
+							'Activo': '',
+							'Destacado': '',
+							'Producto Padre': product.sku || '',
+							'Variante': variant.name || '',
+							'Variante SKU': variant.sku || '',
+							'Variante Precio': variant.price || 0,
+							'Variante Stock': variant.stock_quantity || 0
 						});
 					}
 				}
@@ -387,25 +393,28 @@
 			const workbook = XLSX.utils.book_new();
 			XLSX.utils.book_append_sheet(workbook, worksheet, 'Productos');
 
-			// Set column widths
+			// Set column widths (must match header order)
 			worksheet['!cols'] = [
-				{ wch: 30 }, // nombre
-				{ wch: 20 }, // slug
-				{ wch: 30 }, // descripcion_corta
-				{ wch: 40 }, // descripcion_larga
-				{ wch: 12 }, // precio_base
-				{ wch: 20 }, // categoria_slug
-				{ wch: 15 }, // sku
-				{ wch: 10 }, // stock
-				{ wch: 40 }, // especificaciones
-				{ wch: 30 }, // etiquetas
-				{ wch: 10 }, // activo
-				{ wch: 10 }, // destacado
-				{ wch: 20 }, // variante_nombre
-				{ wch: 15 }, // variante_sku
-				{ wch: 12 }, // variante_precio
-				{ wch: 10 }, // variante_stock
-				{ wch: 15 }  // producto_padre
+				{ wch: 30 }, // Nombre
+				{ wch: 20 }, // Slug
+				{ wch: 30 }, // Descripción Corta
+				{ wch: 40 }, // Descripción Larga
+				{ wch: 12 }, // Precio
+				{ wch: 20 }, // Categoría
+				{ wch: 15 }, // SKU
+				{ wch: 10 }, // Stock
+				{ wch: 40 }, // Especificaciones
+				{ wch: 30 }, // Etiquetas
+				{ wch: 12 }, // Descuento %
+				{ wch: 15 }, // Descuento Inicio
+				{ wch: 15 }, // Descuento Fin
+				{ wch: 10 }, // Activo
+				{ wch: 10 }, // Destacado
+				{ wch: 20 }, // Producto Padre
+				{ wch: 20 }, // Variante
+				{ wch: 15 }, // Variante SKU
+				{ wch: 15 }, // Variante Precio
+				{ wch: 12 }  // Variante Stock
 			];
 
 			// Generate filename
@@ -585,6 +594,27 @@
 						<div>Descuento Fecha Fin</div>
 						<div>Activo (true/false)</div>
 						<div>Destacado (true/false)</div>
+					</div>
+					<div class="mt-4 bg-amber-50 border border-amber-200 rounded-lg p-4">
+						<p class="text-sm font-bold text-amber-900 mb-2">⚠️ Importante: ¿Qué es el "Slug" de Categoría?</p>
+						<p class="text-sm text-amber-800 mb-3">
+							La columna <strong>"Categoría"</strong> debe contener el <strong>SLUG</strong> (versión URL) de la categoría, <strong>NO el nombre completo</strong>.
+						</p>
+						<div class="bg-white rounded p-3 text-sm text-gray-700 space-y-2 font-mono">
+							<div>
+								<strong class="text-red-600">❌ INCORRECTO:</strong>
+								<div class="ml-3">Categoría: "Tubos RECI"</div>
+								<div class="ml-3">Categoría: "Accesorios Láser Premium"</div>
+							</div>
+							<div class="mt-2">
+								<strong class="text-green-600">✅ CORRECTO:</strong>
+								<div class="ml-3">Categoría: "tubos-reci"</div>
+								<div class="ml-3">Categoría: "accesorios-laser-premium"</div>
+							</div>
+						</div>
+						<p class="text-xs text-amber-700 mt-3">
+							💡 <strong>Tip:</strong> Descarga el Excel con "Exportar Productos" para ver los slugs correctos. También puedes verlos en Admin → Categorías, en la columna "Slug".
+						</p>
 					</div>
 				</div>
 				
