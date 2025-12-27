@@ -5,7 +5,7 @@
  * These functions will be implemented when API credentials are available
  */
 
-import type { AmazonSyncPayload, MercadoLibreSyncPayload } from '$lib/types';
+import type { AmazonSyncPayload, MercadoLibreSyncPayload } from '$lib/types/index';
 
 // =====================================================
 // Interface Definitions

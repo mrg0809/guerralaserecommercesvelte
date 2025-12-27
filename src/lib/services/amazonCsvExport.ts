@@ -5,7 +5,7 @@
  * Maps internal product data + JSONB dynamic attributes to flat CSV format
  */
 
-import type { Product, AmazonListing, AmazonCSVMapping } from '$lib/types';
+import type { Product, AmazonListing } from '$lib/types/index';
 
 export interface ProductWithAmazon extends Product {
 	amazon_listing?: AmazonListing;
@@ -54,7 +54,7 @@ export function generateAmazonCSV(products: ProductWithAmazon[]): string {
 	const allColumns = [...baseColumns, ...Array.from(dynamicKeys).sort()];
 
 	// Generate CSV rows
-	const rows: string[][] = [];
+	const rows: (string | number)[][] = [];
 	
 	// Add header row
 	rows.push(allColumns);
@@ -101,7 +101,7 @@ export function generateAmazonCSV(products: ProductWithAmazon[]): string {
 	});
 
 	// Convert rows to CSV string
-	return rows.map(row => row.join(',')).join('\n');
+	return rows.map(row => row.map(cell => String(cell)).join(',')).join('\n');
 }
 
 /**
