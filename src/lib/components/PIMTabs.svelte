@@ -167,11 +167,13 @@
 		try {
 			saving = true;
 
-			// Validate clave_prod_serv (8 digits)
-			if (satInfo.clave_prod_serv && satInfo.clave_prod_serv.length !== 8) {
-				alert('La Clave de Producto/Servicio debe tener 8 dígitos');
-				saving = false;
-				return;
+			// Validate clave_prod_serv (exactly 8 digits)
+			if (satInfo.clave_prod_serv) {
+				if (!/^\d{8}$/.test(satInfo.clave_prod_serv)) {
+					alert('La Clave de Producto/Servicio debe contener exactamente 8 dígitos numéricos');
+					saving = false;
+					return;
+				}
 			}
 
 			const dataToSave = {

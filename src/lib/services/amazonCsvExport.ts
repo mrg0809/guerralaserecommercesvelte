@@ -16,6 +16,9 @@ export interface AmazonCSVOptions {
 	attributeMappings?: Record<string, string>;
 }
 
+// Default configuration
+export const DEFAULT_BRAND_NAME = 'Guerra Laser';
+
 // Default attribute mappings
 export const DEFAULT_ATTRIBUTE_MAPPINGS: Record<string, string> = {
 	'watts': 'power_watts',
@@ -39,10 +42,10 @@ export function generateAmazonCSV(
 	options: AmazonCSVOptions = {}
 ): string {
 	if (!products || products.length === 0) {
-		throw new Error('No products provided for CSV generation');
+		throw new Error('Cannot generate CSV: No products available for export. Please ensure products have Amazon listing data.');
 	}
 
-	const brandName = options.brandName || 'Guerra Laser';
+	const brandName = options.brandName || DEFAULT_BRAND_NAME;
 
 	// Define base Amazon columns
 	const baseColumns = [
