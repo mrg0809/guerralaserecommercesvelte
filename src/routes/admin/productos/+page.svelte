@@ -63,7 +63,149 @@
 		is_active: true
 	});
 
-	let activeTab = $state<'general' | 'variants' | 'specs'>('general');
+	// Variables para datos PIM (Product Information Management)
+	let satData = $state({
+		clave_prod_serv: '',
+		clave_unidad: '',
+		unidad_medida: '',
+		material_peligroso: false
+	});
+
+	let amazonData = $state({
+		sku_amazon: '',
+		asin: '',
+		feed_product_type: '',
+		browse_node_path: '',
+		price: 0,
+		bullet_points: ['', '', '', '', ''],
+		specific_attributes: {} as Record<string, string>
+	});
+
+	let mercadolibreData = $state({
+		ml_id: '',
+		listing_type: 'gold_special',
+		price: 0,
+		attributes: {} as Record<string, string>
+	});
+
+	// Variables para editar JSON en textareas
+	let amazonAttributesJson = $state('{}');
+	let mercadolibreAttributesJson = $state('{}');
+
+	// Catálogos SAT
+	const satUnidades = [
+		{ clave: 'H87', descripcion: 'Pieza' },
+		{ clave: 'E48', descripcion: 'Unidad de servicio' },
+		{ clave: 'E51', descripcion: 'Metro' },
+		{ clave: 'E54', descripcion: 'Metro cuadrado' },
+		{ clave: 'MTR', descripcion: 'Metro lineal' },
+		{ clave: 'KGM', descripcion: 'Kilogramo' },
+		{ clave: 'GRM', descripcion: 'Gramo' },
+		{ clave: 'LTR', descripcion: 'Litro' },
+		{ clave: 'XBX', descripcion: 'Caja' },
+		{ clave: 'XPK', descripcion: 'Paquete' },
+		{ clave: 'SET', descripcion: 'Conjunto' },
+		{ clave: 'ACT', descripcion: 'Actividad' },
+		{ clave: 'E49', descripcion: 'Día' },
+		{ clave: 'HUR', descripcion: 'Hora' }
+	];
+
+	// Mapeo de categorías a claves SAT (por nombre de categoría)
+	const satClavesCategoria: Record<string, string> = {
+		'bomba': '40151500',
+		'chiller': '43201538',
+		'compresor': '40151601',
+		'driver': '32101600',
+		'extractor': '40101502',
+		'fuente': '39121004',
+		'lente': '31242003',
+		'manguera': '40142000',
+		'maquinas-corte-laser': '23241505',
+		'maquinas-grabado': '23153602',
+		'regulador': '39121635',
+		'rotativo': '25171705',
+		'tubos-laser': '39101600',
+		'accesorios': '20121445',
+		'accesorios-y-partes': '20121445',
+		'partes': '20121445'
+	};
+
+	// Catálogos de categorías Amazon (con Browse Node Paths y atributos comunes)
+	const amazonCategories = [
+		{
+			path: 'Industria, Empresas y Ciencia›Hidráulica, Neumática y Plomería',
+			feed_type: 'Industrial',
+			common_attributes: ['material_type', 'item_dimensions', 'item_weight', 'manufacturer', 'model_number', 'part_number']
+		},
+		{
+			path: 'Industria, Empresas y Ciencia›Material de Laboratorio Científico',
+			feed_type: 'Industrial',
+			common_attributes: ['material_type', 'measurement_range', 'accuracy', 'power_source']
+		},
+		{
+			path: 'Herramientas y Mejoras del Hogar›Energía y Herramientas Manuales›Herramientas Eléctricas',
+			feed_type: 'Tools',
+			common_attributes: ['voltage', 'wattage', 'battery_type', 'tool_type', 'warranty']
+		},
+		{
+			path: 'Herramientas y Mejoras del Hogar›Soldadura',
+			feed_type: 'Tools',
+			common_attributes: ['power_source', 'amperage', 'voltage', 'duty_cycle']
+		},
+		{
+			path: 'Electrónica›Componentes y Repuestos Electrónicos',
+			feed_type: 'CE',
+			common_attributes: ['voltage', 'current_rating', 'power_rating', 'connector_type']
+		},
+		{
+			path: 'Industria, Empresas y Ciencia›Abrasivos y Acabados',
+			feed_type: 'Industrial',
+			common_attributes: ['grit_size', 'material_type', 'item_dimensions', 'abrasive_material']
+		},
+		{
+			path: 'Industria, Empresas y Ciencia›Automatización Industrial y Controles',
+			feed_type: 'Industrial',
+			common_attributes: ['voltage', 'current_rating', 'protocol', 'interface_type']
+		},
+		{
+			path: 'Herramientas y Mejoras del Hogar›Productos de Iluminación y Ventiladores de Techo',
+			feed_type: 'Home',
+			common_attributes: ['wattage', 'voltage', 'bulb_type', 'color_temperature', 'lumens']
+		}
+	];
+
+	// Plantillas de atributos comunes para diferentes categorías
+	const amazonAttributeTemplates: Record<string, Record<string, string>> = {
+		'Hidráulica, Neumática y Plomería': {
+			material_type: 'Acero inoxidable / Aluminio / Plástico',
+			thread_size: 'Tamaño de rosca (ej: 1/4", M8)',
+			pressure_rating: 'Presión máxima (ej: 150 PSI)',
+			temperature_range: 'Rango de temperatura (ej: -20°C a 80°C)',
+			connection_type: 'Tipo de conexión'
+		},
+		'Herramientas Eléctricas': {
+			voltage: 'Voltaje (ej: 110V, 220V)',
+			wattage: 'Potencia en watts',
+			speed_settings: 'Velocidades disponibles',
+			chuck_size: 'Tamaño del portabrocas',
+			battery_included: 'true / false'
+		},
+		'Componentes Electrónicos': {
+			voltage: 'Voltaje nominal',
+			current_rating: 'Corriente nominal',
+			power_rating: 'Potencia nominal',
+			wavelength: 'Longitud de onda (para láseres)',
+			beam_divergence: 'Divergencia del haz'
+		},
+		'Soldadura': {
+			amperage: 'Amperaje (ej: 200A)',
+			duty_cycle: 'Ciclo de trabajo (ej: 60%)',
+			input_voltage: 'Voltaje de entrada',
+			welding_process: 'Proceso (ej: MIG, TIG, Stick)'
+		}
+	};
+
+	let activeTab = $state<'general' | 'variants' | 'specs' | 'sat' | 'amazon' | 'mercadolibre'>('general');
 
 	// Función para obtener todas las categorías hijas (recursivo)
 	function getChildCategoryIds(categoryId: string): string[] {
@@ -112,6 +254,14 @@
 		searchQuery;
 		selectedCategoryFilter;
 		currentPage = 1;
+	});
+
+	// Sincronizar SKU de Amazon con SKU del producto
+	$effect(() => {
+		// Solo actualizar si el SKU de Amazon está vacío o es igual al SKU anterior del producto
+		if (formData.sku && (!amazonData.sku_amazon || amazonData.sku_amazon === '')) {
+			amazonData.sku_amazon = formData.sku;
+		}
 	});
 
 	onMount(async () => {
@@ -176,6 +326,16 @@
 		}
 	}
 
+	// Función para sugerir clave SAT basada en la categoría del producto
+	function getSuggestedSatCode(categoryId: number | null): string {
+		if (!categoryId) return '';
+		
+		const category = categories.find(c => c.id === categoryId);
+		if (!category || !category.slug) return '';
+		
+		return satClavesCategoria[category.slug] || '';
+	}
+
 	function openModal(product?: Product) {
 		activeTab = 'general';
 		if (product) {
@@ -197,6 +357,9 @@
 			loadProductTags(product.id);
 			loadProductImages(product.id);
 			loadProductVariants(product.id);
+			loadSatData(product.id);
+			loadAmazonData(product.id);
+			loadMercadolibreData(product.id);
 		} else {
 			editingProduct = null;
 			formData = {
@@ -216,7 +379,59 @@
 			selectedTags = [];
 			productImages = [];
 			variants = [];
+			resetPimData();
 		}
+		newSpec = { key: '', value: '', data_type: 'text' };
+		newVariant = { name: '', sku: '', price: 0, stock_quantity: 0, is_active: true };
+		newTagName = '';
+		selectedFiles = [];
+		imagePreviews = [];
+		showModal = true;
+	}
+
+	async function duplicateProduct(product: Product) {
+		activeTab = 'general';
+		editingProduct = null; // Importante: null para crear uno nuevo
+		
+		// Copiar todos los datos del producto original
+		formData = {
+			name: `${product.name} (Copia)`,
+			slug: '', // Se auto-generará en handleNameChange
+			description: product.description || '',
+			short_description: product.short_description || '',
+			base_price: product.base_price,
+			category_id: product.category_id || '',
+			is_active: product.is_active,
+			is_featured: false, // No destacar la copia por defecto
+			stock_quantity: product.stock_quantity,
+			sku: product.sku ? `${product.sku}-COPIA` : ''
+		};
+		
+		// Cargar especificaciones del producto original
+		await loadProductSpecifications(product.id);
+		
+		// Cargar descuentos del producto original
+		await loadProductDiscounts(product.id);
+		
+		// Cargar etiquetas del producto original
+		await loadProductTags(product.id);
+		
+		// Cargar variantes del producto original (sin IDs para crear nuevas)
+		await loadProductVariants(product.id);
+		variants = variants.map(v => ({
+			...v,
+			id: undefined, // Remover ID para crear nuevas variantes
+			sku: v.sku ? `${v.sku}-COPIA` : ''
+		}));
+		
+		// Cargar datos PIM del producto original
+		await loadSatData(product.id);
+		await loadAmazonData(product.id);
+		await loadMercadolibreData(product.id);
+		
+		// NO copiar imágenes automáticamente (el usuario puede subirlas)
+		productImages = [];
+		
 		newSpec = { key: '', value: '', data_type: 'text' };
 		newVariant = { name: '', sku: '', price: 0, stock_quantity: 0, is_active: true };
 		newTagName = '';
@@ -276,6 +491,120 @@
 				is_active: v.is_active ?? true
 			}));
 		}
+	}
+
+	async function loadSatData(productId: string) {
+		const { data } = await supabase
+			.from('sat_product_info')
+			.select('*')
+			.eq('product_id', productId)
+			.single();
+
+		if (data) {
+			satData = {
+				clave_prod_serv: data.clave_prod_serv || getSuggestedSatCode(formData.category_id),
+				clave_unidad: data.clave_unidad || 'H87',
+				unidad_medida: data.unidad_medida || 'Pieza',
+				material_peligroso: data.material_peligroso || false
+			};
+		} else {
+			// Si no hay datos SAT previos, auto-sugerir basándose en categoría
+			satData = {
+				clave_prod_serv: getSuggestedSatCode(formData.category_id),
+				clave_unidad: 'H87',
+				unidad_medida: 'Pieza',
+				material_peligroso: false
+			};
+		}
+	}
+
+	async function loadAmazonData(productId: string) {
+		const { data } = await supabase
+			.from('amazon_listings')
+			.select('*')
+			.eq('product_id', productId)
+			.single();
+
+		if (data) {
+			const bulletPoints = Array.isArray(data.bullet_points) 
+				? data.bullet_points 
+				: (data.bullet_points as any)?.points || ['', '', '', '', ''];
+			
+			amazonData = {
+				sku_amazon: data.sku_amazon || formData.sku || '',
+				asin: data.asin || '',
+				feed_product_type: data.feed_product_type || '',
+				browse_node_path: data.browse_node_path || '',
+				price: data.price || formData.base_price || 0,
+				bullet_points: [...bulletPoints, '', '', '', '', ''].slice(0, 5),
+				specific_attributes: (data.specific_attributes as Record<string, string>) || {}
+			};
+			amazonAttributesJson = JSON.stringify(amazonData.specific_attributes, null, 2);
+		} else {
+			// Si no hay datos de Amazon previos, usar el SKU del producto por defecto
+			amazonData = {
+				sku_amazon: formData.sku || '',
+				asin: '',
+				feed_product_type: '',
+				browse_node_path: '',
+				price: formData.base_price || 0,
+				bullet_points: ['', '', '', '', ''],
+				specific_attributes: {}
+			};
+			amazonAttributesJson = '{}';
+		}
+	}
+
+	async function loadMercadolibreData(productId: string) {
+		const { data } = await supabase
+			.from('mercadolibre_listings')
+			.select('*')
+			.eq('product_id', productId)
+			.single();
+
+		if (data) {
+			mercadolibreData = {
+				ml_id: data.ml_id || '',
+				listing_type: data.listing_type || 'gold_special',
+				price: data.price || formData.base_price || 0,
+				attributes: (data.attributes as Record<string, string>) || {}
+			};
+			mercadolibreAttributesJson = JSON.stringify(mercadolibreData.attributes, null, 2);
+		} else {
+			mercadolibreData = {
+				ml_id: '',
+				listing_type: 'gold_special',
+				price: formData.base_price || 0,
+				attributes: {}
+			};
+			mercadolibreAttributesJson = '{}';
+		}
+	}
+
+	function resetPimData() {
+		satData = {
+			clave_prod_serv: getSuggestedSatCode(formData.category_id),
+			clave_unidad: 'H87',
+			unidad_medida: 'Pieza',
+			material_peligroso: false
+		};
+		amazonData = {
+			sku_amazon: formData.sku || '',
+			asin: '',
+			feed_product_type: '',
+			browse_node_path: '',
+			price: formData.base_price || 0,
+			bullet_points: ['', '', '', '', ''],
+			specific_attributes: {}
+		};
+		mercadolibreData = {
+			ml_id: '',
+			listing_type: 'gold_special',
+			price: formData.base_price || 0,
+			attributes: {}
+		};
+		amazonAttributesJson = '{}';
+		mercadolibreAttributesJson = '{}';
 	}
 
 	function handleImageSelect(event: Event) {
@@ -564,6 +893,11 @@
 			// Guardar variantes
 			await saveProductVariants(productId);
 
+			// Guardar datos PIM
+			await saveSatData(productId);
+			await saveAmazonData(productId);
+			await saveMercadolibreData(productId);
+
 			closeModal();
 			await loadProducts();
 		} catch (error: any) {
@@ -617,6 +951,162 @@
 		}));
 
 		await supabase.from('product_variants').insert(inserts);
+	}
+
+	async function saveSatData(productId: string) {
+		// Solo guardar si hay datos completos (todos los campos requeridos)
+		if (!satData.clave_prod_serv || !satData.clave_unidad || !satData.unidad_medida) {
+			console.log('❌ SAT: Faltan campos requeridos', {
+				clave_prod_serv: satData.clave_prod_serv,
+				clave_unidad: satData.clave_unidad,
+				unidad_medida: satData.unidad_medida
+			});
+			return;
+		}
+
+		// Validar que clave_prod_serv tenga exactamente 8 caracteres
+		if (satData.clave_prod_serv.length !== 8) {
+			alert(`Error SAT: La clave de producto debe tener exactamente 8 dígitos. Actualmente tiene ${satData.clave_prod_serv.length} caracteres.`);
+			return;
+		}
+
+		// Verificar si ya existe
+		const { data: existing } = await supabase
+			.from('sat_product_info')
+			.select('id')
+			.eq('product_id', productId)
+			.single();
+
+		const satPayload = {
+			product_id: productId,
+			clave_prod_serv: satData.clave_prod_serv.trim(),
+			clave_unidad: satData.clave_unidad.trim(),
+			unidad_medida: satData.unidad_medida.trim(),
+			material_peligroso: satData.material_peligroso
+		};
+
+		console.log('📤 Guardando datos SAT:', satPayload);
+
+		if (existing) {
+			// Actualizar
+			const { error } = await supabase
+				.from('sat_product_info')
+				.update(satPayload)
+				.eq('product_id', productId);
+			
+			if (error) {
+				console.error('❌ Error actualizando SAT:', error);
+				alert('Error al actualizar información SAT: ' + error.message);
+			} else {
+				console.log('✅ SAT actualizado correctamente');
+			}
+		} else {
+			// Insertar
+			const { error } = await supabase
+				.from('sat_product_info')
+				.insert([satPayload]);
+			
+			if (error) {
+				console.error('❌ Error insertando SAT:', error);
+				alert('Error al guardar información SAT: ' + error.message);
+			} else {
+				console.log('✅ SAT insertado correctamente');
+			}
+		}
+	}
+
+	async function saveAmazonData(productId: string) {
+		// Solo guardar si hay datos
+		if (!amazonData.sku_amazon && !amazonData.asin && !amazonData.feed_product_type) {
+			return;
+		}
+
+		// Parsear attributes del JSON
+		try {
+			amazonData.specific_attributes = JSON.parse(amazonAttributesJson || '{}');
+		} catch (e) {
+			amazonData.specific_attributes = {};
+		}
+
+		// Verificar si ya existe
+		const { data: existing } = await supabase
+			.from('amazon_listings')
+			.select('id')
+			.eq('product_id', productId)
+			.single();
+
+		// Filtrar bullet points vacíos
+		const bulletPoints = amazonData.bullet_points.filter(bp => bp.trim() !== '');
+
+		const amazonPayload = {
+			product_id: productId,
+			sku_amazon: amazonData.sku_amazon || null,
+			asin: amazonData.asin || null,
+			feed_product_type: amazonData.feed_product_type || null,
+			browse_node_path: amazonData.browse_node_path || null,
+			price: amazonData.price || null,
+			bullet_points: bulletPoints.length > 0 ? bulletPoints : null,
+			specific_attributes: Object.keys(amazonData.specific_attributes).length > 0 
+				? amazonData.specific_attributes 
+				: null
+		};
+
+		if (existing) {
+			// Actualizar
+			await supabase
+				.from('amazon_listings')
+				.update(amazonPayload)
+				.eq('product_id', productId);
+		} else {
+			// Insertar
+			await supabase
+				.from('amazon_listings')
+				.insert([amazonPayload]);
+		}
+	}
+
+	async function saveMercadolibreData(productId: string) {
+		// Solo guardar si hay datos
+		if (!mercadolibreData.ml_id && !mercadolibreData.listing_type) {
+			return;
+		}
+
+		// Parsear attributes del JSON
+		try {
+			mercadolibreData.attributes = JSON.parse(mercadolibreAttributesJson || '{}');
+		} catch (e) {
+			mercadolibreData.attributes = {};
+		}
+
+		// Verificar si ya existe
+		const { data: existing } = await supabase
+			.from('mercadolibre_listings')
+			.select('id')
+			.eq('product_id', productId)
+			.single();
+
+		const mlPayload = {
+			product_id: productId,
+			ml_id: mercadolibreData.ml_id || null,
+			listing_type: mercadolibreData.listing_type || 'gold_special',
+			price: mercadolibreData.price || null,
+			attributes: Object.keys(mercadolibreData.attributes).length > 0 
+				? mercadolibreData.attributes 
+				: null
+		};
+
+		if (existing) {
+			// Actualizar
+			await supabase
+				.from('mercadolibre_listings')
+				.update(mlPayload)
+				.eq('product_id', productId);
+		} else {
+			// Insertar
+			await supabase
+				.from('mercadolibre_listings')
+				.insert([mlPayload]);
+		}
 	}
 
 	async function createNewTag() {
@@ -837,8 +1327,16 @@
 								<button
 									onclick={() => openModal(product)}
 									class="text-blue-600 hover:text-blue-800 mr-3"
+									title="Editar producto"
 								>
 									Editar
+								</button>
+								<button
+									onclick={() => duplicateProduct(product)}
+									class="text-green-600 hover:text-green-800 mr-3"
+									title="Duplicar producto"
+								>
+									📋 Duplicar
 								</button>
 								<a
 									href="/admin/productos/{product.id}/especificaciones"
@@ -921,7 +1419,13 @@
 			<!-- Header -->
 			<div class="sticky top-0 bg-white border-b px-6 py-4 flex justify-between items-center rounded-t-lg">
 				<h2 class="text-2xl font-bold">
-					{editingProduct ? 'Editar Producto' : 'Nuevo Producto'}
+					{#if editingProduct}
+						Editar Producto
+					{:else if formData.name.includes('(Copia)')}
+						📋 Duplicar Producto
+					{:else}
+						Nuevo Producto
+					{/if}
 				</h2>
 				<button onclick={closeModal} class="text-gray-500 hover:text-gray-700 text-2xl">
 					×
@@ -958,12 +1462,54 @@
 							<span class="ml-1 bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full text-xs">{specifications.length}</span>
 						{/if}
 					</button>
+					<button
+						type="button"
+						onclick={() => activeTab = 'sat'}
+						class="px-6 py-3 font-medium text-sm border-b-2 transition {activeTab === 'sat' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-600 hover:text-gray-800'}"
+					>
+						🇲🇽 SAT
+					</button>
+					<button
+						type="button"
+						onclick={() => activeTab = 'amazon'}
+						class="px-6 py-3 font-medium text-sm border-b-2 transition {activeTab === 'amazon' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-600 hover:text-gray-800'}"
+					>
+						📦 Amazon
+					</button>
+					<button
+						type="button"
+						onclick={() => activeTab = 'mercadolibre'}
+						class="px-6 py-3 font-medium text-sm border-b-2 transition {activeTab === 'mercadolibre' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-600 hover:text-gray-800'}"
+					>
+						💛 Mercado Libre
+					</button>
 				</div>
 			</div>
 
 			<!-- Tab Content -->
 			<form onsubmit={(e) => { e.preventDefault(); saveProduct(); }} class="flex-1 overflow-y-auto">
 				<div class="p-6">
+					{#if !editingProduct && formData.name.includes('(Copia)')}
+						<!-- Aviso de duplicación -->
+						<div class="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+							<div class="flex items-start gap-3">
+								<span class="text-2xl">📋</span>
+								<div class="flex-1">
+									<h3 class="font-bold text-blue-900 mb-1">Duplicando Producto</h3>
+									<p class="text-sm text-blue-800">
+										Se han copiado todos los datos del producto original. Recuerda modificar:
+									</p>
+									<ul class="text-sm text-blue-700 mt-2 space-y-1 list-disc list-inside">
+										<li>El <strong>Nombre</strong> del producto</li>
+										<li>El <strong>SKU</strong> (ya se agregó "-COPIA" automáticamente)</li>
+										<li>El <strong>Slug</strong> (se generará automáticamente al cambiar el nombre)</li>
+										<li>Las <strong>imágenes</strong> (no se copian automáticamente)</li>
+									</ul>
+								</div>
+							</div>
+						</div>
+					{/if}
+					
 					{#if activeTab === 'general'}
 						<!-- PESTAÑA GENERAL -->
 						<div class="space-y-4">
@@ -1500,6 +2046,376 @@
 									<p class="text-sm text-yellow-700">Las especificaciones se pueden agregar después de crear el producto</p>
 								</div>
 							{/if}
+						</div>
+
+					{:else if activeTab === 'sat'}
+						<!-- PESTAÑA SAT (Sistema de Administración Tributaria México) -->
+						<div class="space-y-4">
+							<div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+								<h3 class="font-bold text-blue-900 mb-1">🇲🇽 Información Fiscal SAT</h3>
+								<p class="text-sm text-blue-700">
+									Información requerida por el Sistema de Administración Tributaria de México para facturación electrónica.
+								</p>
+							</div>
+
+							<div>
+								<label class="block text-sm font-semibold mb-2" for="sat-clave-prod">Clave Producto/Servicio SAT *</label>
+								<input
+									id="sat-clave-prod"
+									type="text"
+									bind:value={satData.clave_prod_serv}
+									placeholder="Ej: 43211500"
+									maxlength="8"
+									inputmode="numeric"
+									class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+									oninput={(e) => {
+										// Solo permitir números
+										const target = e.currentTarget;
+										target.value = target.value.replace(/[^0-9]/g, '');
+										satData.clave_prod_serv = target.value;
+									}}
+								/>
+								<p class="text-xs text-gray-500 mt-1">
+									Código de 8 dígitos del catálogo SAT
+									{#if satData.clave_prod_serv && satData.clave_prod_serv.length !== 8}
+										<span class="text-red-600 font-medium">⚠️ Debe tener exactamente 8 dígitos ({satData.clave_prod_serv.length}/8)</span>
+									{/if}
+									{#if formData.category_id}
+										{@const suggestedCode = getSuggestedSatCode(formData.category_id)}
+										{#if suggestedCode && suggestedCode !== satData.clave_prod_serv}
+											<button 
+												type="button"
+												onclick={() => satData.clave_prod_serv = suggestedCode}
+												class="ml-2 text-blue-600 hover:text-blue-800 font-medium"
+											>
+												💡 Usar sugerido: {suggestedCode}
+											</button>
+										{/if}
+									{/if}
+								</p>
+							</div>
+
+							<div>
+								<label class="block text-sm font-semibold mb-2" for="sat-clave-unidad">Clave de Unidad SAT *</label>
+								<select
+									id="sat-clave-unidad"
+									bind:value={satData.clave_unidad}
+									onchange={(e) => {
+										const selectedUnit = satUnidades.find(u => u.clave === e.currentTarget.value);
+										if (selectedUnit) {
+											satData.unidad_medida = selectedUnit.descripcion;
+										}
+									}}
+									class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+								>
+									<option value="">Seleccionar clave...</option>
+									{#each satUnidades as unidad}
+										<option value={unidad.clave}>{unidad.clave} - {unidad.descripcion}</option>
+									{/each}
+								</select>
+								<p class="text-xs text-gray-500 mt-1">
+									Código de unidad de medida SAT
+									{#if !satData.clave_unidad}
+										<span class="text-amber-600 font-medium">⚠️ Campo requerido</span>
+									{/if}
+								</p>
+							</div>
+
+							<div>
+								<label class="block text-sm font-semibold mb-2" for="sat-unidad-medida">Unidad de Medida *</label>
+								<select
+									id="sat-unidad-medida"
+									bind:value={satData.unidad_medida}
+									onchange={(e) => {
+										const selectedDesc = e.currentTarget.value;
+										const unit = satUnidades.find(u => u.descripcion === selectedDesc);
+										if (unit) {
+											satData.clave_unidad = unit.clave;
+										}
+									}}
+									class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+								>
+									<option value="">Seleccionar unidad...</option>
+									{#each satUnidades as unidad}
+										<option value={unidad.descripcion}>{unidad.descripcion}</option>
+									{/each}
+								</select>
+								<p class="text-xs text-gray-500 mt-1">
+									Descripción de la unidad de medida
+									{#if !satData.unidad_medida}
+										<span class="text-amber-600 font-medium">⚠️ Campo requerido</span>
+									{/if}
+								</p>
+							</div>
+
+							<div class="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-lg p-4">
+								<input
+									id="sat-material-peligroso"
+									type="checkbox"
+									bind:checked={satData.material_peligroso}
+									class="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+								/>
+								<label for="sat-material-peligroso" class="text-sm font-medium cursor-pointer">
+									⚠️ Material Peligroso
+									<span class="block text-xs text-gray-600 font-normal">Marcar si el producto contiene materiales peligrosos</span>
+								</label>
+							</div>
+						</div>
+					{:else if activeTab === 'amazon'}
+						<!-- PESTAÑA AMAZON -->
+						<div class="space-y-4">
+							<div class="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-4">
+								<h3 class="font-bold text-orange-900 mb-1">📦 Amazon Listing</h3>
+								<p class="text-sm text-orange-700">
+									Información específica para el listado del producto en Amazon Marketplace.
+								</p>
+							</div>
+
+							<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+								<div>
+									<label class="block text-sm font-semibold mb-2" for="amazon-sku">SKU Amazon</label>
+									<input
+										id="amazon-sku"
+										type="text"
+										bind:value={amazonData.sku_amazon}
+										placeholder="Ej: GLT-SEN-001"
+										class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+									/>
+									<p class="text-xs text-gray-500 mt-1">SKU específico para Amazon (sincronizado con SKU interno)</p>
+								</div>
+
+								<div>
+									<label class="block text-sm font-semibold mb-2" for="amazon-asin">ASIN</label>
+									<input
+										id="amazon-asin"
+										type="text"
+										bind:value={amazonData.asin}
+										placeholder="Ej: B08XYZ1234"
+										maxlength="10"
+										class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+									/>
+									<p class="text-xs text-gray-500 mt-1">Amazon Standard Identification Number</p>
+								</div>
+							</div>
+
+							<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+								<div>
+									<label class="block text-sm font-semibold mb-2" for="amazon-price">Precio en Amazon</label>
+									<div class="relative">
+										<span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">$</span>
+										<input
+											id="amazon-price"
+											type="number"
+											bind:value={amazonData.price}
+											placeholder="0.00"
+											step="0.01"
+											min="0"
+											class="w-full pl-8 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+										/>
+									</div>
+									<p class="text-xs text-gray-500 mt-1">
+										Precio base: ${formData.base_price.toFixed(2)}
+										{#if amazonData.price && amazonData.price !== formData.base_price}
+											<span class="text-orange-600 font-medium">
+												({amazonData.price > formData.base_price ? '+' : ''}{((amazonData.price - formData.base_price) / formData.base_price * 100).toFixed(1)}%)
+											</span>
+										{/if}
+									</p>
+								</div>
+
+								<div class="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-center">
+									<div class="text-xs text-blue-800">
+										<p class="font-semibold mb-1">💡 Comisiones Amazon México:</p>
+										<p>• Referral fee: 8-15% según categoría</p>
+										<p>• Fulfillment: Variable según tamaño/peso</p>
+										<p class="mt-1 text-blue-900 font-medium">Ajusta el precio para compensar comisiones</p>
+									</div>
+								</div>
+							</div>
+
+							<div>
+								<label class="block text-sm font-semibold mb-2" for="amazon-category">Categoría Amazon (Browse Node Path) *</label>
+								<select
+									id="amazon-category"
+									bind:value={amazonData.browse_node_path}
+									onchange={(e) => {
+										const selectedCategory = amazonCategories.find(c => c.path === e.currentTarget.value);
+										if (selectedCategory) {
+											amazonData.feed_product_type = selectedCategory.feed_type;
+										}
+									}}
+									class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+								>
+									<option value="">Seleccionar categoría...</option>
+									{#each amazonCategories as category}
+										<option value={category.path}>{category.path}</option>
+									{/each}
+								</select>
+								<p class="text-xs text-gray-500 mt-1">
+									Categoría completa del producto en Amazon
+									{#if !amazonData.browse_node_path}
+										<span class="text-amber-600 font-medium">⚠️ Requerido para publicar en Amazon</span>
+									{/if}
+								</p>
+								{#if amazonData.browse_node_path}
+									{@const selectedCategory = amazonCategories.find(c => c.path === amazonData.browse_node_path)}
+									{#if selectedCategory}
+										<div class="mt-2 bg-blue-50 border border-blue-200 rounded p-2">
+											<p class="text-xs font-medium text-blue-900">💡 Atributos comunes para esta categoría:</p>
+											<p class="text-xs text-blue-700 mt-1">{selectedCategory.common_attributes.join(', ')}</p>
+										</div>
+									{/if}
+								{/if}
+							</div>
+
+							<div>
+								<label class="block text-sm font-semibold mb-2" for="amazon-feed-type">Tipo de Producto (Feed)</label>
+								<select
+									id="amazon-feed-type"
+									bind:value={amazonData.feed_product_type}
+									class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+								>
+									<option value="">Seleccionar tipo...</option>
+									<option value="Home">Home (Hogar)</option>
+									<option value="CE">Consumer Electronics (Electrónica)</option>
+									<option value="Industrial">Industrial & Scientific (Industria)</option>
+									<option value="Tools">Tools (Herramientas)</option>
+									<option value="AutoAccessory">Auto Accessories (Accesorios Auto)</option>
+									<option value="Sports">Sports (Deportes)</option>
+									<option value="MusicalInstruments">Musical Instruments (Instrumentos)</option>
+								</select>
+								<p class="text-xs text-gray-500 mt-1">Se establece automáticamente según la categoría seleccionada</p>
+							</div>
+
+							<div>
+								<label class="block text-sm font-semibold mb-2">Bullet Points (Viñetas)</label>
+								<p class="text-xs text-gray-500 mb-2">Características clave del producto (máximo 5)</p>
+								{#each amazonData.bullet_points as point, i}
+									<input
+										type="text"
+										bind:value={amazonData.bullet_points[i]}
+										placeholder={`Viñeta ${i + 1}`}
+										class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 mb-2"
+										maxlength="200"
+									/>
+								{/each}
+							</div>
+
+							<div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
+								<h4 class="font-semibold text-sm mb-3 flex items-center justify-between">
+									<span>Atributos Específicos (JSON)</span>
+									{#if amazonData.browse_node_path}
+										{@const categoryKey = amazonData.browse_node_path.split('›').pop()?.trim() || ''}
+										{@const template = amazonAttributeTemplates[categoryKey]}
+										{#if template}
+											<button
+												type="button"
+												onclick={() => {
+													amazonAttributesJson = JSON.stringify(template, null, 2);
+												}}
+												class="text-xs bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600"
+											>
+												💡 Usar plantilla
+											</button>
+										{/if}
+									{/if}
+								</h4>
+								<p class="text-xs text-gray-500 mb-3">
+									Atributos adicionales requeridos por la categoría específica de Amazon.
+									{#if amazonData.browse_node_path}
+										Consulta la <a href="https://sellercentral.amazon.com.mx/help/hub/reference/G1641" target="_blank" class="text-blue-600 hover:underline">guía de atributos de Amazon</a> para tu categoría.
+									{/if}
+								</p>
+								<textarea
+									bind:value={amazonAttributesJson}
+									placeholder={'{"voltage": "220V", "wattage": "100W", "material_type": "Acero inoxidable"}'}
+									class="w-full px-3 py-2 border border-gray-300 rounded text-sm font-mono h-32"
+								></textarea>
+							</div>
+						</div>
+
+					{:else if activeTab === 'mercadolibre'}
+						<!-- PESTAÑA MERCADO LIBRE -->
+						<div class="space-y-4">
+							<div class="bg-yellow-50 border border-yellow-300 rounded-lg p-4 mb-4">
+								<h3 class="font-bold text-yellow-900 mb-1">💛 Mercado Libre Listing</h3>
+								<p class="text-sm text-yellow-800">
+									Información específica para el listado del producto en Mercado Libre.
+								</p>
+							</div>
+
+							<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+								<div>
+									<label class="block text-sm font-semibold mb-2" for="ml-id">ID de Mercado Libre</label>
+									<input
+										id="ml-id"
+										type="text"
+										bind:value={mercadolibreData.ml_id}
+										placeholder="Ej: MLM123456789"
+										class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500"
+									/>
+									<p class="text-xs text-gray-500 mt-1">ID único del listado en Mercado Libre (se genera al publicar)</p>
+								</div>
+
+								<div>
+									<label class="block text-sm font-semibold mb-2" for="ml-price">Precio en Mercado Libre</label>
+									<div class="relative">
+										<span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">$</span>
+										<input
+											id="ml-price"
+											type="number"
+											bind:value={mercadolibreData.price}
+											placeholder="0.00"
+											step="0.01"
+											min="0"
+											class="w-full pl-8 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500"
+										/>
+									</div>
+									<p class="text-xs text-gray-500 mt-1">
+										Precio base: ${formData.base_price.toFixed(2)}
+										{#if mercadolibreData.price && mercadolibreData.price !== formData.base_price}
+											<span class="text-yellow-700 font-medium">
+												({mercadolibreData.price > formData.base_price ? '+' : ''}{((mercadolibreData.price - formData.base_price) / formData.base_price * 100).toFixed(1)}%)
+											</span>
+										{/if}
+									</p>
+								</div>
+							</div>
+
+							<div>
+								<label class="block text-sm font-semibold mb-2" for="ml-listing-type">Tipo de Publicación</label>
+								<select
+									id="ml-listing-type"
+									bind:value={mercadolibreData.listing_type}
+									class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500"
+								>
+									<option value="gold_special">Gold Special (Recomendado - 16% comisión)</option>
+									<option value="gold_premium">Gold Premium (16% comisión)</option>
+									<option value="gold_pro">Gold Pro (16% comisión)</option>
+									<option value="gold">Gold (15% comisión)</option>
+									<option value="silver">Silver (13% comisión)</option>
+									<option value="bronze">Bronze (11% comisión)</option>
+									<option value="free">Gratuita (11% comisión)</option>
+								</select>
+								<p class="text-xs text-gray-500 mt-1">Tipo de publicación define la visibilidad y comisiones. Ajusta el precio arriba para compensar.</p>
+							</div>
+
+							<div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
+								<h4 class="font-semibold text-sm mb-3">Atributos del Producto</h4>
+								<p class="text-xs text-gray-500 mb-3">Atributos específicos de Mercado Libre (BRAND, MODEL, WARRANTY_TYPE, etc.)</p>
+								<textarea
+									bind:value={mercadolibreAttributesJson}
+									placeholder={'{"BRAND": "Mi Marca", "MODEL": "2024"}'}
+									class="w-full px-3 py-2 border border-gray-300 rounded text-sm font-mono h-32"
+								></textarea>
+								<p class="text-xs text-gray-400 mt-2">💡 Formato JSON: Usar MAYÚSCULAS para las claves según API de Mercado Libre</p>
+							</div>
+
+							<div class="bg-blue-50 border border-blue-200 rounded-lg p-3">
+								<p class="text-xs text-blue-800">
+									<strong>Nota:</strong> Los atributos varían según la categoría. Consulta la API de Mercado Libre para conocer los atributos requeridos de tu categoría.
+								</p>
+							</div>
 						</div>
 					{/if}
 				</div>
