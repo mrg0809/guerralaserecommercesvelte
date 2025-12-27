@@ -192,7 +192,8 @@
 			onSave();
 		} catch (error) {
 			console.error('Error saving SAT info:', error);
-			alert('Error al guardar información SAT');
+			const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+			alert(`Error al guardar información SAT: ${errorMessage}`);
 		} finally {
 			saving = false;
 		}
@@ -224,7 +225,8 @@
 			onSave();
 		} catch (error) {
 			console.error('Error saving Amazon listing:', error);
-			alert('Error al guardar listado de Amazon');
+			const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+			alert(`Error al guardar listado de Amazon: ${errorMessage}`);
 		} finally {
 			saving = false;
 		}
@@ -251,7 +253,8 @@
 			onSave();
 		} catch (error) {
 			console.error('Error saving ML listing:', error);
-			alert('Error al guardar listado de Mercado Libre');
+			const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+			alert(`Error al guardar listado de Mercado Libre: ${errorMessage}`);
 		} finally {
 			saving = false;
 		}
@@ -283,7 +286,8 @@
 			await loadCategoryMappings();
 		} catch (error) {
 			console.error('Error creating category template:', error);
-			alert('Error al crear plantilla de categoría');
+			const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+			alert(`Error al crear plantilla de categoría: ${errorMessage}`);
 		}
 	}
 </script>

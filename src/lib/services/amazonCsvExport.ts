@@ -11,16 +11,38 @@ export interface ProductWithAmazon extends Product {
 	amazon_listing?: AmazonListing;
 }
 
+export interface AmazonCSVOptions {
+	brandName?: string;
+	attributeMappings?: Record<string, string>;
+}
+
+// Default attribute mappings
+export const DEFAULT_ATTRIBUTE_MAPPINGS: Record<string, string> = {
+	'watts': 'power_watts',
+	'voltage': 'voltage_rating',
+	'material': 'material_type',
+	'peso': 'item_weight',
+	'dimensiones': 'item_dimensions',
+	'color': 'color_name',
+	'garantia': 'warranty_description'
+};
+
 /**
  * Generates an Amazon-compatible CSV string from product data
  * 
  * @param products - Array of products with Amazon listing data
+ * @param options - Optional configuration (brand name, attribute mappings)
  * @returns CSV string ready for download
  */
-export function generateAmazonCSV(products: ProductWithAmazon[]): string {
+export function generateAmazonCSV(
+	products: ProductWithAmazon[], 
+	options: AmazonCSVOptions = {}
+): string {
 	if (!products || products.length === 0) {
 		throw new Error('No products provided for CSV generation');
 	}
+
+	const brandName = options.brandName || 'Guerra Laser';
 
 	// Define base Amazon columns
 	const baseColumns = [
@@ -69,7 +91,7 @@ export function generateAmazonCSV(products: ProductWithAmazon[]): string {
 			} else if (column === 'product_name') {
 				row.push(escapeCsvValue(product.name || ''));
 			} else if (column === 'brand_name') {
-				row.push(escapeCsvValue('Guerra Laser')); // Default brand
+				row.push(escapeCsvValue(brandName));
 			} else if (column === 'item_type') {
 				row.push(escapeCsvValue(product.amazon_listing?.feed_product_type || ''));
 			} else if (column === 'external_product_id') {
@@ -139,21 +161,15 @@ export function mapAttributesToAmazonColumns(
 	attributes: Record<string, any>,
 	mappingRules?: Record<string, string>
 ): Record<string, any> {
-	const defaultMappings: Record<string, string> = {
-		'watts': 'power_watts',
-		'voltage': 'voltage_rating',
-		'material': 'material_type',
-		'peso': 'item_weight',
-		'dimensiones': 'item_dimensions',
-		'color': 'color_name',
-		'garantia': 'warranty_description',
+	const mappings: Record<string, string> = {
+		...DEFAULT_ATTRIBUTE_MAPPINGS,
 		...mappingRules
 	};
 
 	const result: Record<string, any> = {};
 
 	Object.entries(attributes).forEach(([key, value]) => {
-		const amazonKey = defaultMappings[key] || key;
+		const amazonKey = mappings[key] || key;
 		result[amazonKey] = value;
 	});
 
@@ -187,10 +203,15 @@ export function downloadCSV(csvContent: string, filename: string = 'amazon-inven
  * 
  * @param products - Array of products with Amazon listing data
  * @param filename - Optional custom filename
+ * @param options - Optional configuration (brand name, attribute mappings)
  */
-export function exportToAmazonCSV(products: ProductWithAmazon[], filename?: string): void {
+export function exportToAmazonCSV(
+	products: ProductWithAmazon[], 
+	filename?: string,
+	options?: AmazonCSVOptions
+): void {
 	try {
-		const csvContent = generateAmazonCSV(products);
+		const csvContent = generateAmazonCSV(products, options);
 		downloadCSV(csvContent, filename);
 	} catch (error) {
 		console.error('Error exporting to Amazon CSV:', error);
