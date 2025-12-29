@@ -468,6 +468,134 @@ export type Database = {
 					created_at?: string;
 				};
 			};
+			sat_product_info: {
+				Row: {
+					id: string;
+					product_id: string;
+					clave_prod_serv: string;
+					clave_unidad: string;
+					unidad_medida: string;
+					material_peligroso: boolean;
+					created_at: string;
+					updated_at: string;
+				};
+				Insert: {
+					id?: string;
+					product_id: string;
+					clave_prod_serv: string;
+					clave_unidad: string;
+					unidad_medida: string;
+					material_peligroso?: boolean;
+					created_at?: string;
+					updated_at?: string;
+				};
+				Update: {
+					id?: string;
+					product_id?: string;
+					clave_prod_serv?: string;
+					clave_unidad?: string;
+					unidad_medida?: string;
+					material_peligroso?: boolean;
+					created_at?: string;
+					updated_at?: string;
+				};
+			};
+			amazon_listings: {
+				Row: {
+					id: string;
+					product_id: string;
+					sku_amazon: string | null;
+					asin: string | null;
+					feed_product_type: string | null;
+					bullet_points: Record<string, any> | null;
+					specific_attributes: Record<string, any> | null;
+					created_at: string;
+					updated_at: string;
+				};
+				Insert: {
+					id?: string;
+					product_id: string;
+					sku_amazon?: string | null;
+					asin?: string | null;
+					feed_product_type?: string | null;
+					bullet_points?: Record<string, any> | null;
+					specific_attributes?: Record<string, any> | null;
+					created_at?: string;
+					updated_at?: string;
+				};
+				Update: {
+					id?: string;
+					product_id?: string;
+					sku_amazon?: string | null;
+					asin?: string | null;
+					feed_product_type?: string | null;
+					bullet_points?: Record<string, any> | null;
+					specific_attributes?: Record<string, any> | null;
+					created_at?: string;
+					updated_at?: string;
+				};
+			};
+			mercadolibre_listings: {
+				Row: {
+					id: string;
+					product_id: string;
+					ml_id: string | null;
+					listing_type: string;
+					attributes: Record<string, any> | null;
+					created_at: string;
+					updated_at: string;
+				};
+				Insert: {
+					id?: string;
+					product_id: string;
+					ml_id?: string | null;
+					listing_type?: string;
+					attributes?: Record<string, any> | null;
+					created_at?: string;
+					updated_at?: string;
+				};
+				Update: {
+					id?: string;
+					product_id?: string;
+					ml_id?: string | null;
+					listing_type?: string;
+					attributes?: Record<string, any> | null;
+					created_at?: string;
+					updated_at?: string;
+				};
+			};
+			category_mappings: {
+				Row: {
+					id: string;
+					internal_type: string;
+					platform: 'amazon' | 'mercadolibre' | 'sat';
+					external_category_id: string;
+					external_category_name: string | null;
+					required_schema: Record<string, any> | null;
+					created_at: string;
+					updated_at: string;
+				};
+				Insert: {
+					id?: string;
+					internal_type: string;
+					platform: 'amazon' | 'mercadolibre' | 'sat';
+					external_category_id: string;
+					external_category_name?: string | null;
+					required_schema?: Record<string, any> | null;
+					created_at?: string;
+					updated_at?: string;
+				};
+				Update: {
+					id?: string;
+					internal_type?: string;
+					platform?: 'amazon' | 'mercadolibre' | 'sat';
+					external_category_id?: string;
+					external_category_name?: string | null;
+					required_schema?: Record<string, any> | null;
+					created_at?: string;
+					updated_at?: string;
+				};
+			};
 		};
 		Functions: {
 			get_product_details: {

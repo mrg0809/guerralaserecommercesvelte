@@ -16,6 +16,29 @@
 	let autoplayInterval: number | null = null;
 	let testimonialVideos: TestimonialVideo[] = $state([]);
 
+	// Variables para el carrusel de productos destacados
+	let productsCarouselRef: HTMLDivElement;
+	let canScrollLeft = $state(false);
+	let canScrollRight = $state(false);
+
+	function checkScrollButtons() {
+		if (productsCarouselRef) {
+			canScrollLeft = productsCarouselRef.scrollLeft > 0;
+			canScrollRight = productsCarouselRef.scrollLeft < (productsCarouselRef.scrollWidth - productsCarouselRef.clientWidth - 10);
+		}
+	}
+
+	function scrollProducts(direction: 'left' | 'right') {
+		if (productsCarouselRef) {
+			const scrollAmount = productsCarouselRef.clientWidth * 0.8;
+			productsCarouselRef.scrollBy({
+				left: direction === 'left' ? -scrollAmount : scrollAmount,
+				behavior: 'smooth'
+			});
+			setTimeout(checkScrollButtons, 300);
+		}
+	}
+
 	onMount(async () => {
 		// Load featured products
 		const { data: products } = await supabase
@@ -23,7 +46,7 @@
 			.select('*, product_media(*), categories(*)')
 			.eq('is_featured', true)
 			.eq('is_active', true)
-			.limit(6);
+			.limit(12);
 
 		if (products) {
 			featuredProducts = products.map((p: any) => ({
@@ -56,6 +79,9 @@
 		}
 
 		loading = false;
+		
+		// Inicializar botones del carrusel de productos
+		setTimeout(checkScrollButtons, 100);
 		
 		// Iniciar autoplay del carrusel de videos si hay videos
 		if (testimonialVideos.length > 0) {
@@ -200,39 +226,80 @@
 		</div>
 	</section>
 {:else if featuredProducts.length > 0}
-	<section class="py-16">
+	<section class="py-16 bg-gray-50">
 		<div class="container mx-auto px-4">
 			<h2 class="text-3xl font-bold mb-8 text-center">Productos Destacados</h2>
-			<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-				{#each featuredProducts as product}
-					<a
-						href="/productos/{product.slug}"
-						class="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition"
+			
+			<div class="relative group">
+				<!-- Botón Izquierdo -->
+				{#if canScrollLeft}
+					<button
+						onclick={() => scrollProducts('left')}
+						class="absolute left-0 top-1/2 -translate-y-1/2 z-10 bg-white/90 hover:bg-white p-3 rounded-full shadow-lg transition-all opacity-0 group-hover:opacity-100 -translate-x-4 group-hover:translate-x-0"
+						aria-label="Anterior"
 					>
-						{#if product.media && product.media.length > 0}
-							<img
-								src={product.media.find((m) => m.is_primary)?.url || product.media[0].url}
-								alt={product.name}
-								class="w-full h-64 object-cover"
-							/>
-						{:else}
-							<div class="w-full h-64 bg-gray-200 flex items-center justify-center">
-								<span class="text-gray-400">Sin imagen</span>
+						<svg class="w-6 h-6 text-gray-800" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+						</svg>
+					</button>
+				{/if}
+
+				<!-- Carrusel de Productos -->
+				<div
+					bind:this={productsCarouselRef}
+					onscroll={checkScrollButtons}
+					class="flex gap-6 overflow-x-auto scrollbar-hide scroll-smooth pb-4"
+					style="scroll-snap-type: x mandatory;"
+				>
+					{#each featuredProducts as product}
+						<a
+							href="/productos/{product.slug}"
+							class="flex-none w-[300px] bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition"
+							style="scroll-snap-align: start;"
+						>
+							{#if product.media && product.media.length > 0}
+								<img
+									src={product.media.find((m) => m.is_primary)?.url || product.media[0].url}
+									alt={product.name}
+									class="w-full h-64 object-cover"
+								/>
+							{:else}
+								<div class="w-full h-64 bg-gray-200 flex items-center justify-center">
+									<span class="text-gray-400">Sin imagen</span>
+								</div>
+							{/if}
+							<div class="p-4">
+								{#if product.category}
+									<p class="text-sm text-blue-600 mb-2">{product.category.name}</p>
+								{/if}
+								<h3 class="text-xl font-bold mb-2 line-clamp-2">{product.name}</h3>
+								{#if product.short_description}
+									<p class="text-gray-600 mb-4 line-clamp-2">{product.short_description}</p>
+								{/if}
+								<p class="text-2xl font-bold text-blue-600">{formatPrice(product.base_price)}</p>
 							</div>
-						{/if}
-						<div class="p-4">
-							{#if product.category}
-								<p class="text-sm text-blue-600 mb-2">{product.category.name}</p>
-							{/if}
-							<h3 class="text-xl font-bold mb-2">{product.name}</h3>
-							{#if product.short_description}
-								<p class="text-gray-600 mb-4">{product.short_description}</p>
-							{/if}
-							<p class="text-2xl font-bold text-blue-600">{formatPrice(product.base_price)}</p>
-						</div>
-					</a>
-				{/each}
+						</a>
+					{/each}
+				</div>
+
+				<!-- Botón Derecho -->
+				{#if canScrollRight}
+					<button
+						onclick={() => scrollProducts('right')}
+						class="absolute right-0 top-1/2 -translate-y-1/2 z-10 bg-white/90 hover:bg-white p-3 rounded-full shadow-lg transition-all opacity-0 group-hover:opacity-100 translate-x-4 group-hover:translate-x-0"
+						aria-label="Siguiente"
+					>
+						<svg class="w-6 h-6 text-gray-800" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+						</svg>
+					</button>
+				{/if}
 			</div>
+
+			<!-- Indicador de scroll en móvil -->
+			<p class="text-center text-gray-500 text-sm mt-4 md:hidden">
+				Desliza para ver más productos →
+			</p>
 		</div>
 	</section>
 {:else}
@@ -421,3 +488,22 @@
 		</div>
 	</div>
 </section>
+
+<style>
+	/* Ocultar scrollbar pero mantener funcionalidad */
+	.scrollbar-hide {
+		-ms-overflow-style: none;
+		scrollbar-width: none;
+	}
+	.scrollbar-hide::-webkit-scrollbar {
+		display: none;
+	}
+	
+	/* Limitar líneas de texto */
+	.line-clamp-2 {
+		display: -webkit-box;
+		-webkit-line-clamp: 2;
+		-webkit-box-orient: vertical;
+		overflow: hidden;
+	}
+</style>
