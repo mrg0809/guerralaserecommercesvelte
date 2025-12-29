@@ -19,6 +19,9 @@
 	let selectedTags: string[] = $state([]);
 	let newTagName = $state('');
 	
+	// Mapa de variantes por producto
+	let productVariantsMap: Record<string, ProductVariant[]> = $state({});
+	
 	// Variables de paginación y filtros
 	let searchQuery = $state('');
 	let selectedCategoryFilter = $state('');
@@ -269,6 +272,7 @@
 		await loadCategories();
 		await loadDiscounts();
 		await loadTags();
+		await loadAllProductVariants();
 	});
 
 	async function loadProducts() {
@@ -282,6 +286,25 @@
 			products = data;
 		}
 		loading = false;
+	}
+
+	async function loadAllProductVariants() {
+		// Cargar todas las variantes de una vez
+		const { data } = await supabase
+			.from('product_variants')
+			.select('*')
+			.order('created_at');
+
+		if (data) {
+			// Agrupar variantes por product_id
+			productVariantsMap = {};
+			for (const variant of data) {
+				if (!productVariantsMap[variant.product_id]) {
+					productVariantsMap[variant.product_id] = [];
+				}
+				productVariantsMap[variant.product_id].push(variant);
+			}
+		}
 	}
 
 	async function loadCategories() {
@@ -900,6 +923,7 @@
 
 			closeModal();
 			await loadProducts();
+			await loadAllProductVariants();
 		} catch (error: any) {
 			alert('Error al guardar producto: ' + error.message);
 		}
@@ -1143,6 +1167,7 @@
 			if (error) throw error;
 
 			await loadProducts();
+			await loadAllProductVariants();
 		} catch (error: any) {
 			alert('Error al eliminar producto: ' + error.message);
 		}
@@ -1158,6 +1183,7 @@
 			if (error) throw error;
 
 			await loadProducts();
+			await loadAllProductVariants();
 		} catch (error: any) {
 			alert('Error al actualizar producto: ' + error.message);
 		}
@@ -1177,6 +1203,15 @@
 				class="px-6 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition"
 			>
 				← Volver
+			</a>
+			<a
+				href="/admin/productos/editar-precios"
+				class="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition flex items-center gap-2"
+			>
+				<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+				</svg>
+				Editar Precios y Stock
 			</a>
 			<a
 				href="/admin/importar"
@@ -1295,6 +1330,7 @@
 						<th class="px-4 py-3 text-left">Stock</th>
 						<th class="px-4 py-3 text-left">Estado</th>
 						<th class="px-4 py-3 text-left">Destacado</th>
+						<th class="px-4 py-3 text-left">Variantes</th>
 						<th class="px-4 py-3 text-right">Acciones</th>
 					</tr>
 				</thead>
@@ -1322,6 +1358,19 @@
 							</td>
 							<td class="px-4 py-3">
 								{product.is_featured ? '⭐' : '-'}
+							</td>
+							<td class="px-4 py-3">
+								{#if productVariantsMap[product.id] && productVariantsMap[product.id].length > 0}
+									<div class="flex flex-wrap gap-1">
+										{#each productVariantsMap[product.id] as variant}
+											<span class="inline-block px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded">
+												{variant.name || variant.sku}
+											</span>
+										{/each}
+									</div>
+								{:else}
+									<span class="text-xs text-gray-400">Sin variantes</span>
+								{/if}
 							</td>
 							<td class="px-4 py-3 text-right">
 								<button
