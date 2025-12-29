@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { page } from '$app/stores';
 	import favicon from '$lib/assets/favicon.svg';
 	import { cart } from '$lib/stores/cart';
 	import { supabase } from '$lib/supabaseClient';
@@ -14,6 +15,12 @@
 	let searchQuery = $state('');
 	let searchResults = $state<any[]>([]);
 	let searchTimeout: NodeJS.Timeout;
+	let currentPath = $state('/');
+	
+	// Detectar cambios de ruta
+	page.subscribe(($page) => {
+		currentPath = $page.url.pathname;
+	});
 	
 	cart.subscribe((items) => {
 		cartItemCount = items.reduce((sum, item) => sum + item.quantity, 0);
@@ -405,7 +412,8 @@
 		{@render children()}
 	</main>
 
-	<!-- Sección de Ubicación y Horarios -->
+	<!-- Sección de Ubicación y Horarios - Solo en página de inicio -->
+	{#if currentPath === '/'}
 	<section class="bg-gradient-to-br from-blue-50 to-indigo-50 py-16">
 		<div class="container mx-auto px-4">
 			<div class="text-center mb-12">
@@ -483,6 +491,7 @@
 			</div>
 		</div>
 	</section>
+	{/if}
 
 	<footer class="bg-gray-800 text-white py-8">
 		<div class="container mx-auto px-4">
