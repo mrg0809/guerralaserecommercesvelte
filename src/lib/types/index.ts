@@ -13,6 +13,12 @@ export type OrderItem = Database['public']['Tables']['order_items']['Row'];
 export type ProductBundle = Database['public']['Tables']['product_bundles']['Row'];
 export type BundleItem = Database['public']['Tables']['bundle_items']['Row'];
 
+// PIM (Product Information Management) Types
+export type SATProductInfo = Database['public']['Tables']['sat_product_info']['Row'];
+export type AmazonListing = Database['public']['Tables']['amazon_listings']['Row'];
+export type MercadoLibreListing = Database['public']['Tables']['mercadolibre_listings']['Row'];
+export type CategoryMapping = Database['public']['Tables']['category_mappings']['Row'];
+
 // Tipo para videos testimoniales
 export interface TestimonialVideo {
 	id: string;
@@ -52,5 +58,58 @@ export interface ProductWithDetails extends Product {
 	specifications?: ProductSpecification[];
 	discounts?: Discount[];
 	tags?: Tag[];
+	// PIM data
+	sat_info?: SATProductInfo;
+	amazon_listing?: AmazonListing;
+	mercadolibre_listing?: MercadoLibreListing;
+}
+
+// PIM-specific types for CSV generation and data management
+
+export interface AmazonCSVField {
+	name: string;
+	type: 'text' | 'number' | 'select' | 'boolean';
+	required: boolean;
+	label: string;
+	options?: string[];
+}
+
+export interface AmazonCSVMapping {
+	product_id: string;
+	sku: string;
+	product_name: string;
+	brand_name: string;
+	item_type: string;
+	external_product_id?: string;
+	external_product_id_type?: string;
+	[key: string]: string | number | boolean | undefined;
+}
+
+export interface CategoryMappingSchema {
+	fields: Array<{
+		name: string;
+		type: 'text' | 'number' | 'select' | 'boolean';
+		required: boolean;
+		label: string;
+		options?: string[];
+	}>;
+}
+
+// API sync types for future implementation
+export interface SyncPayload {
+	sku: string;
+	quantity: number;
+	price?: number;
+	updated_at?: string;
+}
+
+export interface AmazonSyncPayload extends SyncPayload {
+	asin?: string;
+	feed_product_type?: string;
+}
+
+export interface MercadoLibreSyncPayload extends SyncPayload {
+	ml_id?: string;
+	listing_type?: string;
 }
 
