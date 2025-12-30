@@ -4,6 +4,7 @@
 	import favicon from '$lib/assets/favicon.svg';
 	import { cart } from '$lib/stores/cart';
 	import { supabase } from '$lib/supabaseClient';
+	import { getDisplayPrice } from '$lib/utils';
 	import type { Category } from '$lib/types';
 	import '../app.css';
 
@@ -76,7 +77,7 @@
 		searchTimeout = setTimeout(async () => {
 			const { data } = await supabase
 				.from('products')
-				.select('id, name, slug, base_price, short_description')
+				.select('id, name, slug, base_price, short_description, product_variants(*)')
 				.eq('is_active', true)
 				.ilike('name', `%${searchQuery}%`)
 				.limit(5);
@@ -383,19 +384,23 @@
 						<!-- Search Results -->
 						{#if searchResults.length > 0}
 							<div class="absolute top-full left-0 right-0 mt-2 bg-white border border-gray-200 rounded-lg shadow-xl z-50 max-h-96 overflow-y-auto">
-								{#each searchResults as product}
-									<a
-										href="/productos/{product.slug}"
-										class="block px-4 py-3 hover:bg-gray-50 border-b last:border-b-0"
-										onclick={() => { showSearch = false; searchQuery = ''; searchResults = []; }}
-									>
-										<p class="font-semibold text-gray-900">{product.name}</p>
-										{#if product.short_description}
-											<p class="text-sm text-gray-600 mt-1">{product.short_description}</p>
-										{/if}
-										<p class="text-sm text-red-600 font-bold mt-1">${product.base_price.toLocaleString('es-MX')}</p>
-									</a>
-								{/each}
+							{#each searchResults as product}
+								{@const displayPrice = getDisplayPrice(product)}
+								<a
+									href="/productos/{product.slug}"
+									class="block px-4 py-3 hover:bg-gray-50 border-b last:border-b-0"
+									onclick={() => { showSearch = false; searchQuery = ''; searchResults = []; }}
+								>
+									<p class="font-semibold text-gray-900">{product.name}</p>
+									{#if product.short_description}
+										<p class="text-sm text-gray-600 mt-1">{product.short_description}</p>
+									{/if}
+									<p class="text-sm text-red-600 font-bold mt-1">
+										{#if displayPrice.hasVariants}<span class="text-xs">Desde</span> {/if}
+										${displayPrice.price.toLocaleString('es-MX')}
+									</p>
+								</a>
+							{/each}
 							</div>
 						{:else if searchQuery.length >= 2}
 							<div class="absolute top-full left-0 right-0 mt-2 bg-white border border-gray-200 rounded-lg shadow-xl z-50 p-4">

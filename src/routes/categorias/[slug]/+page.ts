@@ -47,7 +47,7 @@ export const load: PageLoad = async ({ params }) => {
 	// Consulta por categorías usando IN para cubrir la categoría y sus descendientes
 	const { data: products } = await supabase
 		.from('products')
-		.select('*, product_media(*)')
+		.select('*, product_media(*), product_variants(*)')
 		.in('category_id', ids)
 		.eq('is_active', true)
 		.order('created_at', { ascending: false });

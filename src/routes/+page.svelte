@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { supabase } from '$lib/supabaseClient';
-	import { formatPrice } from '$lib/utils';
+	import { formatPrice, getDisplayPrice, getDisplayStock } from '$lib/utils';
 	import { getBannerVideoUrl } from '$lib/storage';
 	import type { Product, Category, ProductMedia, TestimonialVideo } from '$lib/types';
 
@@ -43,7 +43,7 @@
 		// Load featured products
 		const { data: products } = await supabase
 			.from('products')
-			.select('*, product_media(*), categories(*)')
+			.select('*, product_media(*), categories(*), product_variants(*)')
 			.eq('is_featured', true)
 			.eq('is_active', true)
 			.limit(12);
@@ -252,6 +252,7 @@
 					style="scroll-snap-type: x mandatory;"
 				>
 					{#each featuredProducts as product}
+						{@const displayPrice = getDisplayPrice(product)}
 						<a
 							href="/productos/{product.slug}"
 							class="flex-none w-[300px] bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition"
@@ -272,12 +273,17 @@
 								{#if product.category}
 									<p class="text-sm text-blue-600 mb-2">{product.category.name}</p>
 								{/if}
-								<h3 class="text-xl font-bold mb-2 line-clamp-2">{product.name}</h3>
-								{#if product.short_description}
-									<p class="text-gray-600 mb-4 line-clamp-2">{product.short_description}</p>
+							<h3 class="text-xl font-bold mb-2 line-clamp-2">{product.name}</h3>
+							{#if product.short_description}
+								<p class="text-gray-600 mb-4 line-clamp-2">{product.short_description}</p>
+						{/if}
+					<div class="flex items-baseline gap-1">
+							{#if displayPrice.hasVariants}
+									<span class="text-xs text-gray-500">Desde</span>
 								{/if}
-								<p class="text-2xl font-bold text-blue-600">{formatPrice(product.base_price)}</p>
+								<p class="text-2xl font-bold text-blue-600">{formatPrice(displayPrice.price)}</p>
 							</div>
+						</div>
 						</a>
 					{/each}
 				</div>
