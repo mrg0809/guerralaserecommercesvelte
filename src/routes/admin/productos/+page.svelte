@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { supabase } from '$lib/supabaseClient';
-	import { formatPrice, generateSlug } from '$lib/utils';
+	import { formatPrice, generateSlug, getDisplayPrice, getDisplayStock } from '$lib/utils';
 	import { getProductImageUrl } from '$lib/storage';
 	import type { Product, Category, ProductSpecification, Discount, Tag, ProductMedia, ProductVariant } from '$lib/types';
 
@@ -1336,6 +1336,8 @@
 				</thead>
 				<tbody>
 					{#each paginatedProducts as product}
+						{@const displayPrice = getDisplayPrice({ ...product, product_variants: productVariantsMap[product.id] || [] })}
+						{@const displayStock = getDisplayStock({ ...product, product_variants: productVariantsMap[product.id] || [] })}
 						<tr class="border-t hover:bg-gray-50">
 							<td class="px-4 py-3">
 								<div>
@@ -1344,8 +1346,15 @@
 								</div>
 							</td>
 							<td class="px-4 py-3 text-sm">{product.sku || '-'}</td>
-							<td class="px-4 py-3">{formatPrice(product.base_price)}</td>
-							<td class="px-4 py-3">{product.stock_quantity}</td>
+							<td class="px-4 py-3">
+								{formatPrice(displayPrice.price)}
+							</td>
+							<td class="px-4 py-3">
+								{displayStock}
+								{#if productVariantsMap[product.id] && productVariantsMap[product.id].length > 0}
+									<span class="text-xs text-gray-500">(suma)</span>
+								{/if}
+							</td>
 							<td class="px-4 py-3">
 								<button
 									onclick={() => toggleActive(product)}

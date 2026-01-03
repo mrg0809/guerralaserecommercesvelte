@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { formatPrice } from '$lib/utils';
+    import { formatPrice, getDisplayPrice, getDisplayStock } from '$lib/utils';
     import type { PageData } from './$types';
 
     let { data }: { data: PageData } = $props();
@@ -65,6 +65,8 @@
 
 		<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
 			{#each data.products as product}
+				{@const displayPrice = getDisplayPrice(product)}
+				{@const displayStock = getDisplayStock(product)}
 				<a
 					href="/productos/{product.slug}"
 					class="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition"
@@ -86,8 +88,13 @@
 							<p class="text-gray-600 text-sm mb-3 line-clamp-2">{product.short_description}</p>
 						{/if}
 						<div class="flex items-center justify-between">
-							<p class="text-xl font-bold text-blue-600">{formatPrice(product.base_price)}</p>
-							{#if product.stock_quantity > 0}
+							<div class="flex items-baseline gap-1">
+								{#if displayPrice.hasVariants}
+									<span class="text-xs text-gray-500">Desde</span>
+								{/if}
+								<p class="text-xl font-bold text-blue-600">{formatPrice(displayPrice.price)}</p>
+							</div>
+							{#if displayStock > 0}
 								<span class="text-sm text-green-600">En stock</span>
 							{:else}
 								<span class="text-sm text-red-600">Agotado</span>

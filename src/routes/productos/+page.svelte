@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { supabase } from '$lib/supabaseClient';
-	import { formatPrice } from '$lib/utils';
+	import { formatPrice, getDisplayPrice, getDisplayStock } from '$lib/utils';
 	import type { Product, Category, ProductMedia } from '$lib/types';
 
 	let products: (Product & { media?: ProductMedia[]; category?: Category })[] = $state([]);
@@ -31,7 +31,7 @@
 		loading = true;
 		let query = supabase
 			.from('products')
-			.select('*, product_media(*), categories(*)')
+			.select('*, product_media(*), categories(*), product_variants(*)')
 			.eq('is_active', true);
 
 		if (selectedCategory) {
@@ -112,6 +112,8 @@
 	{:else if filteredProducts.length > 0}
 		<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
 			{#each filteredProducts as product}
+				{@const displayPrice = getDisplayPrice(product)}
+				{@const displayStock = getDisplayStock(product)}
 				<a
 					href="/productos/{product.slug}"
 					class="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition"
@@ -131,18 +133,23 @@
 						{#if product.category}
 							<p class="text-sm text-blue-600 mb-1">{product.category.name}</p>
 						{/if}
-						<h3 class="text-lg font-bold mb-2">{product.name}</h3>
-						{#if product.short_description}
-							<p class="text-gray-600 text-sm mb-3 line-clamp-2">{product.short_description}</p>
-						{/if}
-						<div class="flex items-center justify-between">
-							<p class="text-xl font-bold text-blue-600">{formatPrice(product.base_price)}</p>
-							{#if product.stock_quantity > 0}
-								<span class="text-sm text-green-600">En stock</span>
-							{:else}
-								<span class="text-sm text-red-600">Agotado</span>
+					<h3 class="text-lg font-bold mb-2">{product.name}</h3>
+					{#if product.short_description}
+						<p class="text-gray-600 text-sm mb-3 line-clamp-2">{product.short_description}</p>
+					{/if}
+					<div class="flex items-center justify-between">
+						<div class="flex items-baseline gap-1">
+							{#if displayPrice.hasVariants}
+								<span class="text-xs text-gray-500">Desde</span>
 							{/if}
+							<p class="text-xl font-bold text-blue-600">{formatPrice(displayPrice.price)}</p>
 						</div>
+						{#if displayStock > 0}
+							<span class="text-sm text-green-600">En stock</span>
+						{:else}
+							<span class="text-sm text-red-600">Agotado</span>
+						{/if}
+					</div>
 					</div>
 				</a>
 			{/each}
