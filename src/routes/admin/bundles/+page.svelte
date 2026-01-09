@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { supabase } from '$lib/supabaseClient';
-	import { formatPrice } from '$lib/utils';
+	import { formatPrice, getDisplayStock } from '$lib/utils';
 	import { goto } from '$app/navigation';
 
 	let bundles = $state<any[]>([]);
@@ -29,7 +29,7 @@
 		// Cargar productos
 		const { data: productsData } = await supabase
 			.from('products')
-			.select('id, name, slug, base_price')
+			.select('id, name, slug, base_price, stock_quantity, product_variants (id, name, stock_quantity, is_active)')
 			.eq('is_active', true)
 			.order('name');
 		products = productsData || [];
@@ -43,7 +43,7 @@
 				bundle_items (
 					*,
 					products (id, name, base_price),
-					product_variants (id, name, price)
+					product_variants (id, name, price, stock_quantity)
 				)
 			`)
 			.order('created_at', { ascending: false });
@@ -76,13 +76,16 @@
 		showModal = true;
 	}
 
+	$effect(() => {
+		bundleStock = calculateBundleStock(bundleItems, products);
+	});
+
 	function resetForm() {
 		selectedProductId = '';
 		bundleName = '';
 		bundleDescription = '';
 		bundleSku = '';
 		bundlePrice = 0;
-		bundleStock = 0;
 		bundleActive = true;
 		bundleItems = [];
 	}
@@ -111,13 +114,16 @@
 			return;
 		}
 
+		const computedStock = calculateBundleStock(bundleItems, products);
+		bundleStock = computedStock;
+
 		const bundleData = {
 			product_id: selectedProductId,
 			name: bundleName,
 			description: bundleDescription || null,
 			sku: bundleSku || null,
 			bundle_price: bundlePrice,
-			stock_quantity: bundleStock,
+			stock_quantity: computedStock,
 			is_active: bundleActive
 		};
 
@@ -215,6 +221,25 @@
 			.eq('product_id', productId)
 			.eq('is_active', true);
 		return data || [];
+	}
+
+	function calculateBundleStock(items: any[], availableProducts: any[]): number {
+		if (!items.length) return 0;
+
+		const stocks = items.map((item) => {
+			const product = availableProducts.find((p) => p.id === item.product_id);
+			const quantity = Number(item.quantity) || 0;
+			if (!product || quantity <= 0) return 0;
+
+			const variant = product.product_variants?.find((v: any) => v.id === item.variant_id);
+			const available = variant
+				? variant.stock_quantity || 0
+				: getDisplayStock(product.stock_quantity || 0, product.product_variants || []);
+
+			return Math.floor(available / quantity);
+		});
+
+		return stocks.length ? Math.max(0, Math.min(...stocks)) : 0;
 	}
 </script>
 
@@ -392,14 +417,11 @@
 							/>
 						</div>
 						<div>
-							<label class="block font-semibold mb-2" for="bundle-stock">Stock</label>
-							<input
-								id="bundle-stock"
-								type="number"
-								bind:value={bundleStock}
-								min="0"
-								class="w-full border rounded-lg px-4 py-2"
-							/>
+							<label class="block font-semibold mb-2" for="bundle-stock">Stock (calculado)</label>
+							<div id="bundle-stock" class="w-full border rounded-lg px-4 py-2 bg-gray-50">
+								{bundleStock}
+							</div>
+							<p class="text-sm text-gray-500 mt-1">Se calcula automaticamente segun el stock de los productos incluidos.</p>
 						</div>
 						<div>
 							<label class="block font-semibold mb-2" for="bundle-sku">SKU (opcional)</label>
