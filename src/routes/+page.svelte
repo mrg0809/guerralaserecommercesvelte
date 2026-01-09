@@ -183,7 +183,7 @@
 
 <!-- Categories Section -->
 {#if getMaquinariaSubcategories().length > 0}
-	<section class="py-16 bg-gray-50">
+	<section id="categorias" class="py-16 bg-gray-50">
 		<div class="container mx-auto px-4">
 			<h2 class="text-3xl font-bold mb-8 text-center">Nuestras Máquinas</h2>
 			
@@ -226,7 +226,7 @@
 		</div>
 	</section>
 {:else if featuredProducts.length > 0}
-	<section class="py-16 bg-gray-50">
+	<section id="productos-destacados" class="py-16 bg-gray-50">
 		<div class="container mx-auto px-4">
 			<h2 class="text-3xl font-bold mb-8 text-center">Productos Destacados</h2>
 			
@@ -318,7 +318,7 @@
 
 <!-- Video Testimonials Carousel -->
 {#if testimonialVideos.length > 0}
-	<section class="py-16 bg-gradient-to-br from-blue-50 to-indigo-50">
+	<section id="videos-testimonios" class="py-16 bg-gradient-to-br from-blue-50 to-indigo-50">
 		<div class="container mx-auto px-4">
 			<div class="text-center mb-12">
 				<h2 class="text-4xl font-bold mb-4 text-gray-800">Clientes Satisfechos</h2>
@@ -473,7 +473,7 @@
 {/if}
 
 <!-- Features Section -->
-<section class="py-16 bg-gray-50">
+<section id="caracteristicas" class="py-16 bg-gray-50">
 	<div class="container mx-auto px-4">
 		<div class="grid grid-cols-1 md:grid-cols-3 gap-8 text-center">
 			<div class="p-6">

@@ -419,7 +419,7 @@
 
 	<!-- Sección de Ubicación y Horarios - Solo en página de inicio -->
 	{#if currentPath === '/'}
-	<section class="bg-gradient-to-br from-blue-50 to-indigo-50 py-16">
+	<section id="visitanos" class="bg-gradient-to-br from-blue-50 to-indigo-50 py-16">
 		<div class="container mx-auto px-4">
 			<div class="text-center mb-12">
 				<h2 class="text-4xl font-bold text-gray-900 mb-3">Visítanos</h2>
