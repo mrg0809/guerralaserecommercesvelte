@@ -1,0 +1,29 @@
+{
+  "redirects": [
+    {
+      "source": "/maquinas",
+      "destination": "/categorias/maquinaria",
+      "permanent": true
+    },
+    {
+      "source": "/tienda",
+      "destination": "/",
+      "permanent": true
+    },
+    {
+      "source": "/contacto",
+      "destination": "/#visitanos",
+      "permanent": true
+    },
+    {
+      "source": "/producto/maquina-laser-co2-30x40cm-50w-co2-nuevo-modelo-guerra-laser",
+      "destination": "/productos/maquina-laser-co2-70w-30x50cm-guerra-laser-cnc",
+      "permanent": true
+    },
+    {
+      "source": "/producto/:slug*",
+      "destination": "/productos/:slug*",
+      "permanent": true
+    }
+  ]
+}
