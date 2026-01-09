@@ -13,6 +13,7 @@
 		{ href: '/admin/categorias', label: 'Categorías', icon: '🏷️' },
 		{ href: '/admin/bundles', label: 'Bundles', icon: '🎁' },
 		{ href: '/admin/pedidos', label: 'Pedidos', icon: '🛍️' },
+		{ href: '/admin/inventario', label: 'Inventario', icon: '📋' },
 		{ href: '/admin/importar', label: 'Importar', icon: '📊' },
 		{ href: '/admin/videos', label: 'Videos', icon: '🎥' }
 	];
