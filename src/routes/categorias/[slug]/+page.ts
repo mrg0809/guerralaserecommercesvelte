@@ -2,9 +2,6 @@ import type { PageLoad } from './$types';
 import { supabase } from '$lib/supabaseClient';
 import { error } from '@sveltejs/kit';
 
-// Revalidate (ISR) - cachea por 30 minutos
-export const revalidate = 1800;
-
 export const load: PageLoad = async ({ params }) => {
 	const { data: category } = await supabase
 		.from('categories')
@@ -47,10 +44,10 @@ export const load: PageLoad = async ({ params }) => {
 	}
 
 
-	// Consulta optimizada: solo columnas necesarias sin expandir relaciones
-	const { data: products } = await supabase
+	// Consulta: productos con sus imágenes (product_media)
+	const { data: rawProducts } = await supabase
 		.from('products')
-		.select('id, name, slug, base_price, stock_quantity, short_description')
+		.select('id, name, slug, base_price, stock_quantity, short_description, product_media(*)')
 		.in('category_id', ids)
 		.eq('is_active', true)
 		.order('created_at', { ascending: false })
@@ -60,9 +57,14 @@ export const load: PageLoad = async ({ params }) => {
 		.filter((c) => ids.includes(c.id) && c.id !== category.id)
 		.map(({ id, name, slug }) => ({ id, name, slug }));
 
+	const products = (rawProducts || []).map((p: any) => ({
+		...p,
+		media: p.product_media || []
+	}));
+
 	return {
 		category,
 		descendantCategories,
-		products: products || []
+		products
 	};
 };

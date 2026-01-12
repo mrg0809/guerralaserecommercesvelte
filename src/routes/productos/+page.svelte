@@ -55,7 +55,7 @@
 		loading = true;
 		let query = supabase
 			.from('products')
-			.select('id, name, slug, base_price, stock_quantity, short_description, category_id')
+			.select('id, name, slug, base_price, stock_quantity, short_description, category_id, product_media(*), categories(*)')
 			.eq('is_active', true);
 
 		if (selectedCategory) {
@@ -65,7 +65,11 @@
 		const { data } = await query.order('created_at', { ascending: false }).limit(50);
 
 		if (data) {
-			products = data;
+			products = data.map((p: any) => ({
+				...p,
+				media: p.product_media || [],
+				category: p.categories
+			}));
 		}
 
 		loading = false;
