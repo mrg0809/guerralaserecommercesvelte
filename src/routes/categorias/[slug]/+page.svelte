@@ -1,8 +1,9 @@
 <script lang="ts">
-    import { formatPrice, getDisplayPrice, getDisplayStock } from '$lib/utils';
-    import type { PageData } from './$types';
+	import { formatPrice, getDisplayPrice, getDisplayStock } from '$lib/utils';
+	import { getImageKitUrl } from '$lib/storage';
+	import type { PageData } from './$types';
 
-    let { data }: { data: PageData } = $props();
+	let { data }: { data: PageData } = $props();
 </script>
 
 <svelte:head>
@@ -14,7 +15,7 @@
 	{#if data.category.image_url}
 		<div class="relative h-64 rounded-lg overflow-hidden mb-8">
 			<img
-				src={data.category.image_url}
+				src={getImageKitUrl(data.category.image_url)}
 				alt={data.category.name}
 				class="w-full h-full object-cover"
 			/>
@@ -73,7 +74,7 @@
 				>
 					{#if product.media && product.media.length > 0}
 						<img
-							src={product.media.find((m) => m.is_primary)?.url || product.media[0].url}
+							src={getImageKitUrl(product.media.find((m) => m.is_primary)?.url || product.media[0].url)}
 							alt={product.name}
 							class="w-full h-48 object-cover"
 						/>

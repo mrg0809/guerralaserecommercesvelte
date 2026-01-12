@@ -279,7 +279,18 @@
 		loading = true;
 		const { data } = await supabase
 			.from('products')
-			.select('*')
+			.select(`
+				id,
+				name,
+				slug,
+				base_price,
+				stock_quantity,
+				sku,
+				category_id,
+				is_active,
+				is_featured,
+				created_at
+			`)
 			.order('created_at', { ascending: false });
 
 		if (data) {
@@ -308,7 +319,7 @@
 	}
 
 	async function loadCategories() {
-		const { data } = await supabase.from('categories').select('*').eq('is_active', true);
+		const { data } = await supabase.from('categories').select('id, name, parent_id, is_active').eq('is_active', true);
 		if (data) {
 			categories = data;
 			buildCategoryHierarchy();
@@ -332,7 +343,7 @@
 	async function loadDiscounts() {
 		const { data } = await supabase
 			.from('discounts')
-			.select('*')
+			.select('id, name, discount_type, discount_value, is_active')
 			.eq('is_active', true)
 			.order('name');
 
@@ -342,7 +353,7 @@
 	}
 
 	async function loadTags() {
-		const { data } = await supabase.from('tags').select('*').order('name');
+		const { data } = await supabase.from('tags').select('id, name').order('name');
 
 		if (data) {
 			allTags = data;

@@ -44,7 +44,7 @@
 		loading = true;
 		const { data } = await supabase
 			.from('categories')
-			.select('*')
+			.select('id, name, slug, description, image_url, display_order, is_active, parent_id')
 			.order('display_order');
 
 		if (data) {

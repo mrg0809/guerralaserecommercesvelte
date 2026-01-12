@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { supabase } from '$lib/supabaseClient';
 	import { formatPrice, getDisplayPrice, getDisplayStock } from '$lib/utils';
+	import { getImageKitUrl } from '$lib/storage';
 	import type { Product, Category, ProductMedia } from '$lib/types';
 
 	let products: (Product & { media?: ProductMedia[]; category?: Category })[] = $state([]);
@@ -9,6 +10,29 @@
 	let selectedCategory = $state<string | null>(null);
 	let loading = $state(true);
 	let searchTerm = $state('');
+
+	// Transformaciones por defecto de ImageKit para las miniaturas
+	const IMAGEKIT_TRANSFORM = 'tr=w-600,h-600,fo-auto,q-80';
+
+	function getProductImageSrc(product: Product & { media?: ProductMedia[] }) {
+		if (!product.media || product.media.length === 0) return null;
+
+		const primary = product.media.find((m) => m.is_primary) ?? product.media[0];
+		const baseUrl = primary?.url;
+		if (!baseUrl) return null;
+
+		// Convertimos primero a ImageKit si viene de Supabase
+		const ikUrl = getImageKitUrl(baseUrl);
+
+		// Si no es una URL de ImageKit (por ejemplo, un dominio externo), la devolvemos tal cual
+		if (!ikUrl.includes('ik.imagekit.io')) {
+			return ikUrl;
+		}
+
+		// Añadir transformaciones si no existen aún
+		if (ikUrl.includes('?tr=')) return ikUrl;
+		return `${ikUrl}?${IMAGEKIT_TRANSFORM}`;
+	}
 
 	onMount(async () => {
 		await loadCategories();
@@ -18,7 +42,7 @@
 	async function loadCategories() {
 		const { data } = await supabase
 			.from('categories')
-			.select('*')
+			.select('id, name, slug, parent_id, display_order, is_active')
 			.eq('is_active', true)
 			.order('display_order');
 
@@ -31,21 +55,17 @@
 		loading = true;
 		let query = supabase
 			.from('products')
-			.select('*, product_media(*), categories(*), product_variants(*)')
+			.select('id, name, slug, base_price, stock_quantity, short_description, category_id')
 			.eq('is_active', true);
 
 		if (selectedCategory) {
 			query = query.eq('category_id', selectedCategory);
 		}
 
-		const { data } = await query.order('created_at', { ascending: false });
+		const { data } = await query.order('created_at', { ascending: false }).limit(50);
 
 		if (data) {
-			products = data.map((p: any) => ({
-				...p,
-				media: p.product_media,
-				category: p.categories
-			}));
+			products = data;
 		}
 
 		loading = false;
@@ -114,13 +134,14 @@
 			{#each filteredProducts as product}
 				{@const displayPrice = getDisplayPrice(product)}
 				{@const displayStock = getDisplayStock(product)}
+				{@const imageSrc = getProductImageSrc(product)}
 				<a
 					href="/productos/{product.slug}"
 					class="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition"
 				>
-					{#if product.media && product.media.length > 0}
+					{#if imageSrc}
 						<img
-							src={product.media.find((m) => m.is_primary)?.url || product.media[0].url}
+							src={imageSrc}
 							alt={product.name}
 							class="w-full h-48 object-cover"
 						/>
@@ -133,23 +154,23 @@
 						{#if product.category}
 							<p class="text-sm text-blue-600 mb-1">{product.category.name}</p>
 						{/if}
-					<h3 class="text-lg font-bold mb-2">{product.name}</h3>
-					{#if product.short_description}
-						<p class="text-gray-600 text-sm mb-3 line-clamp-2">{product.short_description}</p>
-					{/if}
-					<div class="flex items-center justify-between">
-						<div class="flex items-baseline gap-1">
-							{#if displayPrice.hasVariants}
-								<span class="text-xs text-gray-500">Desde</span>
-							{/if}
-							<p class="text-xl font-bold text-blue-600">{formatPrice(displayPrice.price)}</p>
-						</div>
-						{#if displayStock > 0}
-							<span class="text-sm text-green-600">En stock</span>
-						{:else}
-							<span class="text-sm text-red-600">Agotado</span>
+						<h3 class="text-lg font-bold mb-2">{product.name}</h3>
+						{#if product.short_description}
+							<p class="text-gray-600 text-sm mb-3 line-clamp-2">{product.short_description}</p>
 						{/if}
-					</div>
+						<div class="flex items-center justify-between">
+							<div class="flex items-baseline gap-1">
+								{#if displayPrice.hasVariants}
+									<span class="text-xs text-gray-500">Desde</span>
+								{/if}
+								<p class="text-xl font-bold text-blue-600">{formatPrice(displayPrice.price)}</p>
+							</div>
+							{#if displayStock > 0}
+								<span class="text-sm text-green-600">En stock</span>
+							{:else}
+								<span class="text-sm text-red-600">Agotado</span>
+							{/if}
+						</div>
 					</div>
 				</a>
 			{/each}

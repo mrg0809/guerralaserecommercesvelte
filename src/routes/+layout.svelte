@@ -31,7 +31,7 @@
 		// Load categories for navigation
 		const { data: cats } = await supabase
 			.from('categories')
-			.select('*')
+			.select('id, name, slug, parent_id, display_order, is_active')
 			.eq('is_active', true)
 			.order('display_order');
 
@@ -69,7 +69,7 @@
 	async function handleSearch() {
 		if (searchTimeout) clearTimeout(searchTimeout);
 		
-		if (searchQuery.trim().length < 2) {
+		if (searchQuery.trim().length < 3) {
 			searchResults = [];
 			return;
 		}
@@ -77,7 +77,7 @@
 		searchTimeout = setTimeout(async () => {
 			const { data } = await supabase
 				.from('products')
-				.select('id, name, slug, base_price, short_description, product_variants(*)')
+				.select('id, name, slug, base_price')
 				.eq('is_active', true)
 				.ilike('name', `%${searchQuery}%`)
 				.limit(5);

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { cart } from '$lib/stores/cart';
 	import { formatPrice } from '$lib/utils';
+	import { getImageKitUrl } from '$lib/storage';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -19,8 +20,9 @@
 
 	$effect(() => {
 		if (!selectedImage && data.product?.media?.length > 0) {
-			selectedImage =
+			const baseUrl =
 				data.product.media.find((m: any) => m.is_primary)?.url || data.product.media[0]?.url || '';
+			selectedImage = getImageKitUrl(baseUrl);
 		}
 	});
 
@@ -79,7 +81,7 @@
 	);
 
 	function selectImage(url: string) {
-		selectedImage = url;
+		selectedImage = getImageKitUrl(url);
 	}
 
 	function selectBundle(bundle: any) {
@@ -184,8 +186,8 @@
 									{#if data.product.media && data.product.media.length > 1}
 										<div class="grid grid-cols-4 gap-2">
 											{#each data.product.media as media}
-												<button onclick={() => selectImage(media.url)} class="border-2 rounded-lg overflow-hidden hover:border-blue-500 transition {selectedImage === media.url ? 'border-blue-500' : 'border-gray-200'}">
-													<img src={media.thumbnail_url || media.url} alt={media.alt_text || ''} class="w-full h-20 object-cover" />
+												<button onclick={() => selectImage(media.url)} class="border-2 rounded-lg overflow-hidden hover:border-blue-500 transition {selectedImage === getImageKitUrl(media.url) ? 'border-blue-500' : 'border-gray-200'}">
+													<img src={getImageKitUrl(media.thumbnail_url || media.url)} alt={media.alt_text || ''} class="w-full h-20 object-cover" />
 												</button>
 											{/each}
 										</div>

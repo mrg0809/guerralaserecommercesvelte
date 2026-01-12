@@ -27,7 +27,7 @@
 	async function loadCategories() {
 		const { data } = await supabase
 			.from('categories')
-			.select('*')
+			.select('id, name, parent_id, is_active')
 			.order('name');
 		if (data) categories = data;
 	}

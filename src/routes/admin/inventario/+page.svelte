@@ -26,10 +26,10 @@
 
 		categories = categoriesData || [];
 
-		// Cargar productos con sus categorías y variantes
+		// Cargar productos - solo columnas necesarias (sin expandir relaciones)
 		const { data: productsData } = await supabase
 			.from('products')
-			.select('id, sku, name, stock_quantity, category_id, categories (id, name), product_variants (id, name, stock_quantity)')
+			.select('id, sku, name, stock_quantity, category_id')
 			.eq('is_active', true)
 			.order('name');
 

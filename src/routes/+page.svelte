@@ -2,14 +2,14 @@
 	import { onMount } from 'svelte';
 	import { supabase } from '$lib/supabaseClient';
 	import { formatPrice, getDisplayPrice, getDisplayStock } from '$lib/utils';
-	import { getBannerVideoUrl } from '$lib/storage';
+	import { getBannerVideoUrl, getImageKitUrl } from '$lib/storage';
 	import type { Product, Category, ProductMedia, TestimonialVideo } from '$lib/types';
 
 	let featuredProducts: (Product & { media?: ProductMedia[]; category?: Category })[] = $state([]);
 	let categories: Category[] = $state([]);
 	let loading = $state(true);
 	
-	const bannerVideoUrl = getBannerVideoUrl();
+	const bannerVideoUrl = getImageKitUrl(getBannerVideoUrl());
 	
 	// Variables para el carrusel de videos
 	let currentVideoIndex = $state(0);
@@ -196,7 +196,7 @@
 					>
 						{#if category.image_url}
 							<img
-								src={category.image_url}
+								src={getImageKitUrl(category.image_url)}
 								alt={category.name}
 								class="w-full h-48 object-cover"
 							/>
@@ -260,7 +260,7 @@
 						>
 							{#if product.media && product.media.length > 0}
 								<img
-									src={product.media.find((m) => m.is_primary)?.url || product.media[0].url}
+									src={getImageKitUrl(product.media.find((m) => m.is_primary)?.url || product.media[0].url)}
 									alt={product.name}
 									class="w-full h-64 object-cover"
 								/>

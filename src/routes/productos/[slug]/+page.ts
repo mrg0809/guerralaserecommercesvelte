@@ -2,6 +2,9 @@ import type { PageLoad } from './$types';
 import { supabase } from '$lib/supabaseClient';
 import { error } from '@sveltejs/kit';
 
+// Revalidate (ISR) - cachea en Vercel por 1 hora, reduce queries a Supabase
+export const revalidate = 3600;
+
 export const load: PageLoad = async ({ params }) => {
 	const { data: productData } = await supabase
 		.from('products')

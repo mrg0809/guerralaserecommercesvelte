@@ -26,24 +26,34 @@
 	async function loadData() {
 		loading = true;
 		
-		// Cargar productos
+		// Cargar productos - solo columnas necesarias
 		const { data: productsData } = await supabase
 			.from('products')
-			.select('id, name, slug, base_price, stock_quantity, product_variants (id, name, stock_quantity, is_active)')
+			.select('id, name, slug, base_price, stock_quantity')
 			.eq('is_active', true)
 			.order('name');
 		products = productsData || [];
 
-		// Cargar bundles con sus items
+		// Cargar bundles optimizado
 		const { data: bundlesData } = await supabase
 			.from('product_bundles')
 			.select(`
-				*,
-				products (id, name, slug),
+				id,
+				name,
+				description,
+				sku,
+				bundle_price,
+				stock_quantity,
+				is_active,
+				created_at,
+				product_id,
+				display_order,
 				bundle_items (
-					*,
-					products (id, name, base_price),
-					product_variants (id, name, price, stock_quantity)
+					id,
+					product_id,
+					variant_id,
+					quantity,
+					display_order
 				)
 			`)
 			.order('created_at', { ascending: false });

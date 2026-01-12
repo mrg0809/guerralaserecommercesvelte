@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { supabase } from '$lib/supabaseClient';
+	import { getImageKitUrl } from '$lib/storage';
 
 	let categories = $state<any[]>([]);
 	let loading = $state(true);
@@ -8,7 +9,7 @@
 	onMount(async () => {
 		const { data } = await supabase
 			.from('categories')
-			.select('*')
+			.select('id, name, slug, description, image_url, display_order, is_active')
 			.eq('is_active', true)
 			.order('display_order');
 
@@ -43,7 +44,7 @@
 				>
 					{#if category.image_url}
 						<img
-							src={category.image_url}
+							src={getImageKitUrl(category.image_url)}
 							alt={category.name}
 							class="w-full h-48 object-cover"
 						/>
