@@ -29,7 +29,7 @@
 		// Cargar productos - solo columnas necesarias (sin expandir relaciones)
 		const { data: productsData } = await supabase
 			.from('products')
-			.select('id, sku, name, stock_quantity, category_id')
+			.select('id, sku, name, stock_quantity, category_id, product_variants(name, stock_quantity)')
 			.eq('is_active', true)
 			.order('name');
 
@@ -173,7 +173,7 @@
 								Subcategoria: subcategory,
 								SKU: product.sku || '-',
 								Nombre: product.name,
-								Variante: variant.name,
+								Variante: variant.name || 'Variante sin nombre',
 								Inventario: variant.stock_quantity || 0,
 								Conteo: ''
 							});
@@ -249,7 +249,7 @@
 								Subcategoria: subcategory,
 								SKU: product.sku || '-',
 								Nombre: product.name,
-								Variante: variant.name,
+								Variante: variant.name || 'Variante sin nombre',
 								Inventario: variant.stock_quantity || 0,
 								Conteo: ''
 							});
