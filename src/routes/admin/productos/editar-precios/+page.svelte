@@ -273,7 +273,7 @@
 						exportData.push({
 							'Categoría': categoryName,
 							'Producto': product.name,
-							'Variante': variant.name || '',
+							'Variante': variant.name || 'Variante sin nombre',
 							'SKU': variant.sku || product.sku || '',
 							'Precio': variant.price || 0,
 							'Stock Sistema': variant.stock_quantity || 0,
@@ -285,7 +285,7 @@
 					exportData.push({
 						'Categoría': categoryName,
 						'Producto': product.name,
-						'Variante': '',
+						'Variante': '-',
 						'SKU': product.sku || '',
 						'Precio': product.base_price || 0,
 						'Stock Sistema': product.stock_quantity || 0,
