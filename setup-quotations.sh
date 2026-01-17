@@ -1,0 +1,32 @@
+#!/bin/bash
+
+# Script para configurar las tablas de cotizaciones en Supabase
+
+echo "🔧 Configuración del Sistema de Cotizaciones"
+echo "==========================================="
+echo ""
+
+echo "📝 INSTRUCCIONES:"
+echo ""
+echo "1. Abre tu proyecto en Supabase (https://supabase.com)"
+echo "2. Ve a: SQL Editor"
+echo "3. Crea una nueva query"
+echo "4. Copia y pega el contenido del archivo:"
+echo "   database/migrations/create_quotations.sql"
+echo "5. Ejecuta el script (botón RUN)"
+echo ""
+echo "✅ Después de ejecutar el SQL, regenera los tipos de TypeScript:"
+echo ""
+echo "   npx supabase gen types typescript --project-id TU_PROJECT_ID > src/lib/types/database.types.ts"
+echo ""
+echo "   O si tienes Supabase CLI configurado localmente:"
+echo "   npx supabase gen types typescript --local > src/lib/types/database.types.ts"
+echo ""
+echo "📋 Verifica que las tablas se crearon correctamente ejecutando:"
+echo ""
+echo "   SELECT table_name FROM information_schema.tables"
+echo "   WHERE table_schema = 'public'"
+echo "   AND table_name IN ('quotations', 'quotation_items');"
+echo ""
+echo "🎯 Una vez completado, ya podrás usar el sistema de cotizaciones!"
+echo ""

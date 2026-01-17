@@ -29,7 +29,7 @@
 		// Cargar productos - solo columnas necesarias (sin expandir relaciones)
 		const { data: productsData } = await supabase
 			.from('products')
-			.select('id, sku, name, stock_quantity, category_id, product_variants(name, stock_quantity)')
+			.select('id, sku, name, base_price, stock_quantity, category_id, product_variants(name, stock_quantity, price)')
 			.eq('is_active', true)
 			.order('name');
 
@@ -38,6 +38,7 @@
 	}
 
 	function getCategoryPath(categoryId: string): string {
+
 		const path: string[] = [];
 		let currentId: string | null = categoryId;
 
