@@ -1,6 +1,10 @@
 <script lang="ts">
 	import { supabase } from '$lib/supabaseClient';
 	import jsPDF from 'jspdf';
+	import CustomerSearch from '$lib/components/customers/CustomerSearch.svelte';
+	import type { Database } from '$lib/types/database.types';
+
+	type Customer = Database['public']['Tables']['customers']['Row'];
 
 	let products = $state<any[]>([]);
 	let loading = $state(true);
@@ -23,6 +27,7 @@
 	let generalDiscount = $state(0); // porcentaje de descuento general
 
 	// Datos de cliente para la cotización
+	let selectedCustomerId = $state<string | null>(null);
 	let customerName = $state('');
 	let customerCompany = $state('');
 	let customerRfc = $state('');
@@ -32,6 +37,37 @@
 	let quotationValidityDays = $state(15);
 	let paymentTerms = $state('Contado');
 	let notes = $state('');
+
+	// Función para cargar datos de cliente existente
+	function handleCustomerSelect(customer: Customer) {
+		selectedCustomerId = customer.id;
+		customerName = customer.contact_name;
+		customerCompany = customer.company_name || '';
+		customerRfc = customer.rfc || '';
+		customerEmail = customer.email;
+		customerPhone = customer.phone || customer.mobile || '';
+		
+		// Construir dirección completa
+		const addressParts = [
+			customer.street,
+			customer.neighborhood,
+			customer.city,
+			customer.state,
+			customer.zip_code
+		].filter(Boolean);
+		customerAddress = addressParts.join(', ');
+	}
+
+	// Limpiar cliente seleccionado
+	function clearCustomer() {
+		selectedCustomerId = null;
+		customerName = '';
+		customerCompany = '';
+		customerRfc = '';
+		customerEmail = '';
+		customerPhone = '';
+		customerAddress = '';
+	}
 
 	$effect(() => {
 		loadProducts();
@@ -202,6 +238,7 @@
 				.from('quotations')
 				.insert({
 					quotation_number: finalQuotationNumber as any,
+					customer_id: selectedCustomerId || null,
 					customer_name: customerName,
 					customer_company: customerCompany || null,
 					customer_rfc: customerRfc || null,
@@ -602,61 +639,90 @@
 
 		<!-- Datos del cliente -->
 		<div class="bg-white rounded-lg shadow-md p-6 mb-6">
-			<h2 class="text-xl font-bold mb-4">Datos del Cliente</h2>
-			<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-				<div>
-					<label class="block text-sm font-medium text-gray-700 mb-1">Nombre del cliente *</label>
-					<input
-						type="text"
-						class="w-full border rounded-md px-3 py-2"
-						bind:value={customerName}
-						placeholder="Nombre completo"
-					/>
-				</div>
-				<div>
-					<label class="block text-sm font-medium text-gray-700 mb-1">Empresa</label>
-					<input
-						type="text"
-						class="w-full border rounded-md px-3 py-2"
-						bind:value={customerCompany}
-						placeholder="Nombre de la empresa"
-					/>
-				</div>
-				<div>
-					<label class="block text-sm font-medium text-gray-700 mb-1">RFC</label>
-					<input
-						type="text"
-						class="w-full border rounded-md px-3 py-2"
-						bind:value={customerRfc}
-						placeholder="RFC"
-					/>
-				</div>
-				<div>
-					<label class="block text-sm font-medium text-gray-700 mb-1">Correo</label>
-					<input
-						type="email"
-						class="w-full border rounded-md px-3 py-2"
-						bind:value={customerEmail}
-						placeholder="correo@ejemplo.com"
-					/>
-				</div>
-				<div>
-					<label class="block text-sm font-medium text-gray-700 mb-1">Teléfono</label>
-					<input
-						type="tel"
-						class="w-full border rounded-md px-3 py-2"
-						bind:value={customerPhone}
-						placeholder="33 1234 5678"
-					/>
-				</div>
-				<div class="lg:col-span-1 md:col-span-2 col-span-1">
-					<label class="block text-sm font-medium text-gray-700 mb-1">Dirección</label>
-					<input
-						type="text"
-						class="w-full border rounded-md px-3 py-2"
-						bind:value={customerAddress}
-						placeholder="Dirección completa"
-					/>
+			<div class="flex justify-between items-center mb-4">
+				<h2 class="text-xl font-bold">Datos del Cliente</h2>
+				{#if selectedCustomerId}
+					<button
+						onclick={clearCustomer}
+						class="text-sm text-red-600 hover:text-red-700 font-medium"
+					>
+						🗑️ Limpiar cliente
+					</button>
+				{/if}
+			</div>
+
+			<!-- Búsqueda de cliente existente -->
+			<div class="mb-4">
+				<label class="block text-sm font-medium text-gray-700 mb-2">
+					¿Cliente existente?
+				</label>
+				<CustomerSearch onSelect={handleCustomerSelect} />
+				{#if selectedCustomerId}
+					<p class="text-sm text-green-600 mt-2 flex items-center gap-2">
+						✅ Cliente seleccionado - Los datos se han autocompletado
+					</p>
+				{/if}
+			</div>
+
+			<div class="border-t pt-4">
+				<p class="text-sm text-gray-600 mb-3">
+					{selectedCustomerId ? 'Puedes modificar los datos si es necesario' : 'O ingresa los datos manualmente'}
+				</p>
+				<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+					<div>
+						<label class="block text-sm font-medium text-gray-700 mb-1">Nombre del cliente *</label>
+						<input
+							type="text"
+							class="w-full border rounded-md px-3 py-2"
+							bind:value={customerName}
+							placeholder="Nombre completo"
+						/>
+					</div>
+					<div>
+						<label class="block text-sm font-medium text-gray-700 mb-1">Empresa</label>
+						<input
+							type="text"
+							class="w-full border rounded-md px-3 py-2"
+							bind:value={customerCompany}
+							placeholder="Nombre de la empresa"
+						/>
+					</div>
+					<div>
+						<label class="block text-sm font-medium text-gray-700 mb-1">RFC</label>
+						<input
+							type="text"
+							class="w-full border rounded-md px-3 py-2"
+							bind:value={customerRfc}
+							placeholder="RFC"
+						/>
+					</div>
+					<div>
+						<label class="block text-sm font-medium text-gray-700 mb-1">Correo</label>
+						<input
+							type="email"
+							class="w-full border rounded-md px-3 py-2"
+							bind:value={customerEmail}
+							placeholder="correo@ejemplo.com"
+						/>
+					</div>
+					<div>
+						<label class="block text-sm font-medium text-gray-700 mb-1">Teléfono</label>
+						<input
+							type="tel"
+							class="w-full border rounded-md px-3 py-2"
+							bind:value={customerPhone}
+							placeholder="33 1234 5678"
+						/>
+					</div>
+					<div class="lg:col-span-1 md:col-span-2 col-span-1">
+						<label class="block text-sm font-medium text-gray-700 mb-1">Dirección</label>
+						<input
+							type="text"
+							class="w-full border rounded-md px-3 py-2"
+							bind:value={customerAddress}
+							placeholder="Dirección completa"
+						/>
+					</div>
 				</div>
 			</div>
 		</div>

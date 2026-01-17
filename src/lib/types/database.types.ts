@@ -196,6 +196,75 @@ export type Database = {
         }
         Relationships: []
       }
+      customers: {
+        Row: {
+          city: string | null
+          company_name: string | null
+          contact_name: string
+          country: string | null
+          created_at: string | null
+          created_by: string | null
+          customer_number: string | null
+          customer_type: string | null
+          email: string
+          id: string
+          mobile: string | null
+          neighborhood: string | null
+          notes: string | null
+          phone: string | null
+          rfc: string | null
+          state: string | null
+          street: string | null
+          tags: string[] | null
+          updated_at: string | null
+          zip_code: string | null
+        }
+        Insert: {
+          city?: string | null
+          company_name?: string | null
+          contact_name: string
+          country?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          customer_number?: string | null
+          customer_type?: string | null
+          email: string
+          id?: string
+          mobile?: string | null
+          neighborhood?: string | null
+          notes?: string | null
+          phone?: string | null
+          rfc?: string | null
+          state?: string | null
+          street?: string | null
+          tags?: string[] | null
+          updated_at?: string | null
+          zip_code?: string | null
+        }
+        Update: {
+          city?: string | null
+          company_name?: string | null
+          contact_name?: string
+          country?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          customer_number?: string | null
+          customer_type?: string | null
+          email?: string
+          id?: string
+          mobile?: string | null
+          neighborhood?: string | null
+          notes?: string | null
+          phone?: string | null
+          rfc?: string | null
+          state?: string | null
+          street?: string | null
+          tags?: string[] | null
+          updated_at?: string | null
+          zip_code?: string | null
+        }
+        Relationships: []
+      }
       discounts: {
         Row: {
           created_at: string | null
@@ -789,6 +858,7 @@ export type Database = {
           customer_address: string | null
           customer_company: string | null
           customer_email: string | null
+          customer_id: string | null
           customer_name: string
           customer_phone: string | null
           customer_rfc: string | null
@@ -809,6 +879,7 @@ export type Database = {
           customer_address?: string | null
           customer_company?: string | null
           customer_email?: string | null
+          customer_id?: string | null
           customer_name: string
           customer_phone?: string | null
           customer_rfc?: string | null
@@ -829,6 +900,7 @@ export type Database = {
           customer_address?: string | null
           customer_company?: string | null
           customer_email?: string | null
+          customer_id?: string | null
           customer_name?: string
           customer_phone?: string | null
           customer_rfc?: string | null
@@ -844,7 +916,15 @@ export type Database = {
           updated_at?: string
           validity_days?: number
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "quotations_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       sat_product_info: {
         Row: {
@@ -968,6 +1048,7 @@ export type Database = {
         Args: { product_id_param: string }
         Returns: number
       }
+      generate_customer_number: { Args: never; Returns: string }
       generate_quotation_number: { Args: never; Returns: string }
       get_category_tree: { Args: never; Returns: Json }
       get_product_details: { Args: { product_slug: string }; Returns: Json }
