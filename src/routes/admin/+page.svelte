@@ -165,6 +165,18 @@
 		</a>
 
 		<a
+			href="/admin/clientes"
+			class="flex items-center gap-4 p-4 border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition"
+		>
+			<div class="text-3xl">👥</div>
+			<div>
+				<h3 class="font-bold text-lg">Gestionar Clientes</h3>
+				<p class="text-gray-600 text-sm">Base de datos de clientes</p>
+			</div>
+		</a>
+
+		<a
+				href="/admin/pedidos"
 				class="flex items-center gap-4 p-4 border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition"
 			>
 				<div class="text-3xl">🛍️</div>
