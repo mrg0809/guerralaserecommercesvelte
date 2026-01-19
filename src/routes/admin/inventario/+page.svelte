@@ -334,12 +334,38 @@
 		doc.setFontSize(10);
 		doc.text(`Fecha: ${new Date().toLocaleDateString()}`, pageWidth / 2, 22, { align: 'center' });
 
-		// Preparar datos para la tabla
+		// Función auxiliar para convertir imagen a base64
+		async function getImageBase64(imageUrl: string): Promise<string | null> {
+			try {
+				const img = new Image();
+				img.crossOrigin = 'anonymous';
+				
+				await new Promise((resolve, reject) => {
+					img.onload = resolve;
+					img.onerror = reject;
+					img.src = imageUrl;
+				});
+				
+				const canvas = document.createElement('canvas');
+				const ctx = canvas.getContext('2d');
+				if (!ctx) return null;
+				
+				canvas.width = img.width;
+				canvas.height = img.height;
+				ctx.drawImage(img, 0, 0);
+				return canvas.toDataURL('image/jpeg');
+			} catch (error) {
+				console.error('Error al cargar imagen:', error);
+				return null;
+			}
+		}
+
+		// Preparar datos para la tabla con imágenes precargadas
 		const tableData: any[] = [];
 		
 		for (const product of productList) {
 			// Obtener imagen del producto
-			let imageData = '';
+			let imageBase64 = null;
 			if (product.id) {
 				const { data: images } = await supabase
 					.from('product_images')
@@ -357,7 +383,8 @@
 							.getPublicUrl(imageUrl);
 						
 						if (publicUrlData?.publicUrl) {
-							imageData = publicUrlData.publicUrl;
+							// Precargar y convertir imagen a base64
+							imageBase64 = await getImageBase64(publicUrlData.publicUrl);
 						}
 					} catch (error) {
 						console.error('Error al obtener imagen:', error);
@@ -365,55 +392,40 @@
 				}
 			}
 
-			tableData.push([
-				imageData,
-				product.sku || '-',
-				product.name,
-				`$${(product.base_price || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
-			]);
+			tableData.push({
+				image: imageBase64,
+				sku: product.sku || '-',
+				name: product.name,
+				price: `$${(product.base_price || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
+			});
 		}
 
 		// Crear tabla con autoTable
 		autoTable(doc, {
 			startY: 28,
 			head: [['Foto', 'SKU', 'Nombre', 'Precio']],
-			body: tableData,
+			body: tableData.map(item => ['', item.sku, item.name, item.price]),
 			columnStyles: {
 				0: { cellWidth: 35, halign: 'center' },
 				1: { cellWidth: 30 },
 				2: { cellWidth: 90 },
 				3: { cellWidth: 30, halign: 'right' }
 			},
-			didDrawCell: async (data: any) => {
+			didDrawCell: (data: any) => {
 				if (data.column.index === 0 && data.cell.section === 'body') {
-					const imageUrl = data.cell.raw;
-					if (imageUrl && typeof imageUrl === 'string') {
+					const rowIndex = data.row.index;
+					const imageBase64 = tableData[rowIndex]?.image;
+					
+					if (imageBase64) {
 						try {
-							const img = new Image();
-							img.crossOrigin = 'anonymous';
-							await new Promise((resolve, reject) => {
-								img.onload = resolve;
-								img.onerror = reject;
-								img.src = imageUrl;
-							});
+							const imgWidth = 25;
+							const imgHeight = 25; // Mantener aspecto cuadrado
+							const x = data.cell.x + (data.cell.width - imgWidth) / 2;
+							const y = data.cell.y + (data.cell.height - imgHeight) / 2;
 							
-							const canvas = document.createElement('canvas');
-							const ctx = canvas.getContext('2d');
-							if (ctx) {
-								canvas.width = img.width;
-								canvas.height = img.height;
-								ctx.drawImage(img, 0, 0);
-								const base64 = canvas.toDataURL('image/jpeg');
-								
-								const imgWidth = 25;
-								const imgHeight = (img.height * imgWidth) / img.width;
-								const x = data.cell.x + (data.cell.width - imgWidth) / 2;
-								const y = data.cell.y + 2;
-								
-								doc.addImage(base64, 'JPEG', x, y, imgWidth, Math.min(imgHeight, data.cell.height - 4));
-							}
+							doc.addImage(imageBase64, 'JPEG', x, y, imgWidth, imgHeight);
 						} catch (error) {
-							console.error('Error al cargar imagen en PDF:', error);
+							console.error('Error al agregar imagen al PDF:', error);
 						}
 					}
 				}
