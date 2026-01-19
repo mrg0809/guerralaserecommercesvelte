@@ -420,6 +420,8 @@
 		}
 
 		// Crear tabla con autoTable
+		const standardRowHeight = 35; // Altura estándar para todas las filas con imágenes
+		
 		autoTable(doc, {
 			startY: 28,
 			head: [['Foto', 'SKU', 'Nombre', 'Existencia', 'Precio']],
@@ -438,9 +440,9 @@
 					
 					if (imgData && imgData.base64) {
 						try {
-							// Calcular dimensiones manteniendo aspect ratio
-							const maxWidth = 28;
-							const maxHeight = data.cell.height - 4;
+							// Calcular dimensiones manteniendo aspect ratio con altura fija
+							const maxWidth = 30;
+							const maxHeight = standardRowHeight - 4; // Restar margen
 							const aspectRatio = imgData.width / imgData.height;
 							
 							let imgWidth = maxWidth;
@@ -454,7 +456,7 @@
 							
 							// Centrar la imagen en la celda
 							const x = data.cell.x + (data.cell.width - imgWidth) / 2;
-							const y = data.cell.y + (data.cell.height - imgHeight) / 2;
+							const y = data.cell.y + (standardRowHeight - imgHeight) / 2;
 							
 							doc.addImage(imgData.base64, 'JPEG', x, y, imgWidth, imgHeight);
 						} catch (error) {
@@ -465,7 +467,7 @@
 			},
 			margin: { top: 30 },
 			styles: {
-				minCellHeight: 32,
+				minCellHeight: standardRowHeight,
 				valign: 'middle',
 				fontSize: 9
 			},
@@ -473,7 +475,9 @@
 				fillColor: [41, 128, 185],
 				textColor: 255,
 				fontStyle: 'bold',
-				halign: 'center'
+				halign: 'center',
+				minCellHeight: 10,
+				fontSize: 10
 			}
 		});
 
