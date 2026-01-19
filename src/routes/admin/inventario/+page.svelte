@@ -308,7 +308,13 @@
 		// Obtener productos de la categoría y sus descendientes
 		const descendantIds = getDescendantCategoryIds(selectedCategoryForPhotos);
 		const allIds = [selectedCategoryForPhotos, ...descendantIds];
-		const categoryProducts = products.filter((p) => allIds.includes(p.category_id));
+		const categoryProducts = products
+			.filter((p) => allIds.includes(p.category_id))
+			.sort((a, b) => {
+				const skuA = (a.sku || '').toLowerCase();
+				const skuB = (b.sku || '').toLowerCase();
+				return skuA.localeCompare(skuB);
+			});
 
 		if (categoryProducts.length === 0) {
 			alert('No hay productos en esta categoría');
