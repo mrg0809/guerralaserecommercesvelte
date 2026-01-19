@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { supabase } from '$lib/supabaseClient';
 	import * as XLSX from 'xlsx';
+	import jsPDF from 'jspdf';
+	import autoTable from 'jspdf-autotable';
 
 	let categories = $state<any[]>([]);
 	let products = $state<any[]>([]);
@@ -9,6 +11,9 @@
 	let selectAllCategories = $state(false);
 	let separateByCategory = $state(true);
 	let showCategorySelector = $state(false);
+	let showPhotoListSelector = $state(false);
+	let selectedCategoryForPhotos = $state<string>('');
+	let exportFormat = $state<'pdf' | 'excel'>('pdf');
 
 	$effect(() => {
 		loadData();
@@ -290,6 +295,190 @@
 		const fileName = `Hoja_Conteo_${new Date().toISOString().split('T')[0]}.xlsx`;
 		XLSX.writeFile(workbook, fileName);
 	}
+
+	async function exportWithPhotos() {
+		if (!selectedCategoryForPhotos) {
+			alert('Por favor selecciona una categoría');
+			return;
+		}
+
+		const category = categories.find((c) => c.id === selectedCategoryForPhotos);
+		if (!category) return;
+
+		// Obtener productos de la categoría y sus descendientes
+		const descendantIds = getDescendantCategoryIds(selectedCategoryForPhotos);
+		const allIds = [selectedCategoryForPhotos, ...descendantIds];
+		const categoryProducts = products.filter((p) => allIds.includes(p.category_id));
+
+		if (categoryProducts.length === 0) {
+			alert('No hay productos en esta categoría');
+			return;
+		}
+
+		if (exportFormat === 'pdf') {
+			await exportToPDF(category.name, categoryProducts);
+		} else {
+			await exportToExcelWithPhotos(category.name, categoryProducts);
+		}
+
+		showPhotoListSelector = false;
+	}
+
+	async function exportToPDF(categoryName: string, productList: any[]) {
+		const doc = new jsPDF();
+		const pageWidth = doc.internal.pageSize.getWidth();
+		
+		// Título
+		doc.setFontSize(18);
+		doc.text(`Listado de Productos - ${categoryName}`, pageWidth / 2, 15, { align: 'center' });
+		doc.setFontSize(10);
+		doc.text(`Fecha: ${new Date().toLocaleDateString()}`, pageWidth / 2, 22, { align: 'center' });
+
+		// Preparar datos para la tabla
+		const tableData: any[] = [];
+		
+		for (const product of productList) {
+			// Obtener imagen del producto
+			let imageData = '';
+			if (product.id) {
+				const { data: images } = await supabase
+					.from('product_images')
+					.select('image_url')
+					.eq('product_id', product.id)
+					.eq('is_primary', true)
+					.limit(1);
+				
+				if (images && images.length > 0) {
+					const imageUrl = images[0].image_url;
+					try {
+						// Obtener URL pública de Supabase
+						const { data: publicUrlData } = supabase.storage
+							.from('product-images')
+							.getPublicUrl(imageUrl);
+						
+						if (publicUrlData?.publicUrl) {
+							imageData = publicUrlData.publicUrl;
+						}
+					} catch (error) {
+						console.error('Error al obtener imagen:', error);
+					}
+				}
+			}
+
+			tableData.push([
+				imageData,
+				product.sku || '-',
+				product.name,
+				`$${(product.base_price || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
+			]);
+		}
+
+		// Crear tabla con autoTable
+		autoTable(doc, {
+			startY: 28,
+			head: [['Foto', 'SKU', 'Nombre', 'Precio']],
+			body: tableData,
+			columnStyles: {
+				0: { cellWidth: 35, halign: 'center' },
+				1: { cellWidth: 30 },
+				2: { cellWidth: 90 },
+				3: { cellWidth: 30, halign: 'right' }
+			},
+			didDrawCell: async (data: any) => {
+				if (data.column.index === 0 && data.cell.section === 'body') {
+					const imageUrl = data.cell.raw;
+					if (imageUrl && typeof imageUrl === 'string') {
+						try {
+							const img = new Image();
+							img.crossOrigin = 'anonymous';
+							await new Promise((resolve, reject) => {
+								img.onload = resolve;
+								img.onerror = reject;
+								img.src = imageUrl;
+							});
+							
+							const canvas = document.createElement('canvas');
+							const ctx = canvas.getContext('2d');
+							if (ctx) {
+								canvas.width = img.width;
+								canvas.height = img.height;
+								ctx.drawImage(img, 0, 0);
+								const base64 = canvas.toDataURL('image/jpeg');
+								
+								const imgWidth = 25;
+								const imgHeight = (img.height * imgWidth) / img.width;
+								const x = data.cell.x + (data.cell.width - imgWidth) / 2;
+								const y = data.cell.y + 2;
+								
+								doc.addImage(base64, 'JPEG', x, y, imgWidth, Math.min(imgHeight, data.cell.height - 4));
+							}
+						} catch (error) {
+							console.error('Error al cargar imagen en PDF:', error);
+						}
+					}
+				}
+			},
+			margin: { top: 30 },
+			styles: {
+				minCellHeight: 30,
+				valign: 'middle'
+			}
+		});
+
+		const fileName = `Listado_${categoryName.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
+		doc.save(fileName);
+	}
+
+	async function exportToExcelWithPhotos(categoryName: string, productList: any[]) {
+		// Para Excel con imágenes usaremos el formato básico con URLs
+		const data: any[] = [];
+
+		for (const product of productList) {
+			let imageUrl = '';
+			
+			if (product.id) {
+				const { data: images } = await supabase
+					.from('product_images')
+					.select('image_url')
+					.eq('product_id', product.id)
+					.eq('is_primary', true)
+					.limit(1);
+				
+				if (images && images.length > 0) {
+					const { data: publicUrlData } = supabase.storage
+						.from('product-images')
+						.getPublicUrl(images[0].image_url);
+					
+					if (publicUrlData?.publicUrl) {
+						imageUrl = publicUrlData.publicUrl;
+					}
+				}
+			}
+
+			data.push({
+				'URL Imagen': imageUrl,
+				'SKU': product.sku || '-',
+				'Nombre': product.name,
+				'Precio': product.base_price || 0
+			});
+		}
+
+		const worksheet = XLSX.utils.json_to_sheet(data);
+		
+		// Ajustar anchos de columna
+		worksheet['!cols'] = [
+			{ wch: 60 }, // URL Imagen
+			{ wch: 15 }, // SKU
+			{ wch: 40 }, // Nombre
+			{ wch: 12 }  // Precio
+		];
+
+		const workbook = XLSX.utils.book_new();
+		XLSX.utils.book_append_sheet(workbook, worksheet, 'Productos');
+
+		const fileName = `Listado_${categoryName.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`;
+		XLSX.writeFile(workbook, fileName);
+	}
 </script>
 
 <svelte:head>
@@ -309,6 +498,13 @@
 			<div class="text-4xl mb-4">📋</div>
 			<h2 class="text-xl font-bold mb-2">Hoja de Conteo</h2>
 			<p class="text-gray-600">Genera una hoja de conteo en Excel seleccionando categorías</p>
+		</div>
+
+		<!-- Listado con Fotos -->
+		<div class="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition cursor-pointer" onclick={() => showPhotoListSelector = !showPhotoListSelector}>
+			<div class="text-4xl mb-4">📸</div>
+			<h2 class="text-xl font-bold mb-2">Listado con Fotos</h2>
+			<p class="text-gray-600">Exporta productos con foto, nombre, SKU y precio en PDF o Excel</p>
 		</div>
 
 		<!-- Próximas funcionalidades -->
@@ -434,6 +630,120 @@
 							>
 								<span>📥</span>
 								Descargar Excel
+							</button>
+						</div>
+					{/if}
+				</div>
+			</div>
+		</div>
+	{/if}
+
+	<!-- Modal de Listado con Fotos -->
+	{#if showPhotoListSelector}
+		<div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+			<div class="bg-white rounded-lg max-w-xl w-full">
+				<div class="p-6">
+					<div class="flex justify-between items-center mb-6">
+						<h2 class="text-2xl font-bold">Exportar Listado con Fotos</h2>
+						<button
+							onclick={() => showPhotoListSelector = false}
+							class="text-gray-600 hover:text-gray-900 text-2xl"
+						>
+							×
+						</button>
+					</div>
+
+					{#if loading}
+						<p class="text-center py-8">Cargando categorías...</p>
+					{:else if categories.length === 0}
+						<p class="text-center py-8 text-gray-600">No hay categorías disponibles</p>
+					{:else}
+						<div class="space-y-4">
+							<!-- Selección de Categoría -->
+							<div>
+								<label class="block font-semibold mb-2">Selecciona una categoría:</label>
+								<select
+									bind:value={selectedCategoryForPhotos}
+									class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+								>
+									<option value="">-- Selecciona una categoría --</option>
+									{#each categories as category}
+										<option value={category.id}>
+											{getCategoryPath(category.id)} ({products.filter((p) => {
+												const descendantIds = getDescendantCategoryIds(category.id);
+												const allIds = [category.id, ...descendantIds];
+												return allIds.includes(p.category_id);
+											}).length} productos)
+										</option>
+									{/each}
+								</select>
+							</div>
+
+							<!-- Formato de Exportación -->
+							<div class="border-t pt-4">
+								<h3 class="font-semibold mb-3">Formato de Exportación</h3>
+								<div class="space-y-2">
+									<div class="flex items-center p-3 border-2 rounded-lg cursor-pointer hover:bg-gray-50" 
+										class:border-blue-500={exportFormat === 'pdf'}
+										class:bg-blue-50={exportFormat === 'pdf'}
+										onclick={() => exportFormat = 'pdf'}>
+										<input
+											type="radio"
+											id="pdf"
+											name="exportFormat"
+											value="pdf"
+											checked={exportFormat === 'pdf'}
+											class="w-4 h-4 text-blue-600 cursor-pointer"
+										/>
+										<label for="pdf" class="ml-3 font-medium text-gray-700 cursor-pointer flex-1">
+											<span class="flex items-center gap-2">
+												<span>📄</span>
+												<span>PDF con imágenes incrustadas (Recomendado)</span>
+											</span>
+											<span class="text-sm text-gray-500">Incluye fotos directamente en el documento</span>
+										</label>
+									</div>
+									<div class="flex items-center p-3 border-2 rounded-lg cursor-pointer hover:bg-gray-50"
+										class:border-blue-500={exportFormat === 'excel'}
+										class:bg-blue-50={exportFormat === 'excel'}
+										onclick={() => exportFormat = 'excel'}>
+										<input
+											type="radio"
+											id="excel"
+											name="exportFormat"
+											value="excel"
+											checked={exportFormat === 'excel'}
+											class="w-4 h-4 text-blue-600 cursor-pointer"
+										/>
+										<label for="excel" class="ml-3 font-medium text-gray-700 cursor-pointer flex-1">
+											<span class="flex items-center gap-2">
+												<span>📊</span>
+												<span>Excel con URLs de imágenes</span>
+											</span>
+											<span class="text-sm text-gray-500">Incluye enlaces a las fotos</span>
+										</label>
+									</div>
+								</div>
+							</div>
+						</div>
+
+						<!-- Botones -->
+						<div class="flex gap-3 mt-6 justify-end">
+							<button
+								onclick={() => showPhotoListSelector = false}
+								class="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+							>
+								Cancelar
+							</button>
+							<button
+								onclick={exportWithPhotos}
+								class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+								disabled={!selectedCategoryForPhotos}
+								class:opacity-50={!selectedCategoryForPhotos}
+								class:cursor-not-allowed={!selectedCategoryForPhotos}
+							>
+								<span>{exportFormat === 'pdf' ? '📄' : '📊'}</span>
+								Exportar {exportFormat === 'pdf' ? 'PDF' : 'Excel'}
 							</button>
 						</div>
 					{/if}
