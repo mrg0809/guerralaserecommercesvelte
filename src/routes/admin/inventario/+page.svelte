@@ -364,28 +364,35 @@
 		const tableData: any[] = [];
 		
 		for (const product of productList) {
-			// Obtener imagen del producto
+			// Obtener imagen del producto desde product_media
 			let imageBase64 = null;
 			if (product.id) {
-				const { data: images } = await supabase
-					.from('product_images')
-					.select('image_url')
+				const { data: mediaItems } = await supabase
+					.from('product_media')
+					.select('url, is_primary')
 					.eq('product_id', product.id)
-					.eq('is_primary', true)
+					.order('is_primary', { ascending: false })
 					.limit(1);
 				
-				if (images && images.length > 0) {
-					const imageUrl = images[0].image_url;
+				if (mediaItems && mediaItems.length > 0) {
+					const imageUrl = mediaItems[0].url;
 					try {
-						// Obtener URL pública de Supabase
-						const { data: publicUrlData } = supabase.storage
-							.from('product-images')
-							.getPublicUrl(imageUrl);
+						// Si la URL ya es completa, usarla directamente
+						// Si no, obtener URL pública de Supabase storage
+						let fullImageUrl = imageUrl;
 						
-						if (publicUrlData?.publicUrl) {
-							// Precargar y convertir imagen a base64
-							imageBase64 = await getImageBase64(publicUrlData.publicUrl);
+						if (!imageUrl.startsWith('http')) {
+							const { data: publicUrlData } = supabase.storage
+								.from('product-images')
+								.getPublicUrl(imageUrl);
+							
+							if (publicUrlData?.publicUrl) {
+								fullImageUrl = publicUrlData.publicUrl;
+							}
 						}
+						
+						// Precargar y convertir imagen a base64
+						imageBase64 = await getImageBase64(fullImageUrl);
 					} catch (error) {
 						console.error('Error al obtener imagen:', error);
 					}
@@ -449,20 +456,28 @@
 			let imageUrl = '';
 			
 			if (product.id) {
-				const { data: images } = await supabase
-					.from('product_images')
-					.select('image_url')
+				const { data: mediaItems } = await supabase
+					.from('product_media')
+					.select('url, is_primary')
 					.eq('product_id', product.id)
-					.eq('is_primary', true)
+					.order('is_primary', { ascending: false })
 					.limit(1);
 				
-				if (images && images.length > 0) {
-					const { data: publicUrlData } = supabase.storage
-						.from('product-images')
-						.getPublicUrl(images[0].image_url);
+				if (mediaItems && mediaItems.length > 0) {
+					const url = mediaItems[0].url;
 					
-					if (publicUrlData?.publicUrl) {
-						imageUrl = publicUrlData.publicUrl;
+					// Si la URL ya es completa, usarla directamente
+					if (url.startsWith('http')) {
+						imageUrl = url;
+					} else {
+						// Si no, obtener URL pública de Supabase storage
+						const { data: publicUrlData } = supabase.storage
+							.from('product-images')
+							.getPublicUrl(url);
+						
+						if (publicUrlData?.publicUrl) {
+							imageUrl = publicUrlData.publicUrl;
+						}
 					}
 				}
 			}
