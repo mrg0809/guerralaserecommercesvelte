@@ -331,7 +331,7 @@
 	}
 
 	async function exportToPDF(categoryName: string, productList: any[]) {
-		const doc = new jsPDF();
+		const doc = new jsPDF({ orientation: 'landscape' });
 		const pageWidth = doc.internal.pageSize.getWidth();
 		
 		// Título
@@ -340,8 +340,8 @@
 		doc.setFontSize(10);
 		doc.text(`Fecha: ${new Date().toLocaleDateString()}`, pageWidth / 2, 22, { align: 'center' });
 
-		// Función auxiliar para convertir imagen a base64
-		async function getImageBase64(imageUrl: string): Promise<string | null> {
+		// Función auxiliar para convertir imagen a base64 y obtener dimensiones
+		async function getImageData(imageUrl: string): Promise<{ base64: string; width: number; height: number } | null> {
 			try {
 				const img = new Image();
 				img.crossOrigin = 'anonymous';
@@ -359,7 +359,12 @@
 				canvas.width = img.width;
 				canvas.height = img.height;
 				ctx.drawImage(img, 0, 0);
-				return canvas.toDataURL('image/jpeg');
+				
+				return {
+					base64: canvas.toDataURL('image/jpeg'),
+					width: img.width,
+					height: img.height
+				};
 			} catch (error) {
 				console.error('Error al cargar imagen:', error);
 				return null;
@@ -371,7 +376,7 @@
 		
 		for (const product of productList) {
 			// Obtener imagen del producto desde product_media
-			let imageBase64 = null;
+			let imageData = null;
 			if (product.id) {
 				const { data: mediaItems } = await supabase
 					.from('product_media')
@@ -397,8 +402,8 @@
 							}
 						}
 						
-						// Precargar y convertir imagen a base64
-						imageBase64 = await getImageBase64(fullImageUrl);
+						// Precargar y convertir imagen a base64 con dimensiones
+						imageData = await getImageData(fullImageUrl);
 					} catch (error) {
 						console.error('Error al obtener imagen:', error);
 					}
@@ -406,9 +411,10 @@
 			}
 
 			tableData.push({
-				image: imageBase64,
+				imageData: imageData,
 				sku: product.sku || '-',
 				name: product.name,
+				stock: product.stock_quantity || 0,
 				price: `$${(product.base_price || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
 			});
 		}
@@ -416,27 +422,41 @@
 		// Crear tabla con autoTable
 		autoTable(doc, {
 			startY: 28,
-			head: [['Foto', 'SKU', 'Nombre', 'Precio']],
-			body: tableData.map(item => ['', item.sku, item.name, item.price]),
+			head: [['Foto', 'SKU', 'Nombre', 'Existencia', 'Precio']],
+			body: tableData.map(item => ['', item.sku, item.name, item.stock, item.price]),
 			columnStyles: {
 				0: { cellWidth: 35, halign: 'center' },
-				1: { cellWidth: 30 },
-				2: { cellWidth: 90 },
-				3: { cellWidth: 30, halign: 'right' }
+				1: { cellWidth: 35 },
+				2: { cellWidth: 140 },
+				3: { cellWidth: 25, halign: 'center' },
+				4: { cellWidth: 30, halign: 'right' }
 			},
 			didDrawCell: (data: any) => {
 				if (data.column.index === 0 && data.cell.section === 'body') {
 					const rowIndex = data.row.index;
-					const imageBase64 = tableData[rowIndex]?.image;
+					const imgData = tableData[rowIndex]?.imageData;
 					
-					if (imageBase64) {
+					if (imgData && imgData.base64) {
 						try {
-							const imgWidth = 25;
-							const imgHeight = 25; // Mantener aspecto cuadrado
+							// Calcular dimensiones manteniendo aspect ratio
+							const maxWidth = 28;
+							const maxHeight = data.cell.height - 4;
+							const aspectRatio = imgData.width / imgData.height;
+							
+							let imgWidth = maxWidth;
+							let imgHeight = maxWidth / aspectRatio;
+							
+							// Si la altura excede el máximo, ajustar por altura
+							if (imgHeight > maxHeight) {
+								imgHeight = maxHeight;
+								imgWidth = maxHeight * aspectRatio;
+							}
+							
+							// Centrar la imagen en la celda
 							const x = data.cell.x + (data.cell.width - imgWidth) / 2;
 							const y = data.cell.y + (data.cell.height - imgHeight) / 2;
 							
-							doc.addImage(imageBase64, 'JPEG', x, y, imgWidth, imgHeight);
+							doc.addImage(imgData.base64, 'JPEG', x, y, imgWidth, imgHeight);
 						} catch (error) {
 							console.error('Error al agregar imagen al PDF:', error);
 						}
@@ -445,8 +465,15 @@
 			},
 			margin: { top: 30 },
 			styles: {
-				minCellHeight: 30,
-				valign: 'middle'
+				minCellHeight: 32,
+				valign: 'middle',
+				fontSize: 9
+			},
+			headStyles: {
+				fillColor: [41, 128, 185],
+				textColor: 255,
+				fontStyle: 'bold',
+				halign: 'center'
 			}
 		});
 
