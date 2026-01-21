@@ -26,7 +26,8 @@
 	"dependencies": {
 		"@supabase/auth-helpers-sveltekit": "latest",
 		"@supabase/supabase-js": "^2.87.1",
-		"jspdf": "^2.5.1",
+		"jspdf": "^2.5.2",
+		"jspdf-autotable": "^5.0.7",
 		"resend": "^6.7.0",
 		"xlsx": "^0.18.5"
 	}

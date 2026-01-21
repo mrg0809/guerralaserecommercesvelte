@@ -38,12 +38,11 @@
 	<!-- Top Navigation Bar -->
 	<nav class="bg-white shadow-md">
 		<div class="container mx-auto px-4">
-			<div class="flex items-center justify-between h-16">
+			<div class="flex items-center justify-between h-12">
 				<!-- Logo/Brand -->
 				<div class="flex items-center">
 					<a href="/admin" class="flex items-center gap-2">
-						<span class="text-2xl">⚡</span>
-						<span class="text-xl font-bold text-gray-800">Guerra Láser Admin</span>
+						<img src="/logorectangular.png" alt="Guerra Láser" class="h-8 w-auto" />
 					</a>
 				</div>
 
@@ -52,22 +51,22 @@
 					{#each menuItems as item}
 						<a
 							href={item.href}
-							class="px-4 py-2 rounded-lg transition {isActive(item.href)
+							class="px-3 py-1.5 rounded-lg transition text-sm {isActive(item.href)
 								? 'bg-blue-600 text-white'
 								: 'text-gray-700 hover:bg-gray-100'}"
 						>
-							<span class="mr-2">{item.icon}</span>
+							<span class="mr-1.5">{item.icon}</span>
 							{item.label}
 						</a>
 					{/each}
 				</div>
 
 				<!-- Right Side Actions -->
-				<div class="flex items-center gap-3">
+				<div class="flex items-center gap-2">
 					<a
 						href="/"
 						target="_blank"
-						class="hidden md:flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg"
+						class="hidden md:flex items-center gap-1.5 px-3 py-1.5 text-gray-700 hover:bg-gray-100 rounded-lg text-sm"
 					>
 						<span>👁️</span>
 						<span>Ver Tienda</span>
@@ -122,7 +121,7 @@
 	{/if}
 
 	<!-- Main Content -->
-	<main>
+	<main class="pt-2">
 		{@render children()}
 	</main>
 

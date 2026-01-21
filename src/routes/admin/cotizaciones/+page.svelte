@@ -7,6 +7,7 @@
 	type Customer = Database['public']['Tables']['customers']['Row'];
 
 	let products = $state<any[]>([]);
+	let productItems = $state<any[]>([]); // Items para mostrar (productos sin variantes + variantes)
 	let loading = $state(true);
 	let saving = $state(false);
 	let sendingEmail = $state(false);
@@ -20,6 +21,8 @@
 		quantity: number;
 		price: number;
 		discount: number; // porcentaje por línea
+		isVariant?: boolean;
+		variantId?: string | null;
 	};
 
 	let quotationItems = $state<QuotationItem[]>([]);
@@ -76,23 +79,58 @@
 	async function loadProducts() {
 		loading = true;
 
-		// Cargar productos con precio
+		// Cargar productos con variantes
 		const { data: productsData } = await supabase
 			.from('products')
-			.select('id, sku, name, base_price, stock_quantity')
+			.select('id, sku, name, base_price, stock_quantity, product_variants(id, name, sku, price, stock_quantity)')
 			.eq('is_active', true)
 			.order('name');
 
 		products = productsData || [];
+		
+		// Crear items para búsqueda: si tiene variantes, mostrar solo variantes; si no, mostrar el producto
+		productItems = [];
+		for (const product of products) {
+			const variants = product.product_variants || [];
+			
+			if (variants.length > 0) {
+				// Producto con variantes: agregar solo las variantes
+				for (const variant of variants) {
+					productItems.push({
+						id: variant.id,
+						productId: product.id,
+						sku: variant.sku || product.sku,
+						name: `${product.name} - ${variant.name}`,
+						price: variant.price || product.base_price,
+						stock_quantity: variant.stock_quantity || 0,
+						isVariant: true,
+						variantId: variant.id
+					});
+				}
+			} else {
+				// Producto sin variantes: agregar el producto
+				productItems.push({
+					id: product.id,
+					productId: product.id,
+					sku: product.sku,
+					name: product.name,
+					price: product.base_price,
+					stock_quantity: product.stock_quantity || 0,
+					isVariant: false,
+					variantId: null
+				});
+			}
+		}
+		
 		loading = false;
 	}
 
 	// --- Utilidades de cotización ---
 
 	function filteredProductsForQuotation() {
-		if (!productSearch.trim()) return products;
+		if (!productSearch.trim()) return productItems;
 		const query = productSearch.toLowerCase();
-		return products.filter((p) => {
+		return productItems.filter((p) => {
 			const name = (p.name || '').toLowerCase();
 			const sku = (p.sku || '').toLowerCase();
 			return name.includes(query) || sku.includes(query);
@@ -101,23 +139,31 @@
 
 	function addProductToQuotation(product: any) {
 		if (!product) return;
-		const existing = quotationItems.find((item) => item.productId === product.id);
+		
+		// Usar id único (puede ser productId o variantId)
+		const uniqueId = product.isVariant ? product.variantId : product.productId;
+		const existing = quotationItems.find((item) => 
+			item.productId === uniqueId && item.isVariant === product.isVariant
+		);
+		
 		if (existing) {
 			existing.quantity += 1;
 			quotationItems = [...quotationItems];
 			return;
 		}
 
-		const basePrice = product.base_price || 0;
+		const basePrice = product.price || 0;
 		quotationItems = [
 			...quotationItems,
 			{
-				productId: product.id,
+				productId: uniqueId,
 				sku: product.sku || '',
 				description: product.name || '',
 				quantity: 1,
 				price: basePrice,
-				discount: 0
+				discount: 0,
+				isVariant: product.isVariant,
+				variantId: product.variantId
 			}
 		];
 	}
@@ -266,7 +312,8 @@
 			// Insertar items
 			const items = quotationItems.map(item => ({
 				quotation_id: quotation.id,
-				product_id: item.productId,
+				product_id: item.isVariant ? null : item.productId,
+				variant_id: item.isVariant ? item.variantId : null,
 				sku: item.sku,
 				description: item.description,
 				quantity: item.quantity,
