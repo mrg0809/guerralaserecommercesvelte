@@ -3,29 +3,70 @@
 	import { goto } from '$app/navigation';
 	import { supabase } from '$lib/supabaseClient';
 	import { onMount } from 'svelte';
+	import { userStore, canAccessAdmin, checkPermission } from '$lib/stores/user';
+	import type { Permission } from '$lib/types/roles';
 
 	let { children } = $props();
 	let menuOpen = $state(false);
 
-	const menuItems = [
-		{ href: '/admin', label: 'Dashboard', icon: '🏠' },
-		{ href: '/admin/productos', label: 'Productos', icon: '📦' },
-		{ href: '/admin/categorias', label: 'Categorías', icon: '🏷️' },
-		{ href: '/admin/bundles', label: 'Bundles', icon: '🎁' },
-		{ href: '/admin/pedidos', label: 'Pedidos', icon: '🛍️' },
-		{ href: '/admin/inventario', label: 'Inventario', icon: '📋' },
-		{ href: '/admin/importar', label: 'Importar', icon: '📊' },
-		{ href: '/admin/videos', label: 'Videos', icon: '🎥' }
+	// Menú con permisos requeridos
+	const menuItems: Array<{
+		href: string;
+		label: string;
+		icon: string;
+		permission?: Permission;
+	}> = [
+		{ href: '/admin', label: 'Dashboard', icon: '🏠', permission: 'view_admin_panel' },
+		{ href: '/admin/productos', label: 'Productos', icon: '📦', permission: 'view_products' },
+		{ href: '/admin/categorias', label: 'Categorías', icon: '🏷️', permission: 'view_categories' },
+		{ href: '/admin/bundles', label: 'Bundles', icon: '🎁', permission: 'view_bundles' },
+		{ href: '/admin/pedidos', label: 'Pedidos', icon: '🛍️', permission: 'view_orders' },
+		{ href: '/admin/inventario', label: 'Inventario', icon: '📋', permission: 'view_inventory' },
+		{ href: '/admin/importar', label: 'Importar', icon: '📊', permission: 'create_products' },
+		{ href: '/admin/videos', label: 'Videos', icon: '🎥', permission: 'view_admin_panel' },
+		{ href: '/admin/usuarios', label: 'Usuarios', icon: '👥', permission: 'view_admin_panel' }
 	];
 
+	let userState = $state({ initialized: false, loading: true });
+
 	onMount(async () => {
+		// Inicializar el store de usuario
+		await userStore.init();
+
+		// Verificar autenticación
 		const {
 			data: { session }
 		} = await supabase.auth.getSession();
 
 		if (!session) {
 			goto('/login');
+			return;
 		}
+
+		// Suscribirse a cambios del store
+		const unsubscribe = userStore.subscribe((state) => {
+			userState = state;
+			
+			// Verificar permisos cuando el store esté inicializado
+			if (state.initialized && !state.loading) {
+				if (!state.user) {
+					goto('/login');
+				} else if (!state.permissions.includes('view_admin_panel')) {
+					goto('/');
+				}
+			}
+		});
+
+		return () => {
+			unsubscribe();
+		};
+	});
+
+	// Filtrar menú según permisos
+	$: visibleMenuItems = menuItems.filter((item) => {
+		if (!item.permission) return true;
+		if (!userState.initialized || userState.loading) return false;
+		return checkPermission(item.permission);
 	});
 
 	function isActive(href: string) {
@@ -48,7 +89,7 @@
 
 				<!-- Desktop Menu -->
 				<div class="hidden md:flex items-center gap-1">
-					{#each menuItems as item}
+					{#each visibleMenuItems as item}
 						<a
 							href={item.href}
 							class="px-3 py-1.5 rounded-lg transition text-sm {isActive(item.href)
@@ -94,7 +135,7 @@
 	{#if menuOpen}
 		<div class="md:hidden bg-white border-t shadow-lg">
 			<div class="container mx-auto px-4 py-4 space-y-2">
-				{#each menuItems as item}
+				{#each visibleMenuItems as item}
 					<a
 						href={item.href}
 						onclick={() => menuOpen = false}

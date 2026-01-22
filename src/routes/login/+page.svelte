@@ -1,5 +1,8 @@
 <script lang="ts">
   import { supabase } from '$lib/supabaseClient';
+  import { userStore } from '$lib/stores/user';
+  import { goto } from '$app/navigation';
+  
   let email = '';
   let password = '';
   let errorMsg = '';
@@ -7,13 +10,19 @@
   async function login(e: Event) {
     e.preventDefault();
     errorMsg = '';
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) {
       errorMsg = error.message;
       return;
     }
+    
+    // Inicializar el store de usuario con los permisos
+    if (data.user) {
+      await userStore.setUser(data.user);
+    }
+    
     // Redirect to admin after login
-    window.location.href = '/admin';
+    goto('/admin');
   }
 </script>
 
