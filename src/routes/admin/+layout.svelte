@@ -63,11 +63,11 @@
 	});
 
 	// Filtrar menú según permisos
-	$: visibleMenuItems = menuItems.filter((item) => {
+	const visibleMenuItems = $derived(menuItems.filter((item) => {
 		if (!item.permission) return true;
 		if (!userState.initialized || userState.loading) return false;
 		return checkPermission(item.permission);
-	});
+	}));
 
 	function isActive(href: string) {
 		return $page.url.pathname === href || 

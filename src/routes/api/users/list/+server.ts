@@ -44,14 +44,6 @@ export const GET: RequestHandler = async ({ request }) => {
 			return json({ success: false, error: 'No tienes permisos para ver usuarios' }, { status: 403 });
 		}
 
-		// Crear cliente de Supabase con service role
-		const supabaseAdmin = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-			auth: {
-				autoRefreshToken: false,
-				persistSession: false
-			}
-		});
-
 		// Obtener usuarios
 		const { data: users, error: usersError } = await supabaseAdmin.auth.admin.listUsers();
 
