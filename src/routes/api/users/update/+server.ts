@@ -1,8 +1,8 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { createClient } from '@supabase/supabase-js';
-import { SUPABASE_SERVICE_ROLE_KEY, PUBLIC_SUPABASE_URL } from '$env/static/private';
-import { PUBLIC_SUPABASE_ANON_KEY } from '$env/static/public';
+import { SUPABASE_SERVICE_ROLE_KEY } from '$env/static/private';
+import { PUBLIC_SUPABASE_ANON_KEY, PUBLIC_SUPABASE_URL } from '$env/static/public';
 
 /**
  * Endpoint del servidor para actualizar usuarios
