@@ -25,8 +25,10 @@
 
       if (response.ok && result.success) {
         let assistantMessage = 'Se ha procesado tu solicitud.';
-        if (result.pdfUrl) {
-          assistantMessage = `Se ha generado tu cotización. Puedes descargarla aquí: <a href="${result.pdfUrl}" target="_blank" class="link">Descargar PDF</a>`;
+        if (result.downloadUrl) {
+          // Crear un enlace de descarga para el PDF en base64
+          const downloadLink = `<a href="${result.downloadUrl}" download="${result.pdfName}" class="link font-semibold text-blue-600 hover:text-blue-800">Descargar PDF: ${result.pdfName}</a>`;
+          assistantMessage = `✅ Se ha generado tu cotización exitosamente.<br><br>${downloadLink}<br><br>La cotización incluye los productos solicitados con los costos de envío e instalación si fueron especificados.`;
         } else if (result.message) {
             assistantMessage = result.message;
         }

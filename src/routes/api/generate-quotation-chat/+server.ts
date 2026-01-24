@@ -5,16 +5,37 @@ import { SUPABASE_SERVICE_ROLE_KEY } from '$env/static/private';
 import { PUBLIC_SUPABASE_URL } from '$env/static/public';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { jsPDF } from 'jspdf';
-import fs from 'fs';
 import { generateEmbedding, normalizeProductText } from '$lib/utils/embeddings';
 
-// Verificar que GEMINI_API_KEY esté disponible
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-if (!GEMINI_API_KEY) {
-	throw new Error('GEMINI_API_KEY no está configurada en el entorno');
+// Función helper para obtener la instancia de genAI
+async function getGenAI() {
+	let GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+	
+	// Fallback para desarrollo: intentar cargar desde .env
+	if (!GEMINI_API_KEY) {
+		try {
+			const fs = await import('fs');
+			const path = await import('path');
+			const envPath = path.join(process.cwd(), '.env');
+			if (fs.existsSync(envPath)) {
+				const envContent = fs.readFileSync(envPath, 'utf8');
+				const match = envContent.match(/^GEMINI_API_KEY=(.+)$/m);
+				if (match) {
+					GEMINI_API_KEY = match[1].trim();
+					console.log('[LOG] GEMINI_API_KEY cargada desde .env');
+				}
+			}
+		} catch (e) {
+			console.log('[LOG] No se pudo cargar .env:', e);
+		}
+	}
+	
+	if (!GEMINI_API_KEY) {
+		throw new Error('GEMINI_API_KEY no está configurada en el entorno');
+	}
+	
+	return new GoogleGenerativeAI(GEMINI_API_KEY);
 }
-
-const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 const createSupabaseAdminClient = () => createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
 // --- BÚSQUEDA SEMÁNTICA DE PRODUCTOS CON EMBEDDINGS ---
@@ -195,18 +216,80 @@ async function searchProductsByText(supabase: SupabaseClient, productInfo: { nom
 }
 
 
+// --- CARGAR LOGO DESDE ARCHIVO LOCAL (como en cotizaciones normales) ---
+async function loadLogoFromUrl(): Promise<string | null> {
+    try {
+        // Intentar leer el logo desde el sistema de archivos local
+        const fs = await import('fs');
+        const path = await import('path');
+        
+        // Ruta al logo en la carpeta static
+        const logoPath = path.join(process.cwd(), 'static', 'logorectangular.png');
+        console.log(`[LOG] Verificando logo en: ${logoPath}`);
+        
+        if (fs.existsSync(logoPath)) {
+            const logoBuffer = fs.readFileSync(logoPath);
+            const base64 = logoBuffer.toString('base64');
+            console.log('[LOG] Logo cargado desde archivo local');
+            return `data:image/png;base64,${base64}`;
+        } else {
+            console.log('[LOG] Logo no encontrado en archivo local, intentando desde URL...');
+            
+            // Fallback: intentar desde URL si no está disponible localmente
+            // Usar la URL del deployment actual
+            let baseUrl = 'https://guerralaser.com'; // Default producción
+            
+            // Si estamos en desarrollo, usar localhost
+            if (process.env.NODE_ENV === 'development' || process.env.PUBLIC_SUPABASE_URL?.includes('localhost')) {
+                baseUrl = 'http://localhost:5173';
+            }
+            
+            // En Vercel, usar el dominio del deployment
+            if (process.env.VERCEL_URL) {
+                baseUrl = `https://${process.env.VERCEL_URL}`;
+            }
+            
+            const logoUrl = `${baseUrl}/logorectangular.png`;
+            console.log(`[LOG] Intentando cargar logo desde: ${logoUrl}`);
+            
+            const response = await fetch(logoUrl);
+            console.log(`[LOG] Response status: ${response.status}`);
+            
+            if (response.ok) {
+                const arrayBuffer = await response.arrayBuffer();
+                const base64 = Buffer.from(arrayBuffer).toString('base64');
+                console.log('[LOG] Logo cargado desde URL fallback');
+                return `data:image/png;base64,${base64}`;
+            } else {
+                console.log(`[LOG] Error en respuesta: ${response.statusText}`);
+            }
+        }
+        
+        console.log('[LOG] No se pudo cargar el logo');
+        return null;
+    } catch (error) {
+        console.error('[LOG] Error cargando logo:', error);
+        return null;
+    }
+}
+
 // --- GENERACIÓN DE PDF ---
 async function createPdfDocument(data: any): Promise<jsPDF> {
     const { quotationItems, customerName, quotationValidityDays, notes, shippingCost, installationCost } = data;
     const doc = new jsPDF();
     let currentY = 10;
     const redColor = [220, 38, 38]; const blueColor = [37, 99, 235];
+    
+    // Intentar cargar el logo desde URL
     try {
-        const logoBuffer = fs.readFileSync('static/logorectangular.png');
-        // CORRECCIÓN: Usar 0 para el alto para que jsPDF calcule la proporción automáticamente
-        doc.addImage(logoBuffer, 'PNG', 10, currentY, 50, 0);
-        currentY += 17; // Ajustar el espacio si es necesario
-    } catch (e) { console.error("[LOG] Logo no encontrado."); }
+        const logoBase64 = await loadLogoFromUrl();
+        if (logoBase64) {
+            doc.addImage(logoBase64, 'PNG', 10, currentY, 50, 0);
+            currentY += 17;
+        }
+    } catch (e) {
+        console.error("[LOG] Logo no encontrado.");
+    }
     doc.setFontSize(16).setFont('helvetica', 'bold').setTextColor(redColor[0], redColor[1], redColor[2]);
     doc.text('COTIZACIÓN', 200, 15, { align: 'right' });
     doc.setFontSize(9).setFont('helvetica', 'normal').setTextColor(0, 0, 0);
@@ -258,9 +341,28 @@ async function createPdfDocument(data: any): Promise<jsPDF> {
     doc.text('Total:', 155, currentY, { align: 'right' }); doc.text(`$${finalTotal.toFixed(2)} MXN`, 195, currentY, { align: 'right' }); currentY += 8;
     doc.setFont('helvetica', 'normal');
     if (notes) { doc.setFontSize(9).setFont('helvetica', 'bold').setTextColor(0,0,0).text('Notas:', 10, currentY); const splitNotes = doc.splitTextToSize(notes, 180); doc.setFontSize(8).setFont('helvetica', 'normal').text(splitNotes, 10, currentY + 4); }
-    currentY = 260; doc.setDrawColor(redColor[0], redColor[1], redColor[2]).line(10, currentY, 200, currentY);
-    doc.setFontSize(7).setTextColor(100, 100, 100).text(`Esta cotización tiene una vigencia de ${quotationValidityDays || 15} días naturales.`, 105, currentY + 4, { align: 'center' });
-    doc.text('Gracias por su preferencia - Guerra Laser México', 105, currentY + 8, { align: 'center' });
+    // Pie de página con datos bancarios
+    if (currentY < 240) {
+        currentY = 240;
+    }
+    doc.setDrawColor(redColor[0], redColor[1], redColor[2]).line(10, currentY, 200, currentY);
+    currentY += 6;
+    
+    // Datos bancarios
+    doc.setFontSize(9).setFont('helvetica', 'bold').setTextColor(0, 0, 0);
+    doc.text('DATOS BANCARIOS PARA DEPÓSITO O TRANSFERENCIA', 105, currentY, { align: 'center' });
+    currentY += 5;
+    
+    doc.setFont('helvetica', 'normal').setFontSize(8).setTextColor(60, 60, 60);
+    doc.text('Banco: BBVA Bancomer', 105, currentY, { align: 'center' }); currentY += 4;
+    doc.text('Nombre: Luis Enrique Guerra Zavala', 105, currentY, { align: 'center' }); currentY += 4;
+    doc.text('Cuenta: 0101373439', 105, currentY, { align: 'center' }); currentY += 4;
+    doc.text('Cuenta interbancaria: 012320001013734399', 105, currentY, { align: 'center' }); currentY += 4;
+    doc.text('Número de tarjeta: 4152 3132 0228 1320', 105, currentY, { align: 'center' }); currentY += 6;
+    
+    doc.setFontSize(7).setTextColor(100, 100, 100);
+    doc.text(`Esta cotización tiene una vigencia de ${quotationValidityDays || 15} días naturales.`, 105, currentY, { align: 'center' });
+    doc.text('Gracias por su preferencia - Guerra Laser México', 105, currentY + 4, { align: 'center' });
     return doc;
 }
 
@@ -272,6 +374,7 @@ export const POST: RequestHandler = async ({ request }) => {
   console.log(`[LOG] Mensaje recibido: "${message}"`);
 
   try {
+    const genAI = await getGenAI();
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     
     // Prompt con Chain of Thought (CoT) para mejor análisis
@@ -393,14 +496,19 @@ Ahora procesa el siguiente mensaje:
         shippingCost: parsedResult.envio,
         installationCost: parsedResult.instalacion
     });
-    const pdfName = `cotizacion-chat-${Date.now()}.pdf`;
-    const pdfPath = `static/cotizaciones/${pdfName}`;
-    const dir = 'static/cotizaciones';
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(pdfPath, Buffer.from(pdfDoc.output('arraybuffer')));
     
-    console.log(`[LOG] PDF generado: ${pdfPath}`);
-    return json({ success: true, pdfUrl: `/cotizaciones/${pdfName}` });
+    // Generar PDF en memoria y devolverlo como base64
+    const pdfBuffer = Buffer.from(pdfDoc.output('arraybuffer'));
+    const pdfBase64 = pdfBuffer.toString('base64');
+    const pdfName = `cotizacion-chat-${Date.now()}.pdf`;
+    
+    console.log(`[LOG] PDF generado en memoria: ${pdfName}`);
+    return json({ 
+        success: true, 
+        pdfData: pdfBase64,
+        pdfName: pdfName,
+        downloadUrl: `data:application/pdf;base64,${pdfBase64}`
+    });
 
   } catch (error: any) {
     console.error('[LOG] Error CRÍTICO en el proceso:', error);
