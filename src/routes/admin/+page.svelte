@@ -119,7 +119,18 @@
 	<!-- Quick Actions -->
 	<div class="bg-white rounded-lg shadow-md p-6">
 		<h2 class="text-2xl font-bold mb-6">Acciones Rápidas</h2>
-		<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+		<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+			<a
+				href="/admin/clientes"
+				class="flex items-center gap-4 p-4 border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition"
+			>
+				<div class="text-3xl">👥</div>
+				<div>
+					<h3 class="font-bold text-lg">Gestionar Clientes</h3>
+					<p class="text-gray-600 text-sm">Base de datos de clientes</p>
+				</div>
+			</a>
+
 			<a
 				href="/admin/productos"
 				class="flex items-center gap-4 p-4 border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition"
@@ -132,79 +143,24 @@
 			</a>
 
 			<a
-				href="/admin/categorias"
+				href="/admin/cotizaciones"
 				class="flex items-center gap-4 p-4 border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition"
 			>
-				<div class="text-3xl">🏷️</div>
+				<div class="text-3xl">🧾</div>
 				<div>
-					<h3 class="font-bold text-lg">Gestionar Categorías</h3>
-					<p class="text-gray-600 text-sm">Organizar categorías</p>
+					<h3 class="font-bold text-lg">Crear Cotización</h3>
+					<p class="text-gray-600 text-sm">Genera cotizaciones en PDF</p>
 				</div>
 			</a>
 
 			<a
-				href="/admin/bundles"
+				href="/admin/cotizacion-chat"
 				class="flex items-center gap-4 p-4 border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition"
 			>
-				<div class="text-3xl">🎁</div>
+				<div class="text-3xl">🤖</div>
 				<div>
-					<h3 class="font-bold text-lg">Gestionar Bundles</h3>
-					<p class="text-gray-600 text-sm">Paquetes de productos</p>
-				</div>
-			</a>
-
-			<a
-			href="/admin/cotizaciones"
-			class="flex items-center gap-4 p-4 border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition"
-		>
-			<div class="text-3xl">🧾</div>
-			<div>
-				<h3 class="font-bold text-lg">Crear Cotización</h3>
-				<p class="text-gray-600 text-sm">Genera cotizaciones en PDF</p>
-			</div>
-		</a>
-
-		<a
-			href="/admin/clientes"
-			class="flex items-center gap-4 p-4 border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition"
-		>
-			<div class="text-3xl">👥</div>
-			<div>
-				<h3 class="font-bold text-lg">Gestionar Clientes</h3>
-				<p class="text-gray-600 text-sm">Base de datos de clientes</p>
-			</div>
-		</a>
-
-		<a
-				href="/admin/pedidos"
-				class="flex items-center gap-4 p-4 border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition"
-			>
-				<div class="text-3xl">🛍️</div>
-				<div>
-					<h3 class="font-bold text-lg">Ver Pedidos</h3>
-					<p class="text-gray-600 text-sm">Administrar pedidos</p>
-				</div>
-			</a>
-
-			<a
-				href="/admin/importar"
-				class="flex items-center gap-4 p-4 border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition"
-			>
-				<div class="text-3xl">📊</div>
-				<div>
-					<h3 class="font-bold text-lg">Importar Excel</h3>
-					<p class="text-gray-600 text-sm">Importar productos masivamente</p>
-				</div>
-			</a>
-
-			<a
-				href="/admin/videos"
-				class="flex items-center gap-4 p-4 border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition"
-			>
-				<div class="text-3xl">🎥</div>
-				<div>
-					<h3 class="font-bold text-lg">Videos Testimoniales</h3>
-					<p class="text-gray-600 text-sm">Gestionar videos de clientes</p>
+					<h3 class="font-bold text-lg">Chat Cotización IA</h3>
+					<p class="text-gray-600 text-sm">Asistente de cotizaciones</p>
 				</div>
 			</a>
 		</div>

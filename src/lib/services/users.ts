@@ -49,7 +49,7 @@ export async function getAllUsers(): Promise<UserWithRoles[]> {
  * Fallback: obtener usuarios desde user_roles
  */
 async function getUsersFromRoles(): Promise<UserWithRoles[]> {
-	const { data: userRoles, error } = await supabase
+	const { data: userRoles, error } = await (supabase as any)
 		.from('user_roles')
 		.select(`
 			user_id,
@@ -150,7 +150,7 @@ export async function deleteUser(userId: string): Promise<{ success: boolean; er
  * Obtiene los roles de un usuario
  */
 export async function getUserRoles(userId: string): Promise<UserRole[]> {
-	const { data, error } = await supabase.rpc('get_user_roles', {
+	const { data, error } = await (supabase as any).rpc('get_user_roles', {
 		user_uuid: userId
 	});
 
@@ -166,18 +166,32 @@ export async function getUserRoles(userId: string): Promise<UserRole[]> {
  * Obtiene todos los roles disponibles
  */
 export async function getAllRoles(): Promise<Array<{ id: string; name: string; display_name: string }>> {
-	const { data, error } = await supabase
-		.from('roles')
-		.select('id, name, display_name')
-		.eq('is_active', true)
-		.order('name');
+	try {
+		// Obtener token de sesión
+		const { data: { session } } = await supabase.auth.getSession();
+		if (!session) {
+			console.error('No hay sesión activa para obtener roles');
+			return [];
+		}
 
-	if (error) {
+		const response = await fetch('/api/users/roles', {
+			headers: {
+				Authorization: `Bearer ${session.access_token}`
+			}
+		});
+
+		const result = await response.json();
+
+		if (!result.success) {
+			console.error('Error en respuesta de roles:', result.error);
+			return [];
+		}
+
+		return result.roles || [];
+	} catch (error: any) {
 		console.error('Error obteniendo roles:', error);
 		return [];
 	}
-
-	return data || [];
 }
 
 /**
@@ -188,12 +202,52 @@ export async function assignRole(
 	roleName: UserRole,
 	assignedBy: string
 ): Promise<{ success: boolean; error?: string }> {
-	return await assignRoleToUser(userId, roleName, assignedBy);
+	try {
+		// Obtener token de sesión
+		const { data: { session } } = await supabase.auth.getSession();
+		if (!session) {
+			return { success: false, error: 'No hay sesión activa' };
+		}
+
+		const response = await fetch('/api/users/assign-role', {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json',
+				Authorization: `Bearer ${session.access_token}`
+			},
+			body: JSON.stringify({ userId, roleName })
+		});
+
+		const result = await response.json();
+		return result;
+	} catch (error: any) {
+		return { success: false, error: error.message || 'Error al asignar rol' };
+	}
 }
 
 /**
  * Remueve un rol de un usuario
  */
 export async function removeRole(userId: string, roleName: UserRole): Promise<{ success: boolean; error?: string }> {
-	return await removeRoleFromUser(userId, roleName);
+	try {
+		// Obtener token de sesión
+		const { data: { session } } = await supabase.auth.getSession();
+		if (!session) {
+			return { success: false, error: 'No hay sesión activa' };
+		}
+
+		const response = await fetch('/api/users/remove-role', {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json',
+				Authorization: `Bearer ${session.access_token}`
+			},
+			body: JSON.stringify({ userId, roleName })
+		});
+
+		const result = await response.json();
+		return result;
+	} catch (error: any) {
+		return { success: false, error: error.message || 'Error al remover rol' };
+	}
 }

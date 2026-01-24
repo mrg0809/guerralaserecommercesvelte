@@ -56,7 +56,17 @@
 	async function loadUsers() {
 		loading = true;
 		try {
-			const response = await fetch('/api/users/list');
+			// Obtener el token del usuario actual
+			const { data: { session } } = await supabase.auth.getSession();
+			if (!session) {
+				throw new Error('No hay sesión activa');
+			}
+
+			const response = await fetch('/api/users/list', {
+				headers: {
+					'Authorization': `Bearer ${session.access_token}`
+				}
+			});
 			const result = await response.json();
 
 			if (!result.success) {
@@ -75,7 +85,14 @@
 
 	// Cargar roles disponibles
 	async function loadRoles() {
-		availableRoles = await getAllRoles();
+		try {
+			console.log('Cargando roles disponibles...');
+			availableRoles = await getAllRoles();
+			console.log('Roles cargados:', availableRoles);
+		} catch (error) {
+			console.error('Error cargando roles:', error);
+			availableRoles = [];
+		}
 	}
 
 	// Filtrar usuarios
@@ -123,9 +140,18 @@
 		createError = '';
 
 		try {
+			// Obtener el token del usuario actual
+			const { data: { session } } = await supabase.auth.getSession();
+			if (!session) {
+				throw new Error('No hay sesión activa');
+			}
+
 			const response = await fetch('/api/users/create', {
 				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
+				headers: { 
+					'Content-Type': 'application/json',
+					'Authorization': `Bearer ${session.access_token}`
+				},
 				body: JSON.stringify({
 					email: formData.email,
 					password: formData.password
@@ -158,11 +184,16 @@
 	async function handleAssignRole(roleName: UserRole) {
 		if (!selectedUser) return;
 
-		const state = userStore;
-		if (!state.user) return;
+		let currentUser = null;
+		const unsubscribe = userStore.subscribe(state => {
+			currentUser = state.user;
+		});
+		unsubscribe();
+
+		if (!currentUser) return;
 
 		try {
-			const result = await assignRole(selectedUser.id, roleName, state.user.id);
+			const result = await assignRole(selectedUser.id, roleName, currentUser.id);
 
 			if (!result.success) {
 				throw new Error(result.error || 'Error al asignar rol');
@@ -404,8 +435,9 @@
 
 				<form onsubmit={(e) => { e.preventDefault(); createUser(); }} class="space-y-4">
 					<div>
-						<label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
+						<label for="email" class="block text-sm font-medium text-gray-700 mb-1">Email</label>
 						<input
+							id="email"
 							type="email"
 							bind:value={formData.email}
 							required
@@ -415,8 +447,9 @@
 					</div>
 
 					<div>
-						<label class="block text-sm font-medium text-gray-700 mb-1">Contraseña</label>
+						<label for="password" class="block text-sm font-medium text-gray-700 mb-1">Contraseña</label>
 						<input
+							id="password"
 							type="password"
 							bind:value={formData.password}
 							required
@@ -427,8 +460,9 @@
 					</div>
 
 					<div>
-						<label class="block text-sm font-medium text-gray-700 mb-1">Confirmar Contraseña</label>
+						<label for="confirmPassword" class="block text-sm font-medium text-gray-700 mb-1">Confirmar Contraseña</label>
 						<input
+							id="confirmPassword"
 							type="password"
 							bind:value={formData.confirmPassword}
 							required
@@ -505,19 +539,24 @@
 
 				<div>
 					<p class="text-sm font-medium text-gray-700 mb-3">Asignar Nuevo Rol:</p>
-					<div class="space-y-2">
-						{#each availableRoles as role}
-							{#if !selectedUser.roles.includes(role.name as UserRole)}
-								<button
-									onclick={() => handleAssignRole(role.name as UserRole)}
-									class="w-full text-left px-4 py-2 border rounded-lg hover:bg-blue-50 hover:border-blue-300 transition"
-								>
-									<div class="font-medium text-gray-900">{role.display_name}</div>
-									<div class="text-xs text-gray-500">{role.name}</div>
-								</button>
-							{/if}
-						{/each}
-					</div>
+					{#if availableRoles.length === 0}
+						<p class="text-sm text-gray-500">No hay roles disponibles para asignar</p>
+						<p class="text-xs text-gray-400">Debug: availableRoles está vacío</p>
+					{:else}
+						<div class="space-y-2">
+							{#each availableRoles as role}
+								{#if !selectedUser.roles.includes(role.name as UserRole)}
+									<button
+										onclick={() => handleAssignRole(role.name as UserRole)}
+										class="w-full text-left px-4 py-2 border rounded-lg hover:bg-blue-50 hover:border-blue-300 transition"
+									>
+										<div class="font-medium text-gray-900">{role.display_name}</div>
+										<div class="text-xs text-gray-500">{role.name}</div>
+									</button>
+								{/if}
+							{/each}
+						</div>
+					{/if}
 				</div>
 
 				<div class="mt-6 pt-4 border-t">

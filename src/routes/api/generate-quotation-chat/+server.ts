@@ -6,79 +6,185 @@ import { PUBLIC_SUPABASE_URL } from '$env/static/public';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { jsPDF } from 'jspdf';
 import fs from 'fs';
+import { generateEmbedding, normalizeProductText } from '$lib/utils/embeddings';
 
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 const createSupabaseAdminClient = () => createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-// --- LÓGICA DE BÚSQUEDA DE PRODUCTOS CON PRECIOS Y DESCUENTOS PERSONALIZADOS ---
-async function searchProducts(supabase: SupabaseClient, productInfo: { nombre: string, cantidad: number, precio?: number, descuento?: number }) {
+// --- BÚSQUEDA SEMÁNTICA DE PRODUCTOS CON EMBEDDINGS ---
+async function searchProductsWithEmbeddings(supabase: SupabaseClient, productInfo: { nombre: string, cantidad: number, precio?: number, descuento?: number }) {
     const { nombre, cantidad, precio, descuento } = productInfo;
 
-    console.log(`[LOG] Iniciando búsqueda para: "${nombre}" (Cantidad: ${cantidad}). Info del prompt: Precio=${precio}, Descuento=${descuento}%`);
+    console.log(`[LOG] Iniciando búsqueda semántica para: "${nombre}" (Cantidad: ${cantidad}). Info del prompt: Precio=${precio}, Descuento=${descuento}%`);
 
-    // Limpieza de nombre de producto para evitar palabras genéricas
+    try {
+        // Generar embedding del nombre del producto
+        const normalizedText = normalizeProductText(nombre);
+        console.log(`[LOG] Texto normalizado: "${normalizedText}"`);
+        
+        const queryEmbedding = await generateEmbedding(normalizedText);
+        console.log(`[LOG] Embedding generado (dimensiones: ${queryEmbedding.length})`);
+
+        // Estrategia 1: Buscar en variantes de productos usando similitud semántica
+        const { data: variants, error: variantsError } = await supabase
+            .rpc('search_product_variants_by_embedding', {
+                query_embedding: queryEmbedding,
+                match_threshold: 0.60,
+                match_count: 3
+            });
+
+        if (variantsError) {
+            console.error('[LOG] Error en búsqueda semántica de variantes:', variantsError);
+        } else {
+            console.log(`[LOG] Resultado de búsqueda semántica en variantes: ${JSON.stringify(variants, null, 2)}`);
+        }
+
+        if (variants && variants.length > 0) {
+            const v = variants[0];
+            console.log(`[LOG] Variante encontrada con búsqueda semántica: ${v.product_name} - ${v.variant_name} (similitud: ${v.similarity})`);
+            
+            const finalPrice = precio !== undefined ? precio : v.price || 0;
+            const finalDiscount = descuento !== undefined ? descuento : 0;
+            
+            console.log(`[LOG] Precio final: ${finalPrice} (DB: ${v.price}), Descuento final: ${finalDiscount}%`);
+
+            return { 
+                id: v.id, 
+                sku: v.sku || 'N/A', 
+                description: `${v.product_name} - ${v.variant_name}`, 
+                quantity: cantidad, 
+                price: finalPrice, 
+                discount: finalDiscount 
+            };
+        }
+
+        // Estrategia 2: Si no hay variantes, buscar en productos principales
+        const { data: products, error: productsError } = await supabase
+            .rpc('search_products_by_embedding', {
+                query_embedding: queryEmbedding,
+                match_threshold: 0.60,
+                match_count: 3
+            });
+
+        if (productsError) {
+            console.error('[LOG] Error en búsqueda semántica de productos:', productsError);
+        } else {
+            console.log(`[LOG] Resultado de búsqueda semántica en productos: ${JSON.stringify(products, null, 2)}`);
+        }
+
+        if (products && products.length > 0) {
+            const p = products[0];
+            console.log(`[LOG] Producto encontrado con búsqueda semántica: ${p.name} (similitud: ${p.similarity})`);
+            
+            const finalPrice = precio !== undefined ? precio : p.base_price || 0;
+            const finalDiscount = descuento !== undefined ? descuento : 0;
+            
+            console.log(`[LOG] Precio final: ${finalPrice} (DB: ${p.base_price}), Descuento final: ${finalDiscount}%`);
+
+            return { 
+                id: p.id, 
+                sku: p.sku || 'N/A', 
+                description: p.name, 
+                quantity: cantidad, 
+                price: finalPrice, 
+                discount: finalDiscount 
+            };
+        }
+
+        console.log(`[LOG] No se encontró nada para "${nombre}" con búsqueda semántica.`);
+        console.log(`[LOG] Intentando fallback a búsqueda por texto...`);
+        
+        // FALLBACK: Búsqueda por texto si la semántica no funciona
+        return await searchProductsByText(supabase, productInfo);
+        
+    } catch (error) {
+        console.error(`[LOG] Error en búsqueda semántica:`, error);
+        console.log(`[LOG] Intentando fallback a búsqueda por texto...`);
+        return await searchProductsByText(supabase, productInfo);
+    }
+}
+
+// --- BÚSQUEDA POR TEXTO (FALLBACK) ---
+async function searchProductsByText(supabase: SupabaseClient, productInfo: { nombre: string, cantidad: number, precio?: number, descuento?: number }) {
+    const { nombre, cantidad, precio, descuento } = productInfo;
+    
+    console.log(`[LOG] Búsqueda por texto para: "${nombre}"`);
+    
+    // Limpiar nombre
     const cleanedName = nombre.replace(/máquina|maquina|tubo|pieza|unidad de|un|una|dame|cotiza/gi, '').trim();
-
-    const normalizedQuery = cleanedName
-        .toLowerCase()
-        .replace(/c02/g, 'co2')
-        .replace(/[^a-z0-9\s]/g, '')
-        .trim();
-
+    const normalizedQuery = cleanedName.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
+    
     if (!normalizedQuery) {
-        console.log('[LOG] La consulta normalizada está vacía.');
+        console.log('[LOG] Consulta vacía después de normalizar');
         return null;
     }
     
-    console.log(`[LOG] Consulta normalizada para FTS: "${normalizedQuery}"`);
+    console.log(`[LOG] Consulta normalizada: "${normalizedQuery}"`);
     
-    // Estrategia 1: Buscar en variantes de productos
+    // Buscar en variantes con ILIKE
     const { data: variants, error: variantsError } = await supabase
         .from('product_variants')
         .select('id, name, sku, price, product:products!inner(id, name, is_active)')
         .eq('product.is_active', true)
-        .textSearch('name', normalizedQuery, { config: 'spanish', type: 'plain' })
+        .ilike('name', `%${normalizedQuery}%`)
         .limit(1);
-
-    if (variantsError) console.error('[LOG] Error en FTS de variantes:', variantsError);
-    else console.log(`[LOG] Resultado de FTS en variantes: ${JSON.stringify(variants, null, 2)}`);
-
+    
+    if (variantsError) {
+        console.error('[LOG] Error en búsqueda de variantes:', variantsError);
+    } else {
+        console.log(`[LOG] Variantes encontradas: ${variants?.length || 0}`);
+    }
+    
     if (variants && variants.length > 0) {
         const v = variants[0];
-        console.log(`[LOG] Variante encontrada con FTS: ${v.product.name} - ${v.name}`);
+        const product = Array.isArray(v.product) ? v.product[0] : v.product;
+        console.log(`[LOG] Variante encontrada: ${product.name} - ${v.name}`);
         
         const finalPrice = precio !== undefined ? precio : v.price || 0;
         const finalDiscount = descuento !== undefined ? descuento : 0;
         
-        console.log(`[LOG] Precio final: ${finalPrice} (DB: ${v.price}), Descuento final: ${finalDiscount}%`);
-
-        return { id: v.id, sku: v.sku || 'N/A', description: `${v.product.name} - ${v.name}`, quantity: cantidad, price: finalPrice, discount: finalDiscount };
+        return {
+            id: v.id,
+            sku: v.sku || 'N/A',
+            description: `${product.name} - ${v.name}`,
+            quantity: cantidad,
+            price: finalPrice,
+            discount: finalDiscount
+        };
     }
-
-    // Estrategia 2: Si no hay variantes, buscar en productos principales
+    
+    // Buscar en productos con ILIKE
     const { data: products, error: productsError } = await supabase
         .from('products')
-        .select('id, name, sku, base_price, is_active')
+        .select('id, name, sku, base_price')
         .eq('is_active', true)
-        .textSearch('name', normalizedQuery, { config: 'spanish', type: 'plain' })
+        .ilike('name', `%${normalizedQuery}%`)
         .limit(1);
-
-    if (productsError) console.error('[LOG] Error en FTS de productos:', productsError);
-    else console.log(`[LOG] Resultado de FTS en productos: ${JSON.stringify(products, null, 2)}`);
-
+    
+    if (productsError) {
+        console.error('[LOG] Error en búsqueda de productos:', productsError);
+    } else {
+        console.log(`[LOG] Productos encontrados: ${products?.length || 0}`);
+    }
+    
     if (products && products.length > 0) {
         const p = products[0];
-        console.log(`[LOG] Producto encontrado con FTS: ${p.name}`);
+        console.log(`[LOG] Producto encontrado: ${p.name}`);
         
         const finalPrice = precio !== undefined ? precio : p.base_price || 0;
         const finalDiscount = descuento !== undefined ? descuento : 0;
         
-        console.log(`[LOG] Precio final: ${finalPrice} (DB: ${p.base_price}), Descuento final: ${finalDiscount}%`);
-
-        return { id: p.id, sku: p.sku || 'N/A', description: p.name, quantity: cantidad, price: finalPrice, discount: finalDiscount };
+        return {
+            id: p.id,
+            sku: p.sku || 'N/A',
+            description: p.name,
+            quantity: cantidad,
+            price: finalPrice,
+            discount: finalDiscount
+        };
     }
-
-    console.log(`[LOG] No se encontró nada para "${nombre}" con FTS.`);
+    
+    console.log(`[LOG] No se encontró nada para "${nombre}"`);
     return null;
 }
 
@@ -126,8 +232,8 @@ async function createPdfDocument(data: any): Promise<jsPDF> {
         currentY += rowHeight + 2; doc.setDrawColor(200, 210, 230).setLineWidth(0.1).line(10, currentY, 200, currentY); currentY += 2;
     }
     currentY += 3; doc.setDrawColor(blueColor[0], blueColor[1], blueColor[2]).setLineWidth(0.5).line(120, currentY, 200, currentY); currentY += 6;
-    const subtotal = quotationItems.reduce((sum, item) => sum + (item.quantity * item.price), 0);
-    const totalDiscountAmount = quotationItems.reduce((sum, item) => sum + (item.quantity * item.price * (item.discount/100)), 0);
+    const subtotal = quotationItems.reduce((sum: number, item: any) => sum + (item.quantity * item.price), 0);
+    const totalDiscountAmount = quotationItems.reduce((sum: number, item: any) => sum + (item.quantity * item.price * (item.discount/100)), 0);
     const finalTotal = subtotal - totalDiscountAmount + (shippingCost || 0) + (installationCost || 0);
     doc.setFontSize(9);
     doc.text('Subtotal:', 155, currentY, { align: 'right' }); doc.text(`$${subtotal.toFixed(2)} MXN`, 195, currentY, { align: 'right' }); currentY += 5;
@@ -160,46 +266,95 @@ export const POST: RequestHandler = async ({ request }) => {
   console.log(`[LOG] Mensaje recibido: "${message}"`);
 
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    
+    // Prompt con Chain of Thought (CoT) para mejor análisis
     const prompt = `
-      Extrae la siguiente información del texto que te proporciono:
-      - Nombre del cliente.
-      - Lista de productos (con cantidad, precio y descuento opcionales).
-      - Costo de envío (opcional).
-      - Costo de instalación (opcional).
+Eres un asistente experto en procesamiento de cotizaciones para una ferretería/tienda de equipos láser.
 
-      INSTRUCCIONES PARA EXTRAER LA INFORMACIÓN:
-      1.  Al extraer el 'nombre' del producto, enfócate en el modelo o código, descartando palabras genéricas como 'máquina', 'tubo', 'pieza', etc.
-      2.  El descuento debe ser un número (porcentaje de 0 a 100).
-      3.  Envío e instalación son costos totales, no por producto.
+Tu tarea es analizar el mensaje del usuario y extraer información estructurada siguiendo un proceso de pensamiento paso a paso.
 
-      El formato de salida debe ser estrictamente un JSON, sin texto adicional ni markdown.
-      El JSON debe tener las siguientes llaves:
-      - cliente: string
-      - productos: array de objetos con "nombre", "cantidad", y opcionalmente "precio" y "descuento".
-      - envio: number (opcional)
-      - instalacion: number (opcional)
+**PROCESO DE ANÁLISIS (Chain of Thought):**
 
-      Ejemplo 1 (completo):
-      Input: "cotiza para mario perez un tubo puri p10 a 4999 con 5% de descuento y envio de 500 pesos"
-      Output:
-      {
-        "cliente": "mario perez",
-        "productos": [
-          { "nombre": "puri p10", "cantidad": 1, "precio": 4999, "descuento": 5 }
-        ],
-        "envio": 500
-      }
+Paso 1: IDENTIFICACIÓN
+- Lee cuidadosamente el mensaje completo
+- Identifica el nombre del cliente
+- Identifica cada producto mencionado y su cantidad
+- Identifica costos adicionales (envío, instalación)
 
-      Ejemplo 2 (sin extras):
-      Input: "Una cotización para Guerralaser de una máquina 4060"
-      Output:
-      {
-        "cliente": "Guerralaser",
-        "productos": [
-          { "nombre": "4060", "cantidad": 1 }
-        ]
-      }
+Paso 2: CORRECCIÓN Y NORMALIZACIÓN
+- Corrige posibles errores ortográficos en nombres de productos
+- Considera el contexto de ferretería/equipos láser para inferir productos correctos
+- Ejemplos de correcciones comunes:
+  * "hoja fierro bordes" → "lámina antiderrapante"
+  * "tubo c02" → "tubo co2"
+  * "maquina corte" → "máquina de corte láser"
+  * "puri" → "puri" (marca conocida)
+- Normaliza cantidades y precios a números
+- Descarta palabras genéricas como "máquina", "tubo", "pieza" del nombre del producto
+
+Paso 3: EXTRACCIÓN ESTRUCTURADA
+- Genera la lista final de productos con:
+  * nombre: modelo o código específico del producto (sin palabras genéricas)
+  * cantidad: número de unidades
+  * precio: precio unitario (opcional, solo si se menciona)
+  * descuento: porcentaje de descuento 0-100 (opcional, solo si se menciona)
+- Extrae costos adicionales:
+  * envio: costo total de envío (opcional)
+  * instalacion: costo total de instalación (opcional)
+
+**FORMATO DE SALIDA:**
+Debes responder ÚNICAMENTE con un objeto JSON válido, sin texto adicional, sin markdown, sin explicaciones.
+
+Estructura del JSON:
+{
+  "cliente": "nombre del cliente",
+  "productos": [
+    { 
+      "nombre": "modelo o código específico", 
+      "cantidad": número,
+      "precio": número (opcional),
+      "descuento": número 0-100 (opcional)
+    }
+  ],
+  "envio": número (opcional),
+  "instalacion": número (opcional)
+}
+
+**EJEMPLOS:**
+
+Ejemplo 1:
+Input: "cotiza para mario perez un tubo puri p10 a 4999 con 5% de descuento y envio de 500 pesos"
+Output:
+{
+  "cliente": "mario perez",
+  "productos": [
+    { "nombre": "puri p10", "cantidad": 1, "precio": 4999, "descuento": 5 }
+  ],
+  "envio": 500
+}
+
+Ejemplo 2:
+Input: "Una cotización para Guerralaser de una máquina 4060"
+Output:
+{
+  "cliente": "Guerralaser",
+  "productos": [
+    { "nombre": "4060", "cantidad": 1 }
+  ]
+}
+
+Ejemplo 3:
+Input: "necesito 2 hojas de fierro con bordes antiderrapantes para Juan Lopez"
+Output:
+{
+  "cliente": "Juan Lopez",
+  "productos": [
+    { "nombre": "lámina antiderrapante", "cantidad": 2 }
+  ]
+}
+
+Ahora procesa el siguiente mensaje:
     `;
 
     const result = await model.generateContent([prompt, message].join('\n'));
@@ -216,7 +371,7 @@ export const POST: RequestHandler = async ({ request }) => {
     console.log(`[LOG] Resultado de Gemini (parseado): ${JSON.stringify(parsedResult, null, 2)}`);
 
     const supabase = createSupabaseAdminClient();
-    const productPromises = parsedResult.productos.map((p: any) => searchProducts(supabase, p));
+    const productPromises = parsedResult.productos.map((p: any) => searchProductsWithEmbeddings(supabase, p));
     const productosEncontrados = (await Promise.all(productPromises)).filter(p => p !== null) as any[];
 
     if (productosEncontrados.length === 0) {
