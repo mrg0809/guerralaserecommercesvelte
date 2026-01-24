@@ -1,12 +1,18 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { SUPABASE_SERVICE_ROLE_KEY, GEMINI_API_KEY } from '$env/static/private';
+import { SUPABASE_SERVICE_ROLE_KEY } from '$env/static/private';
 import { PUBLIC_SUPABASE_URL } from '$env/static/public';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { jsPDF } from 'jspdf';
 import fs from 'fs';
 import { generateEmbedding, normalizeProductText } from '$lib/utils/embeddings';
+
+// Verificar que GEMINI_API_KEY esté disponible
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+if (!GEMINI_API_KEY) {
+	throw new Error('GEMINI_API_KEY no está configurada en el entorno');
+}
 
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 const createSupabaseAdminClient = () => createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);

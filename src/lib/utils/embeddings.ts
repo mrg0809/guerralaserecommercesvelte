@@ -1,5 +1,10 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { GEMINI_API_KEY } from '$env/static/private';
+
+// Verificar que GEMINI_API_KEY esté disponible
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+if (!GEMINI_API_KEY) {
+	throw new Error('GEMINI_API_KEY no está configurada en el entorno');
+}
 
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
