@@ -244,6 +244,11 @@ async function loadLogoFromUrl(): Promise<string | null> {
                 baseUrl = 'http://localhost:5173';
             }
             
+            // En Vercel, usar el dominio del deployment
+            if (process.env.VERCEL_URL) {
+                baseUrl = `https://${process.env.VERCEL_URL}`;
+            }
+            
             const logoUrl = `${baseUrl}/logorectangular.png`;
             console.log(`[LOG] Intentando cargar logo desde: ${logoUrl}`);
             
@@ -336,9 +341,28 @@ async function createPdfDocument(data: any): Promise<jsPDF> {
     doc.text('Total:', 155, currentY, { align: 'right' }); doc.text(`$${finalTotal.toFixed(2)} MXN`, 195, currentY, { align: 'right' }); currentY += 8;
     doc.setFont('helvetica', 'normal');
     if (notes) { doc.setFontSize(9).setFont('helvetica', 'bold').setTextColor(0,0,0).text('Notas:', 10, currentY); const splitNotes = doc.splitTextToSize(notes, 180); doc.setFontSize(8).setFont('helvetica', 'normal').text(splitNotes, 10, currentY + 4); }
-    currentY = 260; doc.setDrawColor(redColor[0], redColor[1], redColor[2]).line(10, currentY, 200, currentY);
-    doc.setFontSize(7).setTextColor(100, 100, 100).text(`Esta cotización tiene una vigencia de ${quotationValidityDays || 15} días naturales.`, 105, currentY + 4, { align: 'center' });
-    doc.text('Gracias por su preferencia - Guerra Laser México', 105, currentY + 8, { align: 'center' });
+    // Pie de página con datos bancarios
+    if (currentY < 240) {
+        currentY = 240;
+    }
+    doc.setDrawColor(redColor[0], redColor[1], redColor[2]).line(10, currentY, 200, currentY);
+    currentY += 6;
+    
+    // Datos bancarios
+    doc.setFontSize(9).setFont('helvetica', 'bold').setTextColor(0, 0, 0);
+    doc.text('DATOS BANCARIOS PARA DEPÓSITO O TRANSFERENCIA', 105, currentY, { align: 'center' });
+    currentY += 5;
+    
+    doc.setFont('helvetica', 'normal').setFontSize(8).setTextColor(60, 60, 60);
+    doc.text('Banco: BBVA Bancomer', 105, currentY, { align: 'center' }); currentY += 4;
+    doc.text('Nombre: Luis Enrique Guerra Zavala', 105, currentY, { align: 'center' }); currentY += 4;
+    doc.text('Cuenta: 0101373439', 105, currentY, { align: 'center' }); currentY += 4;
+    doc.text('Cuenta interbancaria: 012320001013734399', 105, currentY, { align: 'center' }); currentY += 4;
+    doc.text('Número de tarjeta: 4152 3132 0228 1320', 105, currentY, { align: 'center' }); currentY += 6;
+    
+    doc.setFontSize(7).setTextColor(100, 100, 100);
+    doc.text(`Esta cotización tiene una vigencia de ${quotationValidityDays || 15} días naturales.`, 105, currentY, { align: 'center' });
+    doc.text('Gracias por su preferencia - Guerra Laser México', 105, currentY + 4, { align: 'center' });
     return doc;
 }
 
