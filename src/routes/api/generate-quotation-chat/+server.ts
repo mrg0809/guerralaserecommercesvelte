@@ -7,13 +7,35 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { jsPDF } from 'jspdf';
 import { generateEmbedding, normalizeProductText } from '$lib/utils/embeddings';
 
-// Verificar que GEMINI_API_KEY esté disponible
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-if (!GEMINI_API_KEY) {
-	throw new Error('GEMINI_API_KEY no está configurada en el entorno');
+// Función helper para obtener la instancia de genAI
+async function getGenAI() {
+	let GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+	
+	// Fallback para desarrollo: intentar cargar desde .env
+	if (!GEMINI_API_KEY) {
+		try {
+			const fs = await import('fs');
+			const path = await import('path');
+			const envPath = path.join(process.cwd(), '.env');
+			if (fs.existsSync(envPath)) {
+				const envContent = fs.readFileSync(envPath, 'utf8');
+				const match = envContent.match(/^GEMINI_API_KEY=(.+)$/m);
+				if (match) {
+					GEMINI_API_KEY = match[1].trim();
+					console.log('[LOG] GEMINI_API_KEY cargada desde .env');
+				}
+			}
+		} catch (e) {
+			console.log('[LOG] No se pudo cargar .env:', e);
+		}
+	}
+	
+	if (!GEMINI_API_KEY) {
+		throw new Error('GEMINI_API_KEY no está configurada en el entorno');
+	}
+	
+	return new GoogleGenerativeAI(GEMINI_API_KEY);
 }
-
-const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 const createSupabaseAdminClient = () => createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
 // --- BÚSQUEDA SEMÁNTICA DE PRODUCTOS CON EMBEDDINGS ---
@@ -203,6 +225,7 @@ async function loadLogoFromUrl(): Promise<string | null> {
         
         // Ruta al logo en la carpeta static
         const logoPath = path.join(process.cwd(), 'static', 'logorectangular.png');
+        console.log(`[LOG] Verificando logo en: ${logoPath}`);
         
         if (fs.existsSync(logoPath)) {
             const logoBuffer = fs.readFileSync(logoPath);
@@ -213,18 +236,27 @@ async function loadLogoFromUrl(): Promise<string | null> {
             console.log('[LOG] Logo no encontrado en archivo local, intentando desde URL...');
             
             // Fallback: intentar desde URL si no está disponible localmente
-            const baseUrl = process.env.PUBLIC_SUPABASE_URL?.includes('localhost') 
-                ? 'http://localhost:5173' 
-                : 'https://guerralaser.com';
+            // Usar la URL del deployment actual
+            let baseUrl = 'https://guerralaser.com'; // Default producción
+            
+            // Si estamos en desarrollo, usar localhost
+            if (process.env.NODE_ENV === 'development' || process.env.PUBLIC_SUPABASE_URL?.includes('localhost')) {
+                baseUrl = 'http://localhost:5173';
+            }
             
             const logoUrl = `${baseUrl}/logorectangular.png`;
+            console.log(`[LOG] Intentando cargar logo desde: ${logoUrl}`);
+            
             const response = await fetch(logoUrl);
+            console.log(`[LOG] Response status: ${response.status}`);
             
             if (response.ok) {
                 const arrayBuffer = await response.arrayBuffer();
                 const base64 = Buffer.from(arrayBuffer).toString('base64');
                 console.log('[LOG] Logo cargado desde URL fallback');
                 return `data:image/png;base64,${base64}`;
+            } else {
+                console.log(`[LOG] Error en respuesta: ${response.statusText}`);
             }
         }
         
@@ -318,6 +350,7 @@ export const POST: RequestHandler = async ({ request }) => {
   console.log(`[LOG] Mensaje recibido: "${message}"`);
 
   try {
+    const genAI = await getGenAI();
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     
     // Prompt con Chain of Thought (CoT) para mejor análisis
