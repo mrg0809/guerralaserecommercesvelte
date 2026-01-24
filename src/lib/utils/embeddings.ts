@@ -1,12 +1,13 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-// Verificar que GEMINI_API_KEY esté disponible
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-if (!GEMINI_API_KEY) {
-	throw new Error('GEMINI_API_KEY no está configurada en el entorno');
+// Función helper para obtener la instancia de genAI
+function getGenAI() {
+	const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+	if (!GEMINI_API_KEY) {
+		throw new Error('GEMINI_API_KEY no está configurada en el entorno');
+	}
+	return new GoogleGenerativeAI(GEMINI_API_KEY);
 }
-
-const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
 /**
  * Genera un embedding de texto usando Gemini Embedding Model
@@ -15,6 +16,7 @@ const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
  */
 export async function generateEmbedding(text: string): Promise<number[]> {
     try {
+        const genAI = getGenAI();
         const model = genAI.getGenerativeModel({ model: 'text-embedding-004' });
         const result = await model.embedContent(text);
         return result.embedding.values;
@@ -31,6 +33,7 @@ export async function generateEmbedding(text: string): Promise<number[]> {
  */
 export async function generateEmbeddingsBatch(texts: string[]): Promise<number[][]> {
     try {
+        const genAI = getGenAI();
         const model = genAI.getGenerativeModel({ model: 'text-embedding-004' });
         const promises = texts.map(text => model.embedContent(text));
         const results = await Promise.all(promises);
