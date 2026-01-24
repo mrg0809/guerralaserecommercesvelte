@@ -40,6 +40,8 @@
 	let quotationValidityDays = $state(15);
 	let paymentTerms = $state('Contado');
 	let notes = $state('');
+	let shippingCost = $state(0);
+	let installationCost = $state(0);
 
 	// Función para cargar datos de cliente existente
 	function handleCustomerSelect(customer: Customer) {
@@ -214,7 +216,8 @@
 
 	function quotationTotal(): number {
 		const subtotal = quotationSubtotal();
-		return subtotal - generalDiscountAmount();
+		const total = subtotal - generalDiscountAmount();
+		return total + shippingCost + installationCost;
 	}
 
 	function resetQuotation() {
@@ -230,6 +233,8 @@
 		quotationValidityDays = 15;
 		paymentTerms = 'Contado';
 		notes = '';
+		shippingCost = 0;
+		installationCost = 0;
 		savedQuotationId = null;
 	}
 
@@ -294,6 +299,8 @@
 					subtotal: subtotal,
 					general_discount_percentage: generalDiscount,
 					discount_amount: generalDiscountAmt,
+					shipping_cost: shippingCost || 0,
+					installation_cost: installationCost || 0,
 					total_amount: total,
 					validity_days: quotationValidityDays,
 					payment_terms: paymentTerms,
@@ -632,6 +639,18 @@
 			currentY += 5;
 		}
 		
+		if (shippingCost > 0) {
+			doc.text('Envío:', 155, currentY, { align: 'right' });
+			doc.text(`$${shippingCost.toFixed(2)} MXN`, 195, currentY, { align: 'right' });
+			currentY += 5;
+		}
+		
+		if (installationCost > 0) {
+			doc.text('Instalación:', 155, currentY, { align: 'right' });
+			doc.text(`$${installationCost.toFixed(2)} MXN`, 195, currentY, { align: 'right' });
+			currentY += 5;
+		}
+		
 		doc.setFont('helvetica', 'bold');
 		doc.setFontSize(11);
 		doc.setTextColor(blueColor[0], blueColor[1], blueColor[2]);
@@ -654,15 +673,38 @@
 		}
 
 		// Pie de página
-		if (currentY < 260) {
-			currentY = 260;
+		if (currentY < 240) {
+			currentY = 240;
 		}
 		doc.setDrawColor(redColor[0], redColor[1], redColor[2]);
 		doc.line(10, currentY, 200, currentY);
+		currentY += 6;
+		
+		// Datos bancarios
+		doc.setFontSize(9);
+		doc.setFont('helvetica', 'bold');
+		doc.setTextColor(0, 0, 0);
+		doc.text('DATOS BANCARIOS PARA DEPÓSITO O TRANSFERENCIA', 105, currentY, { align: 'center' });
+		currentY += 5;
+		
+		doc.setFont('helvetica', 'normal');
+		doc.setFontSize(8);
+		doc.setTextColor(60, 60, 60);
+		doc.text('Banco: BBVA Bancomer', 105, currentY, { align: 'center' });
+		currentY += 4;
+		doc.text('Nombre: Luis Enrique Guerra Zavala', 105, currentY, { align: 'center' });
+		currentY += 4;
+		doc.text('Cuenta: 0101373439', 105, currentY, { align: 'center' });
+		currentY += 4;
+		doc.text('Cuenta interbancaria: 012320001013734399', 105, currentY, { align: 'center' });
+		currentY += 4;
+		doc.text('Número de tarjeta: 4152 3132 0228 1320', 105, currentY, { align: 'center' });
+		currentY += 6;
+		
 		doc.setFontSize(7);
 		doc.setTextColor(100, 100, 100);
-		doc.text('Esta cotización tiene una vigencia de ' + (quotationValidityDays || 15) + ' días naturales a partir de la fecha de emisión.', 105, currentY + 4, { align: 'center' });
-		doc.text('Gracias por su preferencia - Guerra Laser México', 105, currentY + 8, { align: 'center' });
+		doc.text('Esta cotización tiene una vigencia de ' + (quotationValidityDays || 15) + ' días naturales a partir de la fecha de emisión.', 105, currentY, { align: 'center' });
+		doc.text('Gracias por su preferencia - Guerra Laser México', 105, currentY + 4, { align: 'center' });
 
 		return doc;
 	}
@@ -777,7 +819,7 @@
 		<!-- Condiciones comerciales -->
 		<div class="bg-white rounded-lg shadow-md p-6 mb-6">
 			<h2 class="text-xl font-bold mb-4">Condiciones Comerciales</h2>
-			<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+			<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
 				<div>
 					<label class="block text-sm font-medium text-gray-700 mb-1">Vigencia (días)</label>
 					<input
@@ -796,15 +838,37 @@
 						placeholder="Ej: Contado, Crédito 30 días"
 					/>
 				</div>
-				<div class="md:col-span-1">
-					<label class="block text-sm font-medium text-gray-700 mb-1">Notas adicionales</label>
-					<textarea
-						rows="1"
+				<div>
+					<label class="block text-sm font-medium text-gray-700 mb-1">Costo de envío (opcional)</label>
+					<input
+						type="number"
+						step="0.01"
+						min="0"
 						class="w-full border rounded-md px-3 py-2"
-						bind:value={notes}
-						placeholder="Información adicional..."
-					></textarea>
+						bind:value={shippingCost}
+						placeholder="0.00"
+					/>
 				</div>
+				<div>
+					<label class="block text-sm font-medium text-gray-700 mb-1">Costo de instalación (opcional)</label>
+					<input
+						type="number"
+						step="0.01"
+						min="0"
+						class="w-full border rounded-md px-3 py-2"
+						bind:value={installationCost}
+						placeholder="0.00"
+					/>
+				</div>
+			</div>
+			<div class="mt-4">
+				<label class="block text-sm font-medium text-gray-700 mb-1">Notas adicionales</label>
+				<textarea
+					rows="2"
+					class="w-full border rounded-md px-3 py-2"
+					bind:value={notes}
+					placeholder="Información adicional..."
+				></textarea>
 			</div>
 		</div>
 
@@ -966,6 +1030,18 @@
 											<div class="flex justify-between text-sm text-red-600">
 												<span class="font-medium">Descuento ({generalDiscount}%):</span>
 												<span class="font-semibold">-${generalDiscountAmount().toFixed(2)}</span>
+											</div>
+										{/if}
+										{#if shippingCost > 0}
+											<div class="flex justify-between text-sm">
+												<span class="font-medium">Envío:</span>
+												<span class="font-semibold">${shippingCost.toFixed(2)}</span>
+											</div>
+										{/if}
+										{#if installationCost > 0}
+											<div class="flex justify-between text-sm">
+												<span class="font-medium">Instalación:</span>
+												<span class="font-semibold">${installationCost.toFixed(2)}</span>
 											</div>
 										{/if}
 										<div class="flex justify-between text-lg font-bold border-t pt-2">

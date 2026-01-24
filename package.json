@@ -13,6 +13,7 @@
 	},
 	"devDependencies": {
 		"@sveltejs/adapter-auto": "^7.0.0",
+		"@sveltejs/adapter-vercel": "^6.3.1",
 		"@sveltejs/kit": "^2.49.1",
 		"@sveltejs/vite-plugin-svelte": "^6.2.1",
 		"autoprefixer": "^10.4.22",
@@ -24,6 +25,7 @@
 		"vite": "^7.2.6"
 	},
 	"dependencies": {
+		"@google/generative-ai": "^0.24.1",
 		"@supabase/auth-helpers-sveltekit": "latest",
 		"@supabase/supabase-js": "^2.87.1",
 		"jspdf": "^2.5.2",

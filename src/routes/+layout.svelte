@@ -3,6 +3,7 @@
 	import { page } from '$app/stores';
 	import favicon from '$lib/assets/favicon.svg';
 	import { cart } from '$lib/stores/cart';
+	import { userStore } from '$lib/stores/user';
 	import { supabase } from '$lib/supabaseClient';
 	import { getDisplayPrice } from '$lib/utils';
 	import type { Category } from '$lib/types';
@@ -30,6 +31,15 @@ page.subscribe(($page) => {
 	});
 
 	onMount(async () => {
+		// Inicializar store de usuario si hay sesión
+		const {
+			data: { session }
+		} = await supabase.auth.getSession();
+		
+		if (session?.user) {
+			await userStore.init();
+		}
+		
 		// Load categories for navigation
 		const { data: cats } = await supabase
 			.from('categories')
@@ -40,6 +50,15 @@ page.subscribe(($page) => {
 		if (cats) {
 			categories = cats;
 		}
+		
+		// Escuchar cambios de autenticación
+		supabase.auth.onAuthStateChange(async (event, session) => {
+			if (event === 'SIGNED_IN' && session?.user) {
+				await userStore.setUser(session.user);
+			} else if (event === 'SIGNED_OUT') {
+				userStore.logout();
+			}
+		});
 	});
 
 	function getChildCategories(parentId: string): Category[] {
