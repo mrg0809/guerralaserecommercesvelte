@@ -194,14 +194,65 @@ async function searchProductsByText(supabase: SupabaseClient, productInfo: { nom
 }
 
 
+// --- CARGAR LOGO DESDE ARCHIVO LOCAL (como en cotizaciones normales) ---
+async function loadLogoFromUrl(): Promise<string | null> {
+    try {
+        // Intentar leer el logo desde el sistema de archivos local
+        const fs = await import('fs');
+        const path = await import('path');
+        
+        // Ruta al logo en la carpeta static
+        const logoPath = path.join(process.cwd(), 'static', 'logorectangular.png');
+        
+        if (fs.existsSync(logoPath)) {
+            const logoBuffer = fs.readFileSync(logoPath);
+            const base64 = logoBuffer.toString('base64');
+            console.log('[LOG] Logo cargado desde archivo local');
+            return `data:image/png;base64,${base64}`;
+        } else {
+            console.log('[LOG] Logo no encontrado en archivo local, intentando desde URL...');
+            
+            // Fallback: intentar desde URL si no está disponible localmente
+            const baseUrl = process.env.PUBLIC_SUPABASE_URL?.includes('localhost') 
+                ? 'http://localhost:5173' 
+                : 'https://guerralaser.com';
+            
+            const logoUrl = `${baseUrl}/logorectangular.png`;
+            const response = await fetch(logoUrl);
+            
+            if (response.ok) {
+                const arrayBuffer = await response.arrayBuffer();
+                const base64 = Buffer.from(arrayBuffer).toString('base64');
+                console.log('[LOG] Logo cargado desde URL fallback');
+                return `data:image/png;base64,${base64}`;
+            }
+        }
+        
+        console.log('[LOG] No se pudo cargar el logo');
+        return null;
+    } catch (error) {
+        console.error('[LOG] Error cargando logo:', error);
+        return null;
+    }
+}
+
 // --- GENERACIÓN DE PDF ---
 async function createPdfDocument(data: any): Promise<jsPDF> {
     const { quotationItems, customerName, quotationValidityDays, notes, shippingCost, installationCost } = data;
     const doc = new jsPDF();
     let currentY = 10;
     const redColor = [220, 38, 38]; const blueColor = [37, 99, 235];
-    // El logo se omite en el chat para evitar problemas con el sistema de archivos en producción
-    // En el futuro se podría cargar desde una URL o base64 si es necesario
+    
+    // Intentar cargar el logo desde URL
+    try {
+        const logoBase64 = await loadLogoFromUrl();
+        if (logoBase64) {
+            doc.addImage(logoBase64, 'PNG', 10, currentY, 50, 0);
+            currentY += 17;
+        }
+    } catch (e) {
+        console.error("[LOG] Logo no encontrado.");
+    }
     doc.setFontSize(16).setFont('helvetica', 'bold').setTextColor(redColor[0], redColor[1], redColor[2]);
     doc.text('COTIZACIÓN', 200, 15, { align: 'right' });
     doc.setFontSize(9).setFont('helvetica', 'normal').setTextColor(0, 0, 0);
