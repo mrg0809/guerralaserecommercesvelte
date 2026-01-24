@@ -5,7 +5,6 @@ import { SUPABASE_SERVICE_ROLE_KEY } from '$env/static/private';
 import { PUBLIC_SUPABASE_URL } from '$env/static/public';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { jsPDF } from 'jspdf';
-import fs from 'fs';
 import { generateEmbedding, normalizeProductText } from '$lib/utils/embeddings';
 
 // Verificar que GEMINI_API_KEY esté disponible
@@ -201,12 +200,8 @@ async function createPdfDocument(data: any): Promise<jsPDF> {
     const doc = new jsPDF();
     let currentY = 10;
     const redColor = [220, 38, 38]; const blueColor = [37, 99, 235];
-    try {
-        const logoBuffer = fs.readFileSync('static/logorectangular.png');
-        // CORRECCIÓN: Usar 0 para el alto para que jsPDF calcule la proporción automáticamente
-        doc.addImage(logoBuffer, 'PNG', 10, currentY, 50, 0);
-        currentY += 17; // Ajustar el espacio si es necesario
-    } catch (e) { console.error("[LOG] Logo no encontrado."); }
+    // El logo se omite en el chat para evitar problemas con el sistema de archivos en producción
+    // En el futuro se podría cargar desde una URL o base64 si es necesario
     doc.setFontSize(16).setFont('helvetica', 'bold').setTextColor(redColor[0], redColor[1], redColor[2]);
     doc.text('COTIZACIÓN', 200, 15, { align: 'right' });
     doc.setFontSize(9).setFont('helvetica', 'normal').setTextColor(0, 0, 0);
@@ -393,14 +388,19 @@ Ahora procesa el siguiente mensaje:
         shippingCost: parsedResult.envio,
         installationCost: parsedResult.instalacion
     });
-    const pdfName = `cotizacion-chat-${Date.now()}.pdf`;
-    const pdfPath = `static/cotizaciones/${pdfName}`;
-    const dir = 'static/cotizaciones';
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(pdfPath, Buffer.from(pdfDoc.output('arraybuffer')));
     
-    console.log(`[LOG] PDF generado: ${pdfPath}`);
-    return json({ success: true, pdfUrl: `/cotizaciones/${pdfName}` });
+    // Generar PDF en memoria y devolverlo como base64
+    const pdfBuffer = Buffer.from(pdfDoc.output('arraybuffer'));
+    const pdfBase64 = pdfBuffer.toString('base64');
+    const pdfName = `cotizacion-chat-${Date.now()}.pdf`;
+    
+    console.log(`[LOG] PDF generado en memoria: ${pdfName}`);
+    return json({ 
+        success: true, 
+        pdfData: pdfBase64,
+        pdfName: pdfName,
+        downloadUrl: `data:application/pdf;base64,${pdfBase64}`
+    });
 
   } catch (error: any) {
     console.error('[LOG] Error CRÍTICO en el proceso:', error);
