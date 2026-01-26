@@ -33,7 +33,7 @@ function createUserStore() {
 	let lastCacheTime = 0;
 	
 	// Sesión expirada y refresh
-	let sessionExpired = $state(false);
+	let sessionExpired = false;
 	let refreshInterval: NodeJS.Timeout | null = null;
 	const SESSION_CHECK_INTERVAL = 30 * 1000; // Verificar cada 30 segundos
 	const SESSION_WARNING_TIME = 5 * 60 * 1000; // Advertir 5 minutos antes de expirar
