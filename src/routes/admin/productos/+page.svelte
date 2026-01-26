@@ -309,9 +309,9 @@
 			console.log('🔍 Iniciando consulta a Supabase...');
 			
 			// Aumentar timeout a 30 segundos y agregar diagnóstico
-			const timeoutPromise = new Promise((_, reject) => 
-				setTimeout(() => reject(new Error('Timeout al cargar productos (30s)'), 30000)
-			);
+			const timeoutPromise = new Promise((_, reject) => {
+				setTimeout(() => reject(new Error('Timeout al cargar productos (30s)')), 30000);
+			});
 			
 			const dataPromise = supabase
 				.from('products')
@@ -365,9 +365,9 @@
 			console.log('🔍 Iniciando consulta de variantes a Supabase...');
 			
 			// Timeout de 15 segundos para variantes
-			const timeoutPromise = new Promise((_, reject) => 
-				setTimeout(() => reject(new Error('Timeout al cargar variantes (15s)')), 15000)
-			);
+			const timeoutPromise = new Promise((_, reject) => {
+				setTimeout(() => reject(new Error('Timeout al cargar variantes (15s)')), 15000);
+			});
 			
 			const dataPromise = supabase
 				.from('product_variants')
@@ -1089,7 +1089,9 @@
 		try {
 			// Eliminar descuentos existentes con timeout
 			const deletePromise = supabase.from('product_discounts').delete().eq('product_id', productId);
-			await Promise.race([deletePromise, new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout eliminando descuentos')), 5000))]);
+			await Promise.race([deletePromise, new Promise((_, reject) => {
+				setTimeout(() => reject(new Error('Timeout eliminando descuentos')), 5000);
+			})]);
 
 			// Agregar nuevos descuentos seleccionados
 			if (selectedDiscounts.length > 0) {
@@ -1099,7 +1101,9 @@
 				}));
 
 				const insertPromise = supabase.from('product_discounts').insert(discountInserts);
-				await Promise.race([insertPromise, new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout insertando descuentos')), 5000))]);
+				await Promise.race([insertPromise, new Promise((_, reject) => {
+				setTimeout(() => reject(new Error('Timeout insertando descuentos')), 5000);
+			})]);
 			}
 			console.log('✅ Descuentos guardados');
 		} catch (error) {
@@ -1113,7 +1117,9 @@
 		try {
 			// Eliminar tags existentes con timeout
 			const deletePromise = supabase.from('product_tags').delete().eq('product_id', productId);
-			await Promise.race([deletePromise, new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout eliminando tags')), 5000))]);
+			await Promise.race([deletePromise, new Promise((_, reject) => {
+				setTimeout(() => reject(new Error('Timeout eliminando tags')), 5000);
+			})]);
 
 			// Agregar nuevas tags seleccionadas
 			if (selectedTags.length > 0) {
@@ -1123,7 +1129,9 @@
 				}));
 
 				const insertPromise = supabase.from('product_tags').insert(tagInserts);
-				await Promise.race([insertPromise, new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout insertando tags')), 5000))]);
+				await Promise.race([insertPromise, new Promise((_, reject) => {
+				setTimeout(() => reject(new Error('Timeout insertando tags')), 5000);
+			})]);
 			}
 			console.log('✅ Tags guardados');
 		} catch (error) {
@@ -1137,7 +1145,9 @@
 		try {
 			// Reemplaza todas las variantes actuales por las definidas en la UI
 			const deletePromise = supabase.from('product_variants').delete().eq('product_id', productId);
-			await Promise.race([deletePromise, new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout eliminando variantes')), 5000))]);
+			await Promise.race([deletePromise, new Promise((_, reject) => {
+				setTimeout(() => reject(new Error('Timeout eliminando variantes')), 5000);
+			})]);
 
 			if (variants.length === 0) {
 				console.log('🔍 No hay variantes que guardar');
@@ -1154,7 +1164,9 @@
 			}));
 
 			const insertPromise = supabase.from('product_variants').insert(inserts);
-			await Promise.race([insertPromise, new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout insertando variantes')), 5000))]);
+			await Promise.race([insertPromise, new Promise((_, reject) => {
+				setTimeout(() => reject(new Error('Timeout insertando variantes')), 5000);
+			})]);
 			console.log('✅ Variantes guardadas');
 		} catch (error) {
 			console.error('❌ Error en saveProductVariants:', error);
