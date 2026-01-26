@@ -6,6 +6,7 @@
 	import { userStore } from '$lib/stores/user';
 	import { supabase } from '$lib/supabaseClient';
 	import { getDisplayPrice } from '$lib/utils';
+	import ReauthModal from '$lib/components/ReauthModal.svelte';
 	import type { Category } from '$lib/types';
 	import '../app.css';
 
@@ -696,4 +697,19 @@ page.subscribe(($page) => {
 	</div>
     {/if}
 
-</div>
+    <!-- Modal de Reautenticación -->
+    <ReauthModal 
+        show={$userStore.sessionExpired}
+        onReauth={() => {
+            console.log(' Reautenticación completada, recargando página...');
+			window.location.reload();
+        }}
+        onsuccess={(e) => {
+			userStore.handleReauthSuccess(e.detail.session, e.detail.user);
+		}}
+        onlogout={() => {
+			window.location.href = '/login';
+		}}
+    />
+
+</svelte>

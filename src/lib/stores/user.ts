@@ -31,9 +31,67 @@ function createUserStore() {
 	let cacheTimeout: NodeJS.Timeout | null = null;
 	const CACHE_DURATION = 5 * 60 * 1000; // 5 minutos
 	let lastCacheTime = 0;
+	
+	// Sesión expirada y refresh
+	let sessionExpired = $state(false);
+	let refreshInterval: NodeJS.Timeout | null = null;
+	const SESSION_CHECK_INTERVAL = 30 * 1000; // Verificar cada 30 segundos
+	const SESSION_WARNING_TIME = 5 * 60 * 1000; // Advertir 5 minutos antes de expirar
+
+	// Función para verificar si la sesión está por expirar
+	function checkSessionExpiry() {
+		const token = localStorage.getItem('sb-access-token') || 
+					  localStorage.getItem('supabase.auth.token');
+		
+		if (token) {
+			try {
+				const tokenParts = token.split('.');
+				if (tokenParts.length === 3) {
+					const payload = JSON.parse(atob(tokenParts[1]));
+					const now = Date.now() / 1000;
+					const exp = payload.exp;
+					
+					if (exp) {
+						const timeUntilExpiry = exp - now;
+						
+						// Si expira en menos de 5 minutos, marcar como expirada
+						if (timeUntilExpiry < SESSION_WARNING_TIME / 1000) {
+							console.log('🔍 Sesión por expirar, mostrando modal de reautenticación');
+							sessionExpired = true;
+							return true;
+						}
+					}
+				}
+			} catch (error) {
+				console.warn('Error verificando expiración del token:', error);
+			}
+		}
+		
+		return false;
+	}
+
+	// Iniciar monitoreo de sesión
+	function startSessionMonitoring() {
+		if (refreshInterval) clearInterval(refreshInterval);
+		
+		refreshInterval = setInterval(() => {
+			checkSessionExpiry();
+		}, SESSION_CHECK_INTERVAL);
+	}
+
+	// Detener monitoreo de sesión
+	function stopSessionMonitoring() {
+		if (refreshInterval) {
+			clearInterval(refreshInterval);
+			refreshInterval = null;
+		}
+	}
 
 	return {
 		subscribe,
+		get sessionExpired() {
+			return sessionExpired;
+		},
 		/**
 		 * Inicializa el store cargando el usuario actual y sus permisos
 		 */
@@ -98,6 +156,9 @@ function createUserStore() {
 					}
 					
 					console.log('✅ UserStore inicializado con cache');
+					
+					// Iniciar monitoreo de sesión
+					startSessionMonitoring();
 				} else {
 					console.log('🔍 No hay sesión de usuario');
 					set({
@@ -275,6 +336,50 @@ function createUserStore() {
 			});
 			// Limpiar cache
 			lastCacheTime = 0;
+		},
+
+		/**
+		 * Maneja reautenticación exitosa
+		 */
+		async handleReauthSuccess(session: any, user: any) {
+			console.log('🔍 Procesando reautenticación exitosa...');
+			sessionExpired = false;
+			
+			// Actualizar el store con el nuevo usuario
+			try {
+				const userPermissions = await getUserRolesAndPermissions(user.id);
+				
+				set({
+					user,
+					roles: userPermissions.roles,
+					permissions: userPermissions.permissions,
+					loading: false,
+					initialized: true
+				});
+				
+				// Guardar cache persistente
+				try {
+					localStorage.setItem('user_cache', JSON.stringify({
+						user,
+						roles: userPermissions.roles,
+						permissions: userPermissions.permissions,
+						loading: false,
+						initialized: true,
+						timestamp: Date.now()
+					}));
+				} catch (cacheError) {
+					console.warn('No se pudo guardar cache persistente:', cacheError);
+				}
+				
+				// Reiniciar monitoreo de sesión
+				startSessionMonitoring();
+				lastCacheTime = Date.now();
+				
+				console.log('✅ Reautenticación completada exitosamente');
+			} catch (error) {
+				console.error('❌ Error en reautenticación:', error);
+				sessionExpired = true;
+			}
 		},
 
 		/**
