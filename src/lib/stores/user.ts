@@ -54,10 +54,10 @@ function createUserStore() {
 				console.log('🔍 Obteniendo sesión de Supabase...');
 				const sessionStartTime = Date.now();
 				
-				// Timeout para getSession (reducido a 3 segundos para responder más rápido)
+				// Timeout para getSession (reducido a 1 segundo para respuesta ultra rápida)
 				const sessionPromise = supabase.auth.getSession();
 				const timeoutPromise = new Promise<never>((_, reject) => {
-					setTimeout(() => reject(new Error('Timeout obteniendo sesión')), 3000);
+					setTimeout(() => reject(new Error('Timeout obteniendo sesión')), 1000);
 				});
 
 				const result = await Promise.race([sessionPromise, timeoutPromise]);
@@ -120,7 +120,7 @@ function createUserStore() {
 						const { data: { user }, error: userError } = await Promise.race([
 							supabase.auth.getUser(),
 							new Promise<never>((_, reject) => 
-								setTimeout(() => reject(new Error('Timeout obteniendo usuario')), 2000)
+								setTimeout(() => reject(new Error('Timeout obteniendo usuario')), 500)
 							)
 						]);
 						
@@ -143,6 +143,57 @@ function createUserStore() {
 					}
 				}
 			
+				// Si todo falla, intentar extraer roles del token JWT (fallback ultra rápido)
+				console.log('🔍 Intentando extraer roles del token JWT...');
+				try {
+					// Intentar obtener token de localStorage directamente (más rápido)
+					const token = localStorage.getItem('sb-access-token') || 
+								  localStorage.getItem('supabase.auth.token');
+					
+					if (token) {
+						console.log('🔍 Token encontrado en localStorage');
+						// Decodificar JWT (sin verificar firma, solo para extraer datos)
+						const tokenParts = token.split('.');
+						if (tokenParts.length === 3) {
+							const payload = JSON.parse(atob(tokenParts[1]));
+							console.log('🔍 Payload del token:', payload);
+							
+							// Extraer roles del token (si existen)
+							const roles = payload.user_roles || payload.roles || payload.app_metadata?.roles || [];
+							const permissions = payload.permissions || payload.app_metadata?.permissions || [];
+							
+							if (roles.length > 0 || permissions.length > 0) {
+								console.log('🔍 Roles/permisos encontrados en token:', { roles, permissions });
+								
+								// Reconstruir objeto user básico del payload
+								const user: any = {
+									id: payload.sub,
+									email: payload.email,
+									user_metadata: payload.user_metadata || {},
+									app_metadata: payload.app_metadata || {}
+								};
+								
+								set({
+									user,
+									roles: Array.isArray(roles) ? roles : [],
+									permissions: Array.isArray(permissions) ? permissions : [],
+									loading: false,
+									initialized: true
+								});
+								lastCacheTime = Date.now();
+								console.log('✅ Autenticación vía JWT completada');
+								return;
+							} else {
+								console.log('🔍 No se encontraron roles en el token');
+							}
+						}
+					} else {
+						console.log('🔍 No se encontró token en localStorage');
+					}
+				} catch (tokenError) {
+					console.warn('Error extrayendo roles del token:', tokenError);
+				}
+
 				// Si todo falla, intentar modo offline con cache persistente
 				console.log('🔍 Intentando modo offline...');
 				try {
