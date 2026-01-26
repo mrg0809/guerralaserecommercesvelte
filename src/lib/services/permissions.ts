@@ -9,15 +9,22 @@ import type { UserRole, Permission, UserPermissions } from '$lib/types/roles';
  * Obtiene los roles de un usuario
  */
 export async function getUserRoles(userId: string): Promise<UserRole[]> {
+	console.log('🔍 Llamando RPC get_user_roles para:', userId);
+	const startTime = Date.now();
+	
 	const { data, error } = await supabase.rpc('get_user_roles' as any, {
 		user_uuid: userId
 	});
 
+	const endTime = Date.now();
+	console.log(`🔍 RPC get_user_roles completada en ${endTime - startTime}ms`);
+
 	if (error) {
-		console.error('Error obteniendo roles del usuario:', error);
+		console.error('❌ Error en RPC get_user_roles:', error);
 		return [];
 	}
 
+	console.log('🔍 Datos de roles recibidos:', data);
 	return (data || []).map((r: any) => r.role_name as UserRole);
 }
 
@@ -59,15 +66,22 @@ export async function hasRole(userId: string, role: UserRole): Promise<boolean> 
  * Obtiene todos los permisos de un usuario
  */
 export async function getUserPermissions(userId: string): Promise<Permission[]> {
+	console.log('🔍 Llamando RPC get_user_permissions para:', userId);
+	const startTime = Date.now();
+	
 	const { data, error } = await supabase.rpc('get_user_permissions' as any, {
 		user_uuid: userId
 	});
 
+	const endTime = Date.now();
+	console.log(`🔍 RPC get_user_permissions completada en ${endTime - startTime}ms`);
+
 	if (error) {
-		console.error('Error obteniendo permisos del usuario:', error);
+		console.error('❌ Error en RPC get_user_permissions:', error);
 		return [];
 	}
 
+	console.log('🔍 Datos de permisos recibidos:', data);
 	return (data || []).map((p: any) => p.permission_name as Permission);
 }
 
@@ -79,21 +93,31 @@ export async function getUserRolesAndPermissions(userId: string): Promise<UserPe
 	const startTime = Date.now();
 	
 	try {
-		// Agregar timeout de 5 segundos para cada consulta
-		const timeoutPromise = new Promise<never>((_, reject) => {
-			setTimeout(() => reject(new Error('Timeout obteniendo permisos')), 5000);
-		});
-
-		const [roles, permissions] = await Promise.race([
-			Promise.all([
-				getUserRoles(userId),
-				getUserPermissions(userId)
-			]),
-			timeoutPromise
+		// Cargar roles y permisos por separado con timeouts individuales
+		console.log('🔍 Cargando roles...');
+		const rolesStartTime = Date.now();
+		const roles = await Promise.race([
+			getUserRoles(userId),
+			new Promise<never>((_, reject) => 
+				setTimeout(() => reject(new Error('Timeout obteniendo roles')), 10000)
+			)
 		]);
+		const rolesEndTime = Date.now();
+		console.log(`✅ Roles cargados en ${rolesEndTime - rolesStartTime}ms`);
+
+		console.log('🔍 Cargando permisos...');
+		const permissionsStartTime = Date.now();
+		const permissions = await Promise.race([
+			getUserPermissions(userId),
+			new Promise<never>((_, reject) => 
+				setTimeout(() => reject(new Error('Timeout obteniendo permisos')), 10000)
+			)
+		]);
+		const permissionsEndTime = Date.now();
+		console.log(`✅ Permisos cargados en ${permissionsEndTime - permissionsStartTime}ms`);
 
 		const endTime = Date.now();
-		console.log(`✅ Roles y permisos cargados en ${endTime - startTime}ms`);
+		console.log(`✅ Todos los permisos cargados en ${endTime - startTime}ms total`);
 		
 		return { roles, permissions };
 	} catch (error) {
