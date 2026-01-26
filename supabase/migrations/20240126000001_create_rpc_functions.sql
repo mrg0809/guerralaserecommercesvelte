@@ -1,3 +1,7 @@
+-- Eliminar funciones existentes si existen
+DROP FUNCTION IF EXISTS get_user_roles(uuid);
+DROP FUNCTION IF EXISTS get_user_permissions(uuid);
+
 -- Función RPC para obtener roles de un usuario
 CREATE OR REPLACE FUNCTION get_user_roles(user_uuid uuid)
 RETURNS TABLE (role_name text)
