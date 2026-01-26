@@ -54,10 +54,16 @@ page.subscribe(($page) => {
 		
 		// Escuchar cambios de autenticación
 		supabase.auth.onAuthStateChange(async (event, session) => {
+			console.log('🔍 Auth state change:', event);
+			
+			// Solo recargar en cambios reales, no en refresh de token
 			if (event === 'SIGNED_IN' && session?.user) {
 				await userStore.setUser(session.user);
 			} else if (event === 'SIGNED_OUT') {
 				userStore.logout();
+			} else if (event === 'TOKEN_REFRESHED') {
+				// No hacer nada en refresh de token, mantener estado actual
+				console.log('🔍 Token refreshed, manteniendo estado actual');
 			}
 		});
 	});

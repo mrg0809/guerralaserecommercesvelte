@@ -304,14 +304,36 @@ function createUserStore() {
 		 */
 		async setUser(user: User | null) {
 			if (user) {
-				const userPermissions = await getUserRolesAndPermissions(user.id);
-				set({
-					user,
-					roles: userPermissions.roles,
-					permissions: userPermissions.permissions,
-					loading: false,
-					initialized: true
-				});
+				// Si el cache es válido (menos de 5 minutos), no recargar roles
+				const cacheAge = Date.now() - lastCacheTime;
+				if (cacheAge < CACHE_DURATION) {
+					console.log('🔍 setUser: usando cache existente, no recargando roles');
+					update(state => ({ ...state, user, loading: false, initialized: true }));
+					return;
+				}
+
+				// Solo recargar roles si el cache expiró
+				console.log('🔍 setUser: cache expirado, recargando roles en background');
+				
+				// Actualizar usuario inmediatamente con roles del cache
+				update(state => ({ ...state, user, loading: false, initialized: true }));
+				
+				// Recargar roles en background sin bloquear
+				getUserRolesAndPermissions(user.id)
+					.then(userPermissions => {
+						set({
+							user,
+							roles: userPermissions.roles,
+							permissions: userPermissions.permissions,
+							loading: false,
+							initialized: true
+						});
+						lastCacheTime = Date.now();
+					})
+					.catch(error => {
+						console.warn('⚠️ Error recargando roles en background:', error);
+						// No hacer nada, mantener el estado actual
+					});
 			} else {
 				set({
 					user: null,
