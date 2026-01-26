@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
-	// import favicon from '$lib/assets/favicon.svg';
+	import favicon from '$lib/assets/favicon.svg';
 	import { cart } from '$lib/stores/cart';
 	import { userStore } from '$lib/stores/user';
 	import { supabase } from '$lib/supabaseClient';
@@ -696,6 +696,7 @@ page.subscribe(($page) => {
 		</button>
 	</div>
     {/if}
+</div>
 
     <!-- Modal de Reautenticación -->
     <ReauthModal 
