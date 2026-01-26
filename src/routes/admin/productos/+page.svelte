@@ -276,26 +276,41 @@
 	});
 
 	async function loadProducts() {
+		console.log('🔍 Cargando productos...');
 		loading = true;
-		const { data } = await supabase
-			.from('products')
-			.select(`
-				id,
-				name,
-				slug,
-				base_price,
-				stock_quantity,
-				sku,
-				category_id,
-				is_active,
-				is_featured,
-				created_at
-			`)
-			.order('created_at', { ascending: false });
+		
+		try {
+			// Agregar timeout de 10 segundos
+			const timeoutPromise = new Promise((_, reject) => 
+				setTimeout(() => reject(new Error('Timeout al cargar productos')), 10000)
+			);
+			
+			const dataPromise = supabase
+				.from('products')
+				.select(`
+					id,
+					name,
+					slug,
+					base_price,
+					stock_quantity,
+					sku,
+					category_id,
+					is_active,
+					is_featured,
+					created_at
+				`)
+				.order('created_at', { ascending: false });
 
-		if (data) {
-			products = data;
+			const { data } = await Promise.race([dataPromise, timeoutPromise]);
+
+			if (data) {
+				products = data;
+				console.log(`✅ ${products.length} productos cargados`);
+			}
+		} catch (error) {
+			console.error('❌ Error cargando productos:', error);
 		}
+		
 		loading = false;
 	}
 
@@ -888,10 +903,15 @@
 	}
 
 	async function saveProduct() {
+		console.log('🔍 saveProduct() iniciado');
+		console.log('🔍 formData:', formData);
+		console.log('🔍 editingProduct:', editingProduct);
+		
 		try {
 			let productId: string;
 
 			if (editingProduct) {
+				console.log('🔍 Actualizando producto existente...');
 				const { error } = await supabase
 					.from('products')
 					.update(formData)
@@ -899,7 +919,9 @@
 
 				if (error) throw error;
 				productId = editingProduct.id;
+				console.log('✅ Producto actualizado:', productId);
 			} else {
+				console.log('🔍 Creando nuevo producto...');
 				const { data, error } = await supabase
 					.from('products')
 					.insert([formData])
@@ -908,6 +930,7 @@
 				if (error) throw error;
 				if (!data || data.length === 0) throw new Error('No se pudo crear el producto');
 				productId = data[0].id;
+				console.log('✅ Producto creado:', productId);
 			}
 
 			// Subir imágenes nuevas
@@ -936,6 +959,7 @@
 			await loadProducts();
 			await loadAllProductVariants();
 		} catch (error: any) {
+			console.error('❌ Error en saveProduct:', error);
 			alert('Error al guardar producto: ' + error.message);
 		}
 	}
@@ -1556,7 +1580,11 @@
 			</div>
 
 			<!-- Tab Content -->
-			<form onsubmit={(e) => { e.preventDefault(); saveProduct(); }} class="flex-1 overflow-y-auto">
+			<form onsubmit={(e) => { 
+		console.log('🔍 Formulario enviado'); 
+		e.preventDefault(); 
+		saveProduct(); 
+	}} class="flex-1 overflow-y-auto">
 				<div class="p-6">
 					{#if !editingProduct && formData.name.includes('(Copia)')}
 						<!-- Aviso de duplicación -->
@@ -2492,7 +2520,12 @@
 				<!-- Footer con botones -->
 				<div class="border-t bg-gray-50 px-6 py-4 flex gap-4 rounded-b-lg">
 					<button
-						type="submit"
+						type="button"
+						onclick={() => {
+							console.log('🔍 Botón crear producto clickeado');
+							console.log('🔍 formData actual:', formData);
+							saveProduct();
+						}}
 						disabled={uploadingImages}
 						class="flex-1 bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition disabled:bg-gray-400 disabled:cursor-not-allowed font-medium"
 					>
