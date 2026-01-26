@@ -54,10 +54,10 @@ function createUserStore() {
 				console.log('🔍 Obteniendo sesión de Supabase...');
 				const sessionStartTime = Date.now();
 				
-				// Timeout para getSession (aumentado a 10 segundos)
+				// Timeout para getSession (reducido a 3 segundos para responder más rápido)
 				const sessionPromise = supabase.auth.getSession();
 				const timeoutPromise = new Promise<never>((_, reject) => {
-					setTimeout(() => reject(new Error('Timeout obteniendo sesión')), 10000);
+					setTimeout(() => reject(new Error('Timeout obteniendo sesión')), 3000);
 				});
 
 				const result = await Promise.race([sessionPromise, timeoutPromise]);
@@ -79,8 +79,24 @@ function createUserStore() {
 						initialized: true
 					});
 					
-					// Actualizar cache
+					// Actualizar cache y guardar persistente
 					lastCacheTime = Date.now();
+					
+					// Guardar cache persistente para modo offline
+					try {
+						localStorage.setItem('user_cache', JSON.stringify({
+							user: session.user,
+							roles: userPermissions.roles,
+							permissions: userPermissions.permissions,
+							loading: false,
+							initialized: true,
+							timestamp: Date.now()
+						}));
+						console.log('✅ Cache persistente guardado');
+					} catch (cacheError) {
+						console.warn('No se pudo guardar cache persistente:', cacheError);
+					}
+					
 					console.log('✅ UserStore inicializado con cache');
 				} else {
 					console.log('🔍 No hay sesión de usuario');
@@ -104,7 +120,7 @@ function createUserStore() {
 						const { data: { user }, error: userError } = await Promise.race([
 							supabase.auth.getUser(),
 							new Promise<never>((_, reject) => 
-								setTimeout(() => reject(new Error('Timeout obteniendo usuario')), 5000)
+								setTimeout(() => reject(new Error('Timeout obteniendo usuario')), 2000)
 							)
 						]);
 						
@@ -127,7 +143,32 @@ function createUserStore() {
 					}
 				}
 			
+				// Si todo falla, intentar modo offline con cache persistente
+				console.log('🔍 Intentando modo offline...');
+				try {
+					const cached = localStorage.getItem('user_cache');
+					if (cached) {
+						const { timestamp, ...state } = JSON.parse(cached);
+						const age = Date.now() - timestamp;
+						
+						// Usar cache si tiene menos de 2 minutos
+						if (age < 2 * 60 * 1000) {
+							console.log(`🔍 Usando modo offline (cache de ${Math.round(age/1000)}s)`);
+							set({
+								...state,
+								loading: false,
+								initialized: true
+							});
+							lastCacheTime = Date.now();
+							return;
+						}
+					}
+				} catch (offlineError) {
+					console.warn('Error en modo offline:', offlineError);
+				}
+
 				// Si todo falla, establecer como no autenticado
+				console.log('🔍 Modo offline no disponible, estableciendo como no autenticado');
 				set({
 					user: null,
 					roles: [],
