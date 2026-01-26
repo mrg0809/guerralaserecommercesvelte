@@ -712,3 +712,5 @@ page.subscribe(($page) => {
 			window.location.href = '/login';
 		}}
     />
+
+</svelte>
