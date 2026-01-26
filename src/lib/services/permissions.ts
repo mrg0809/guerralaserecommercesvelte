@@ -9,23 +9,40 @@ import type { UserRole, Permission, UserPermissions } from '$lib/types/roles';
  * Obtiene los roles de un usuario
  */
 export async function getUserRoles(userId: string): Promise<UserRole[]> {
-	console.log('🔍 Llamando RPC get_user_roles para:', userId);
+	console.log('🔍 Obteniendo roles para:', userId);
 	const startTime = Date.now();
 	
-	const { data, error } = await supabase.rpc('get_user_roles' as any, {
-		user_uuid: userId
-	});
+	try {
+		// Intentar con RPC primero
+		const { data: rpcData, error: rpcError } = await supabase.rpc('get_user_roles' as any, {
+			user_uuid: userId
+		});
 
-	const endTime = Date.now();
-	console.log(`🔍 RPC get_user_roles completada en ${endTime - startTime}ms`);
+		if (!rpcError && rpcData) {
+			const endTime = Date.now();
+			console.log(`✅ Roles obtenidos via RPC en ${endTime - startTime}ms`);
+			return (rpcData || []).map((r: any) => r.role_name as UserRole);
+		}
 
-	if (error) {
-		console.error('❌ Error en RPC get_user_roles:', error);
+		// Fallback: consulta directa a las tablas
+		console.log('⚠️ RPC falló, usando consulta directa...');
+		const { data: directData, error: directError } = await supabase
+			.from('user_roles' as any)
+			.select('roles(name)')
+			.eq('user_id', userId);
+
+		if (directError) {
+			console.error('❌ Error en consulta directa:', directError);
+			return [];
+		}
+
+		const endTime = Date.now();
+		console.log(`✅ Roles obtenidos via consulta directa en ${endTime - startTime}ms`);
+		return (directData || []).map((ur: any) => ur.roles?.name as UserRole).filter(Boolean);
+	} catch (error) {
+		console.error('❌ Error obteniendo roles:', error);
 		return [];
 	}
-
-	console.log('🔍 Datos de roles recibidos:', data);
-	return (data || []).map((r: any) => r.role_name as UserRole);
 }
 
 /**
@@ -66,23 +83,53 @@ export async function hasRole(userId: string, role: UserRole): Promise<boolean> 
  * Obtiene todos los permisos de un usuario
  */
 export async function getUserPermissions(userId: string): Promise<Permission[]> {
-	console.log('🔍 Llamando RPC get_user_permissions para:', userId);
+	console.log('🔍 Obteniendo permisos para:', userId);
 	const startTime = Date.now();
 	
-	const { data, error } = await supabase.rpc('get_user_permissions' as any, {
-		user_uuid: userId
-	});
+	try {
+		// Intentar con RPC primero
+		const { data: rpcData, error: rpcError } = await supabase.rpc('get_user_permissions' as any, {
+			user_uuid: userId
+		});
 
-	const endTime = Date.now();
-	console.log(`🔍 RPC get_user_permissions completada en ${endTime - startTime}ms`);
+		if (!rpcError && rpcData) {
+			const endTime = Date.now();
+			console.log(`✅ Permisos obtenidos via RPC en ${endTime - startTime}ms`);
+			return (rpcData || []).map((p: any) => p.permission_name as Permission);
+		}
 
-	if (error) {
-		console.error('❌ Error en RPC get_user_permissions:', error);
+		// Fallback: consulta directa a las tablas
+		console.log('⚠️ RPC falló, usando consulta directa...');
+		const { data: directData, error: directError } = await supabase
+			.from('user_roles' as any)
+			.select('role_id, role_permissions(permissions(name))')
+			.eq('user_id', userId);
+
+		if (directError) {
+			console.error('❌ Error en consulta directa:', directError);
+			return [];
+		}
+
+		const endTime = Date.now();
+		console.log(`✅ Permisos obtenidos via consulta directa en ${endTime - startTime}ms`);
+		
+		// Extraer permisos únicos
+		const permissions = new Set<Permission>();
+		(directData || []).forEach((ur: any) => {
+			if (ur.role_permissions) {
+				ur.role_permissions.forEach((rp: any) => {
+					if (rp.permissions?.name) {
+						permissions.add(rp.permissions.name as Permission);
+					}
+				});
+			}
+		});
+		
+		return Array.from(permissions);
+	} catch (error) {
+		console.error('❌ Error obteniendo permisos:', error);
 		return [];
 	}
-
-	console.log('🔍 Datos de permisos recibidos:', data);
-	return (data || []).map((p: any) => p.permission_name as Permission);
 }
 
 /**
@@ -99,7 +146,7 @@ export async function getUserRolesAndPermissions(userId: string): Promise<UserPe
 		const roles = await Promise.race([
 			getUserRoles(userId),
 			new Promise<never>((_, reject) => 
-				setTimeout(() => reject(new Error('Timeout obteniendo roles')), 10000)
+				setTimeout(() => reject(new Error('Timeout obteniendo roles')), 2000)
 			)
 		]);
 		const rolesEndTime = Date.now();
@@ -110,7 +157,7 @@ export async function getUserRolesAndPermissions(userId: string): Promise<UserPe
 		const permissions = await Promise.race([
 			getUserPermissions(userId),
 			new Promise<never>((_, reject) => 
-				setTimeout(() => reject(new Error('Timeout obteniendo permisos')), 10000)
+				setTimeout(() => reject(new Error('Timeout obteniendo permisos')), 2000)
 			)
 		]);
 		const permissionsEndTime = Date.now();
