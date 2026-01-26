@@ -45,16 +45,27 @@ function createUserStore() {
 			}
 
 			console.log('🔍 Inicializando userStore...');
+			console.log('🔍 Verificando configuración de Supabase...');
+			console.log('🔍 Cliente Supabase disponible:', !!supabase);
+			
 			update((state) => ({ ...state, loading: true }));
 
 			try {
-				// Timeout para getSession
+				console.log('🔍 Obteniendo sesión de Supabase...');
+				const sessionStartTime = Date.now();
+				
+				// Timeout para getSession (aumentado a 10 segundos)
 				const sessionPromise = supabase.auth.getSession();
 				const timeoutPromise = new Promise<never>((_, reject) => {
-					setTimeout(() => reject(new Error('Timeout obteniendo sesión')), 3000);
+					setTimeout(() => reject(new Error('Timeout obteniendo sesión')), 10000);
 				});
 
-				const { data: { session } } = await Promise.race([sessionPromise, timeoutPromise]);
+				const result = await Promise.race([sessionPromise, timeoutPromise]);
+				const { data: { session } } = result as any;
+				
+				const sessionEndTime = Date.now();
+				console.log(`🔍 Sesión obtenida en ${sessionEndTime - sessionStartTime}ms`);
+				console.log('🔍 Estado de sesión:', session ? 'Usuario autenticado' : 'No hay sesión');
 
 				if (session?.user) {
 					console.log('🔍 Usuario encontrado, cargando permisos...');
@@ -84,6 +95,39 @@ function createUserStore() {
 				}
 			} catch (error) {
 				console.error('❌ Error inicializando usuario:', error);
+			
+				// Si es timeout de sesión, intentar un enfoque alternativo
+				if (error instanceof Error && error.message === 'Timeout obteniendo sesión') {
+					console.log('🔍 Timeout en getSession, intentando fallback...');
+					try {
+						// Intentar obtener usuario directamente (sin sesión completa)
+						const { data: { user }, error: userError } = await Promise.race([
+							supabase.auth.getUser(),
+							new Promise<never>((_, reject) => 
+								setTimeout(() => reject(new Error('Timeout obteniendo usuario')), 5000)
+							)
+						]);
+						
+						if (user && !userError) {
+							console.log('🔍 Usuario obtenido via fallback, cargando permisos...');
+							const userPermissions = await getUserRolesAndPermissions(user.id);
+							
+							set({
+								user,
+								roles: userPermissions.roles,
+								permissions: userPermissions.permissions,
+								loading: false,
+								initialized: true
+							});
+							lastCacheTime = Date.now();
+							return;
+						}
+					} catch (fallbackError) {
+						console.error('❌ Error en fallback:', fallbackError);
+					}
+				}
+			
+				// Si todo falla, establecer como no autenticado
 				set({
 					user: null,
 					roles: [],
