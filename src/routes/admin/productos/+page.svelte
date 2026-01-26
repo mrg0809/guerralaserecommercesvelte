@@ -904,20 +904,25 @@
 
 	async function saveProduct() {
 		console.log('🔍 saveProduct() iniciado');
-		console.log('🔍 formData:', formData);
-		console.log('🔍 editingProduct:', editingProduct);
+		console.log('🔍 formData:', $state.snapshot(formData));
+		console.log('🔍 editingProduct:', $state.snapshot(editingProduct));
 		
 		try {
 			let productId: string;
 
 			if (editingProduct) {
 				console.log('🔍 Actualizando producto existente...');
+				// Usar snapshot para evitar problemas con proxies
+				const formDataSnapshot = $state.snapshot(formData);
 				const { error } = await supabase
 					.from('products')
-					.update(formData)
+					.update(formDataSnapshot)
 					.eq('id', editingProduct.id);
 
-				if (error) throw error;
+				if (error) {
+					console.error('❌ Error de Supabase:', error);
+					throw error;
+				}
 				productId = editingProduct.id;
 				console.log('✅ Producto actualizado:', productId);
 			} else {
@@ -935,6 +940,7 @@
 
 			// Subir imágenes nuevas
 			if (selectedFiles.length > 0) {
+				console.log('🔍 Subiendo imágenes...');
 				const uploadSuccess = await uploadProductImages(productId);
 				if (!uploadSuccess) {
 					alert('El producto se guardó pero hubo errores al subir algunas imágenes');
@@ -942,22 +948,28 @@
 			}
 
 			// Guardar descuentos
+			console.log('🔍 Guardando descuentos...');
 			await saveProductDiscounts(productId);
 
 			// Guardar etiquetas
+			console.log('🔍 Guardando etiquetas...');
 			await saveProductTags(productId);
 
 			// Guardar variantes
+			console.log('🔍 Guardando variantes...');
 			await saveProductVariants(productId);
 
 			// Guardar datos PIM
+			console.log('🔍 Guardando datos PIM...');
 			await saveSatData(productId);
 			await saveAmazonData(productId);
 			await saveMercadolibreData(productId);
 
+			console.log('🔍 Cerrando modal y recargando...');
 			closeModal();
 			await loadProducts();
 			await loadAllProductVariants();
+			console.log('✅ Proceso completado');
 		} catch (error: any) {
 			console.error('❌ Error en saveProduct:', error);
 			alert('Error al guardar producto: ' + error.message);
@@ -965,51 +977,81 @@
 	}
 
 	async function saveProductDiscounts(productId: string) {
-		// Eliminar descuentos existentes
-		await supabase.from('product_discounts').delete().eq('product_id', productId);
+		console.log('🔍 saveProductDiscounts iniciado');
+		try {
+			// Eliminar descuentos existentes con timeout
+			const deletePromise = supabase.from('product_discounts').delete().eq('product_id', productId);
+			await Promise.race([deletePromise, new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout eliminando descuentos')), 5000))]);
 
-		// Agregar nuevos descuentos seleccionados
-		if (selectedDiscounts.length > 0) {
-			const discountInserts = selectedDiscounts.map(discountId => ({
-				product_id: productId,
-				discount_id: discountId
-			}));
+			// Agregar nuevos descuentos seleccionados
+			if (selectedDiscounts.length > 0) {
+				const discountInserts = selectedDiscounts.map(discountId => ({
+					product_id: productId,
+					discount_id: discountId
+				}));
 
-			await supabase.from('product_discounts').insert(discountInserts);
+				const insertPromise = supabase.from('product_discounts').insert(discountInserts);
+				await Promise.race([insertPromise, new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout insertando descuentos')), 5000))]);
+			}
+			console.log('✅ Descuentos guardados');
+		} catch (error) {
+			console.error('❌ Error en saveProductDiscounts:', error);
+			throw error;
 		}
 	}
 
 	async function saveProductTags(productId: string) {
-		// Eliminar tags existentes
-		await supabase.from('product_tags').delete().eq('product_id', productId);
+		console.log('🔍 saveProductTags iniciado');
+		try {
+			// Eliminar tags existentes con timeout
+			const deletePromise = supabase.from('product_tags').delete().eq('product_id', productId);
+			await Promise.race([deletePromise, new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout eliminando tags')), 5000))]);
 
-		// Agregar nuevas tags seleccionadas
-		if (selectedTags.length > 0) {
-			const tagInserts = selectedTags.map(tagId => ({
-				product_id: productId,
-				tag_id: tagId
-			}));
+			// Agregar nuevas tags seleccionadas
+			if (selectedTags.length > 0) {
+				const tagInserts = selectedTags.map(tagId => ({
+					product_id: productId,
+					tag_id: tagId
+				}));
 
-			await supabase.from('product_tags').insert(tagInserts);
+				const insertPromise = supabase.from('product_tags').insert(tagInserts);
+				await Promise.race([insertPromise, new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout insertando tags')), 5000))]);
+			}
+			console.log('✅ Tags guardados');
+		} catch (error) {
+			console.error('❌ Error en saveProductTags:', error);
+			throw error;
 		}
 	}
 
 	async function saveProductVariants(productId: string) {
-		// Reemplaza todas las variantes actuales por las definidas en la UI
-		await supabase.from('product_variants').delete().eq('product_id', productId);
+		console.log('🔍 saveProductVariants iniciado');
+		try {
+			// Reemplaza todas las variantes actuales por las definidas en la UI
+			const deletePromise = supabase.from('product_variants').delete().eq('product_id', productId);
+			await Promise.race([deletePromise, new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout eliminando variantes')), 5000))]);
 
-		if (variants.length === 0) return;
+			if (variants.length === 0) {
+				console.log('🔍 No hay variantes que guardar');
+				return;
+			}
 
-		const inserts = variants.map(v => ({
-			product_id: productId,
-			name: v.name,
-			sku: v.sku,
-			price: v.price || 0,
-			stock_quantity: v.stock_quantity || 0,
-			is_active: v.is_active
-		}));
+			const inserts = variants.map(v => ({
+				product_id: productId,
+				name: v.name,
+				sku: v.sku,
+				price: v.price,
+				stock_quantity: v.stock_quantity,
+				is_active: v.is_active
+			}));
 
-		await supabase.from('product_variants').insert(inserts);
+			const insertPromise = supabase.from('product_variants').insert(inserts);
+			await Promise.race([insertPromise, new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout insertando variantes')), 5000))]);
+			console.log('✅ Variantes guardadas');
+		} catch (error) {
+			console.error('❌ Error en saveProductVariants:', error);
+			throw error;
+		}
 	}
 
 	async function saveSatData(productId: string) {
