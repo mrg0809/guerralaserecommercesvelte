@@ -94,20 +94,9 @@
 				wasAuthenticated = true;
 			}
 			
-			// Solo verificar permisos si:
-			// 1. El store está inicializado
-			// 2. No está cargando
-			// 3. Hay una sesión válida de Supabase
-			if (state.initialized && !state.loading && hasValidSession) {
-				// Solo redirigir si nunca estuvo autenticado (no es un timeout temporal)
-				if (!state.user && !wasAuthenticated) {
-					console.log('🔍 Admin: Usuario nunca autenticado, redirigiendo a login');
-					goto('/login');
-				} else if (state.user && !state.permissions.includes('view_admin_panel')) {
-					console.log('🔍 Admin: Usuario sin permisos de admin, redirigiendo a home');
-					goto('/');
-				}
-			}
+			// NO REDIRIGIR AUTOMÁTICAMENTE - La verificación inicial en onMount es suficiente
+			// Esto evita que el usuario sea sacado mientras trabaja en modales
+			console.log('🔍 Admin: Estado del usuario actualizado, manteniendo en página actual');
 		});
 
 		return () => {
