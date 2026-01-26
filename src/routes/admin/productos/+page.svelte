@@ -268,11 +268,36 @@
 	});
 
 	onMount(async () => {
-		await loadProducts();
-		await loadCategories();
-		await loadDiscounts();
-		await loadTags();
-		await loadAllProductVariants();
+		console.log('🔍 Iniciando carga de datos del módulo de productos...');
+		
+		try {
+			// Primero probar la conexión
+			const connectionOk = await testSupabaseConnection();
+			if (!connectionOk) {
+				console.error('❌ No se puede continuar sin conexión a Supabase');
+				return;
+			}
+			
+			// Cargar secuencialmente para evitar sobrecargar la base de datos
+			console.log('🔍 Paso 1/5: Cargando productos...');
+			await loadProducts();
+			
+			console.log('🔍 Paso 2/5: Cargando categorías...');
+			await loadCategories();
+			
+			console.log('🔍 Paso 3/5: Cargando descuentos...');
+			await loadDiscounts();
+			
+			console.log('🔍 Paso 4/5: Cargando etiquetas...');
+			await loadTags();
+			
+			console.log('🔍 Paso 5/5: Cargando variantes...');
+			await loadAllProductVariants();
+			
+			console.log('✅ Todos los datos cargados exitosamente');
+		} catch (error) {
+			console.error('❌ Error en la carga inicial:', error);
+		}
 	});
 
 	async function loadProducts() {
@@ -280,9 +305,12 @@
 		loading = true;
 		
 		try {
-			// Agregar timeout de 10 segundos
+			const startTime = Date.now();
+			console.log('🔍 Iniciando consulta a Supabase...');
+			
+			// Aumentar timeout a 30 segundos y agregar diagnóstico
 			const timeoutPromise = new Promise((_, reject) => 
-				setTimeout(() => reject(new Error('Timeout al cargar productos')), 10000)
+				setTimeout(() => reject(new Error('Timeout al cargar productos (30s)'), 30000)
 			);
 			
 			const dataPromise = supabase
@@ -301,43 +329,123 @@
 				`)
 				.order('created_at', { ascending: false });
 
-			const { data } = await Promise.race([dataPromise, timeoutPromise]);
+			console.log('🔍 Esperando respuesta de Supabase...');
+			const result = await Promise.race([dataPromise, timeoutPromise]);
+			const { data, error } = result as any;
+			
+			const endTime = Date.now();
+			console.log(`🔍 Respuesta recibida en ${endTime - startTime}ms`);
+
+			if (error) {
+				console.error('❌ Error de Supabase:', error);
+				throw error;
+			}
 
 			if (data) {
 				products = data;
-				console.log(`✅ ${products.length} productos cargados`);
+				console.log(`✅ ${products.length} productos cargados en ${endTime - startTime}ms`);
+			} else {
+				console.log('🔍 No se encontraron productos');
+				products = [];
 			}
 		} catch (error) {
 			console.error('❌ Error cargando productos:', error);
+			// No lanzar el error para no bloquear la UI, solo mostrar en consola
+			products = [];
 		}
 		
 		loading = false;
 	}
 
 	async function loadAllProductVariants() {
-		// Cargar todas las variantes de una vez
-		const { data } = await supabase
-			.from('product_variants')
-			.select('*')
-			.order('created_at');
+		console.log('🔍 Cargando variantes de productos...');
+		
+		try {
+			const startTime = Date.now();
+			console.log('🔍 Iniciando consulta de variantes a Supabase...');
+			
+			// Timeout de 15 segundos para variantes
+			const timeoutPromise = new Promise((_, reject) => 
+				setTimeout(() => reject(new Error('Timeout al cargar variantes (15s)')), 15000)
+			);
+			
+			const dataPromise = supabase
+				.from('product_variants')
+				.select('*')
+				.order('created_at');
 
-		if (data) {
-			// Agrupar variantes por product_id
-			productVariantsMap = {};
-			for (const variant of data) {
-				if (!productVariantsMap[variant.product_id]) {
-					productVariantsMap[variant.product_id] = [];
-				}
-				productVariantsMap[variant.product_id].push(variant);
+			console.log('🔍 Esperando respuesta de variantes...');
+			const result = await Promise.race([dataPromise, timeoutPromise]);
+			const { data, error } = result as any;
+			
+			const endTime = Date.now();
+			console.log(`🔍 Respuesta de variantes recibida en ${endTime - startTime}ms`);
+
+			if (error) {
+				console.error('❌ Error de Supabase en variantes:', error);
+				throw error;
 			}
+
+			if (data) {
+				// Agrupar variantes por product_id
+				productVariantsMap = {};
+				for (const variant of data) {
+					if (!productVariantsMap[variant.product_id]) {
+						productVariantsMap[variant.product_id] = [];
+					}
+					productVariantsMap[variant.product_id].push(variant);
+				}
+				console.log(`✅ ${data.length} variantes cargadas y agrupadas para ${Object.keys(productVariantsMap).length} productos`);
+			} else {
+				console.log('🔍 No se encontraron variantes');
+				productVariantsMap = {};
+			}
+		} catch (error) {
+			console.error('❌ Error cargando variantes:', error);
+			productVariantsMap = {};
+		}
+	}
+
+	// Función para probar la conexión con Supabase
+	async function testSupabaseConnection() {
+		console.log('🔍 Probando conexión con Supabase...');
+		try {
+			const startTime = Date.now();
+			
+			// Consulta simple y rápida
+			const { data, error } = await supabase
+				.from('products')
+				.select('id')
+				.limit(1);
+			
+			const endTime = Date.now();
+			console.log(`🔍 Conexión probada en ${endTime - startTime}ms`);
+			
+			if (error) {
+				console.error('❌ Error en conexión:', error);
+				return false;
+			}
+			
+			console.log('✅ Conexión con Supabase exitosa');
+			return true;
+		} catch (error) {
+			console.error('❌ Error crítico de conexión:', error);
+			return false;
 		}
 	}
 
 	async function loadCategories() {
-		const { data } = await supabase.from('categories').select('id, name, parent_id, is_active').eq('is_active', true);
-		if (data) {
-			categories = data;
-			buildCategoryHierarchy();
+		console.log('🔍 Cargando categorías...');
+		try {
+			const { data } = await supabase.from('categories').select('id, name, parent_id, is_active').eq('is_active', true);
+			if (data) {
+				categories = data;
+				buildCategoryHierarchy();
+				console.log(`✅ ${data.length} categorías cargadas`);
+			}
+		} catch (error) {
+			console.error('❌ Error cargando categorías:', error);
+			categories = [];
 		}
 	}
 
