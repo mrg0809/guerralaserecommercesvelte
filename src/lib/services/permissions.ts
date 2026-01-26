@@ -9,7 +9,7 @@ import type { UserRole, Permission, UserPermissions } from '$lib/types/roles';
  * Obtiene los roles de un usuario
  */
 export async function getUserRoles(userId: string): Promise<UserRole[]> {
-	const { data, error } = await supabase.rpc('get_user_roles', {
+	const { data, error } = await supabase.rpc('get_user_roles' as any, {
 		user_uuid: userId
 	});
 
@@ -18,14 +18,14 @@ export async function getUserRoles(userId: string): Promise<UserRole[]> {
 		return [];
 	}
 
-	return (data || []).map((r: { role_name: string }) => r.role_name as UserRole);
+	return (data || []).map((r: any) => r.role_name as UserRole);
 }
 
 /**
  * Verifica si un usuario tiene un permiso específico
  */
 export async function hasPermission(userId: string, permission: Permission): Promise<boolean> {
-	const { data, error } = await supabase.rpc('user_has_permission', {
+	const { data, error } = await supabase.rpc('user_has_permission' as any, {
 		user_uuid: userId,
 		permission_name: permission
 	});
@@ -42,7 +42,7 @@ export async function hasPermission(userId: string, permission: Permission): Pro
  * Verifica si un usuario tiene un rol específico
  */
 export async function hasRole(userId: string, role: UserRole): Promise<boolean> {
-	const { data, error } = await supabase.rpc('user_has_role', {
+	const { data, error } = await supabase.rpc('user_has_role' as any, {
 		user_uuid: userId,
 		role_name: role
 	});
@@ -59,7 +59,7 @@ export async function hasRole(userId: string, role: UserRole): Promise<boolean> 
  * Obtiene todos los permisos de un usuario
  */
 export async function getUserPermissions(userId: string): Promise<Permission[]> {
-	const { data, error } = await supabase.rpc('get_user_permissions', {
+	const { data, error } = await supabase.rpc('get_user_permissions' as any, {
 		user_uuid: userId
 	});
 
@@ -68,19 +68,39 @@ export async function getUserPermissions(userId: string): Promise<Permission[]> 
 		return [];
 	}
 
-	return (data || []).map((p: { permission_name: string }) => p.permission_name as Permission);
+	return (data || []).map((p: any) => p.permission_name as Permission);
 }
 
 /**
  * Obtiene roles y permisos de un usuario
  */
 export async function getUserRolesAndPermissions(userId: string): Promise<UserPermissions> {
-	const [roles, permissions] = await Promise.all([
-		getUserRoles(userId),
-		getUserPermissions(userId)
-	]);
+	console.log('🔍 Cargando roles y permisos para usuario:', userId);
+	const startTime = Date.now();
+	
+	try {
+		// Agregar timeout de 5 segundos para cada consulta
+		const timeoutPromise = new Promise<never>((_, reject) => {
+			setTimeout(() => reject(new Error('Timeout obteniendo permisos')), 5000);
+		});
 
-	return { roles, permissions };
+		const [roles, permissions] = await Promise.race([
+			Promise.all([
+				getUserRoles(userId),
+				getUserPermissions(userId)
+			]),
+			timeoutPromise
+		]);
+
+		const endTime = Date.now();
+		console.log(`✅ Roles y permisos cargados en ${endTime - startTime}ms`);
+		
+		return { roles, permissions };
+	} catch (error) {
+		console.error('❌ Error cargando roles y permisos:', error);
+		// Retornar valores vacíos en caso de error para no bloquear
+		return { roles: [], permissions: [] };
+	}
 }
 
 /**
@@ -128,21 +148,20 @@ export async function assignRoleToUser(
 	assignedBy: string
 ): Promise<{ success: boolean; error?: string }> {
 	// Primero obtener el role_id
-	const { data: roleData, error: roleError } = await supabase
-		.from('roles')
+	const { data: roleData, error: roleError } = await (supabase.from('roles' as any)
 		.select('id')
 		.eq('name', roleName)
-		.single();
+		.single() as any);
 
 	if (roleError || !roleData) {
 		return { success: false, error: 'Rol no encontrado' };
 	}
 
-	const { error } = await supabase.from('user_roles').insert({
+	const { error } = await (supabase.from('user_roles' as any).insert({
 		user_id: userId,
 		role_id: roleData.id,
 		assigned_by: assignedBy
-	});
+	}) as any);
 
 	if (error) {
 		return { success: false, error: error.message };
@@ -159,21 +178,20 @@ export async function removeRoleFromUser(
 	roleName: UserRole
 ): Promise<{ success: boolean; error?: string }> {
 	// Primero obtener el role_id
-	const { data: roleData, error: roleError } = await supabase
-		.from('roles')
+	const { data: roleData, error: roleError } = await (supabase.from('roles' as any)
 		.select('id')
 		.eq('name', roleName)
-		.single();
+		.single() as any);
 
 	if (roleError || !roleData) {
 		return { success: false, error: 'Rol no encontrado' };
 	}
 
-	const { error } = await supabase
-		.from('user_roles')
+	const { error } = await (supabase
+		.from('user_roles' as any)
 		.delete()
 		.eq('user_id', userId)
-		.eq('role_id', roleData.id);
+		.eq('role_id', roleData.id) as any);
 
 	if (error) {
 		return { success: false, error: error.message };

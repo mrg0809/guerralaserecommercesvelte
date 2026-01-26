@@ -26,6 +26,11 @@ const initialState: UserState = {
 
 function createUserStore() {
 	const { subscribe, set, update } = writable<UserState>(initialState);
+	
+	// Cache para evitar múltiples llamadas
+	let cacheTimeout: NodeJS.Timeout | null = null;
+	const CACHE_DURATION = 5 * 60 * 1000; // 5 minutos
+	let lastCacheTime = 0;
 
 	return {
 		subscribe,
@@ -33,15 +38,28 @@ function createUserStore() {
 		 * Inicializa el store cargando el usuario actual y sus permisos
 		 */
 		async init() {
+			// Si ya está inicializado y el cache es válido, no hacer nada
+			if (Date.now() - lastCacheTime < CACHE_DURATION) {
+				console.log('🔍 Usando cache de usuario (válido por 5 min)');
+				return;
+			}
+
+			console.log('🔍 Inicializando userStore...');
 			update((state) => ({ ...state, loading: true }));
 
 			try {
-				const {
-					data: { session }
-				} = await supabase.auth.getSession();
+				// Timeout para getSession
+				const sessionPromise = supabase.auth.getSession();
+				const timeoutPromise = new Promise<never>((_, reject) => {
+					setTimeout(() => reject(new Error('Timeout obteniendo sesión')), 3000);
+				});
+
+				const { data: { session } } = await Promise.race([sessionPromise, timeoutPromise]);
 
 				if (session?.user) {
+					console.log('🔍 Usuario encontrado, cargando permisos...');
 					const userPermissions = await getUserRolesAndPermissions(session.user.id);
+					
 					set({
 						user: session.user,
 						roles: userPermissions.roles,
@@ -49,7 +67,12 @@ function createUserStore() {
 						loading: false,
 						initialized: true
 					});
+					
+					// Actualizar cache
+					lastCacheTime = Date.now();
+					console.log('✅ UserStore inicializado con cache');
 				} else {
+					console.log('🔍 No hay sesión de usuario');
 					set({
 						user: null,
 						roles: [],
@@ -57,9 +80,10 @@ function createUserStore() {
 						loading: false,
 						initialized: true
 					});
+					lastCacheTime = Date.now();
 				}
 			} catch (error) {
-				console.error('Error inicializando usuario:', error);
+				console.error('❌ Error inicializando usuario:', error);
 				set({
 					user: null,
 					roles: [],
@@ -67,6 +91,7 @@ function createUserStore() {
 					loading: false,
 					initialized: true
 				});
+				lastCacheTime = Date.now();
 			}
 		},
 
@@ -112,6 +137,17 @@ function createUserStore() {
 				loading: false,
 				initialized: true
 			});
+			// Limpiar cache
+			lastCacheTime = 0;
+		},
+
+		/**
+		 * Fuerza la recarga ignorando el cache
+		 */
+		forceRefresh() {
+			console.log('🔍 Forzando refresh de userStore (ignorando cache)');
+			lastCacheTime = 0;
+			return this.init();
 		}
 	};
 }
