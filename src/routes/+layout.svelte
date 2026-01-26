@@ -702,11 +702,11 @@ page.subscribe(($page) => {
     <ReauthModal 
         show={$userStore.sessionExpired}
         onReauth={() => {
-            console.log(' Reautenticación completada, recargando página...');
+            console.log('🔍 Reautenticación completada, recargando página...');
 			window.location.reload();
         }}
-        onsuccess={(e) => {
-			userStore.handleReauthSuccess(e.detail.session, e.detail.user);
+        onsuccess={(data) => {
+			userStore.handleReauthSuccess(data.session, data.user);
 		}}
         onlogout={() => {
 			window.location.href = '/login';

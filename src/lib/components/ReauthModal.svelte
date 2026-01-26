@@ -1,15 +1,17 @@
 <script lang="ts">
-	import { createEventDispatcher } from 'svelte';
 	import { supabase } from '$lib/supabaseClient';
 
-	let { show = false, onReauth = () => {} } = $props();
+	let { 
+		show = false, 
+		onReauth = () => {}, 
+		onsuccess = (data: any) => {},
+		onlogout = () => {}
+	} = $props();
 
 	let email = $state('');
 	let password = $state('');
 	let loading = $state(false);
 	let error = $state('');
-
-	const dispatch = createEventDispatcher();
 
 	async function handleReauth() {
 		if (!email || !password) {
@@ -32,7 +34,7 @@
 			}
 
 			if (data.user && data.session) {
-				dispatch('success', { user: data.user, session: data.session });
+				onsuccess({ user: data.user, session: data.session });
 				onReauth();
 			}
 		} catch (err) {
@@ -44,7 +46,7 @@
 
 	function handleLogout() {
 		supabase.auth.signOut();
-		dispatch('logout');
+		onlogout();
 	}
 </script>
 
