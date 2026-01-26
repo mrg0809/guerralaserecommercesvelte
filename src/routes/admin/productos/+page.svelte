@@ -319,6 +319,8 @@
 					id,
 					name,
 					slug,
+					description,
+					short_description,
 					base_price,
 					stock_quantity,
 					sku,
@@ -494,8 +496,15 @@
 	}
 
 	function openModal(product?: Product) {
+		console.log('🔍 openModal llamado con:', product ? 'producto existente' : 'nuevo producto');
 		activeTab = 'general';
 		if (product) {
+			console.log('🔍 Datos del producto:', {
+				name: product.name,
+				description: product.description,
+				short_description: product.short_description
+			});
+			
 			editingProduct = product;
 			formData = {
 				name: product.name,
@@ -505,10 +514,15 @@
 				base_price: product.base_price,
 				category_id: product.category_id || '',
 				is_active: product.is_active,
-				is_featured: product.is_featured,
-				stock_quantity: product.stock_quantity,
+				is_featured: product.is_featured || false,
+				stock_quantity: product.stock_quantity || 0,
 				sku: product.sku || ''
 			};
+			
+			console.log('🔍 formData después de cargar:', {
+				description: formData.description,
+				short_description: formData.short_description
+			});
 			loadProductSpecifications(product.id);
 			loadProductDiscounts(product.id);
 			loadProductTags(product.id);
@@ -1012,7 +1026,12 @@
 
 	async function saveProduct() {
 		console.log('🔍 saveProduct() iniciado');
-		console.log('🔍 formData:', $state.snapshot(formData));
+		const formDataSnapshot = $state.snapshot(formData);
+		console.log('🔍 formData completo:', formDataSnapshot);
+		console.log('🔍 Campos de descripción:', {
+			description: formDataSnapshot.description,
+			short_description: formDataSnapshot.short_description
+		});
 		console.log('🔍 editingProduct:', $state.snapshot(editingProduct));
 		
 		try {
