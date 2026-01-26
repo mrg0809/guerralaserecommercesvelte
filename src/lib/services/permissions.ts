@@ -13,23 +13,12 @@ export async function getUserRoles(userId: string): Promise<UserRole[]> {
 	const startTime = Date.now();
 	
 	try {
-		// Intentar con RPC primero
-		const { data: rpcData, error: rpcError } = await supabase.rpc('get_user_roles' as any, {
-			user_uuid: userId
-		});
-
-		if (!rpcError && rpcData) {
-			const endTime = Date.now();
-			console.log(`✅ Roles obtenidos via RPC en ${endTime - startTime}ms`);
-			return (rpcData || []).map((r: any) => r.role_name as UserRole);
-		}
-
-		// Fallback: consulta directa a las tablas
-		console.log('⚠️ RPC falló, usando consulta directa...');
+		// Usar consulta directa que es más rápida que RPC
 		const { data: directData, error: directError } = await supabase
 			.from('user_roles' as any)
 			.select('roles(name)')
-			.eq('user_id', userId);
+			.eq('user_id', userId)
+			.limit(10); // Limitar resultados
 
 		if (directError) {
 			console.error('❌ Error en consulta directa:', directError);
@@ -87,23 +76,12 @@ export async function getUserPermissions(userId: string): Promise<Permission[]> 
 	const startTime = Date.now();
 	
 	try {
-		// Intentar con RPC primero
-		const { data: rpcData, error: rpcError } = await supabase.rpc('get_user_permissions' as any, {
-			user_uuid: userId
-		});
-
-		if (!rpcError && rpcData) {
-			const endTime = Date.now();
-			console.log(`✅ Permisos obtenidos via RPC en ${endTime - startTime}ms`);
-			return (rpcData || []).map((p: any) => p.permission_name as Permission);
-		}
-
-		// Fallback: consulta directa a las tablas
-		console.log('⚠️ RPC falló, usando consulta directa...');
+		// Usar consulta directa simplificada
 		const { data: directData, error: directError } = await supabase
 			.from('user_roles' as any)
 			.select('role_id, role_permissions(permissions(name))')
-			.eq('user_id', userId);
+			.eq('user_id', userId)
+			.limit(50); // Limitar resultados
 
 		if (directError) {
 			console.error('❌ Error en consulta directa:', directError);
@@ -140,13 +118,13 @@ export async function getUserRolesAndPermissions(userId: string): Promise<UserPe
 	const startTime = Date.now();
 	
 	try {
-		// Cargar roles y permisos por separado con timeouts individuales
+		// Cargar roles y permisos por separado con timeouts muy cortos
 		console.log('🔍 Cargando roles...');
 		const rolesStartTime = Date.now();
 		const roles = await Promise.race([
 			getUserRoles(userId),
 			new Promise<never>((_, reject) => 
-				setTimeout(() => reject(new Error('Timeout obteniendo roles')), 2000)
+				setTimeout(() => reject(new Error('Timeout obteniendo roles')), 500)
 			)
 		]);
 		const rolesEndTime = Date.now();
@@ -157,7 +135,7 @@ export async function getUserRolesAndPermissions(userId: string): Promise<UserPe
 		const permissions = await Promise.race([
 			getUserPermissions(userId),
 			new Promise<never>((_, reject) => 
-				setTimeout(() => reject(new Error('Timeout obteniendo permisos')), 2000)
+				setTimeout(() => reject(new Error('Timeout obteniendo permisos')), 500)
 			)
 		]);
 		const permissionsEndTime = Date.now();
