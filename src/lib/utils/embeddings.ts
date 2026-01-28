@@ -2,6 +2,11 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 
 // Función helper para obtener la instancia de genAI
 function getGenAI() {
+	// Solo ejecutar en el servidor
+	if (typeof window !== 'undefined') {
+		throw new Error('Embeddings solo disponible en el servidor');
+	}
+	
 	const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 	if (!GEMINI_API_KEY) {
 		throw new Error('GEMINI_API_KEY no está configurada en el entorno');

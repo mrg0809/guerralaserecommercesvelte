@@ -26,22 +26,109 @@ const initialState: UserState = {
 
 function createUserStore() {
 	const { subscribe, set, update } = writable<UserState>(initialState);
+	
+	// Cache para evitar múltiples llamadas
+	let cacheTimeout: NodeJS.Timeout | null = null;
+	const CACHE_DURATION = 5 * 60 * 1000; // 5 minutos
+	let lastCacheTime = 0;
+	
+	// Sesión expirada y refresh
+	let sessionExpired = false;
+	let refreshInterval: NodeJS.Timeout | null = null;
+	const SESSION_CHECK_INTERVAL = 30 * 1000; // Verificar cada 30 segundos
+	const SESSION_WARNING_TIME = 5 * 60 * 1000; // Advertir 5 minutos antes de expirar
+
+	// Función para verificar si la sesión está por expirar
+	function checkSessionExpiry() {
+		const token = localStorage.getItem('sb-access-token') || 
+					  localStorage.getItem('supabase.auth.token');
+		
+		if (token) {
+			try {
+				const tokenParts = token.split('.');
+				if (tokenParts.length === 3) {
+					const payload = JSON.parse(atob(tokenParts[1]));
+					const now = Date.now() / 1000;
+					const exp = payload.exp;
+					
+					if (exp) {
+						const timeUntilExpiry = exp - now;
+						
+						// Si expira en menos de 5 minutos, marcar como expirada
+						if (timeUntilExpiry < SESSION_WARNING_TIME / 1000) {
+							console.log('🔍 Sesión por expirar, mostrando modal de reautenticación');
+							sessionExpired = true;
+							return true;
+						}
+					}
+				}
+			} catch (error) {
+				console.warn('Error verificando expiración del token:', error);
+			}
+		}
+		
+		return false;
+	}
+
+	// Iniciar monitoreo de sesión
+	function startSessionMonitoring() {
+		if (refreshInterval) clearInterval(refreshInterval);
+		
+		refreshInterval = setInterval(() => {
+			checkSessionExpiry();
+		}, SESSION_CHECK_INTERVAL);
+	}
+
+	// Detener monitoreo de sesión
+	function stopSessionMonitoring() {
+		if (refreshInterval) {
+			clearInterval(refreshInterval);
+			refreshInterval = null;
+		}
+	}
 
 	return {
 		subscribe,
+		get sessionExpired() {
+			return sessionExpired;
+		},
 		/**
 		 * Inicializa el store cargando el usuario actual y sus permisos
 		 */
 		async init() {
+			// Si ya está inicializado y el cache es válido, no hacer nada
+			if (Date.now() - lastCacheTime < CACHE_DURATION) {
+				console.log('🔍 Usando cache de usuario (válido por 5 min)');
+				return;
+			}
+
+			console.log('🔍 Inicializando userStore...');
+			console.log('🔍 Verificando configuración de Supabase...');
+			console.log('🔍 Cliente Supabase disponible:', !!supabase);
+			
 			update((state) => ({ ...state, loading: true }));
 
 			try {
-				const {
-					data: { session }
-				} = await supabase.auth.getSession();
+				console.log('🔍 Obteniendo sesión de Supabase...');
+				const sessionStartTime = Date.now();
+				
+				// Timeout para getSession (reducido a 1 segundo para respuesta ultra rápida)
+				const sessionPromise = supabase.auth.getSession();
+				const timeoutPromise = new Promise<never>((_, reject) => {
+					setTimeout(() => reject(new Error('Timeout obteniendo sesión')), 1000);
+				});
+
+				const result = await Promise.race([sessionPromise, timeoutPromise]);
+				const { data: { session } } = result as any;
+				
+				const sessionEndTime = Date.now();
+				console.log(`🔍 Sesión obtenida en ${sessionEndTime - sessionStartTime}ms`);
+				console.log('🔍 Estado de sesión:', session ? 'Usuario autenticado' : 'No hay sesión');
 
 				if (session?.user) {
+					console.log('🔍 Usuario encontrado, cargando permisos...');
 					const userPermissions = await getUserRolesAndPermissions(session.user.id);
+					
 					set({
 						user: session.user,
 						roles: userPermissions.roles,
@@ -49,7 +136,31 @@ function createUserStore() {
 						loading: false,
 						initialized: true
 					});
+					
+					// Actualizar cache y guardar persistente
+					lastCacheTime = Date.now();
+					
+					// Guardar cache persistente para modo offline
+					try {
+						localStorage.setItem('user_cache', JSON.stringify({
+							user: session.user,
+							roles: userPermissions.roles,
+							permissions: userPermissions.permissions,
+							loading: false,
+							initialized: true,
+							timestamp: Date.now()
+						}));
+						console.log('✅ Cache persistente guardado');
+					} catch (cacheError) {
+						console.warn('No se pudo guardar cache persistente:', cacheError);
+					}
+					
+					console.log('✅ UserStore inicializado con cache');
+					
+					// Iniciar monitoreo de sesión
+					startSessionMonitoring();
 				} else {
+					console.log('🔍 No hay sesión de usuario');
 					set({
 						user: null,
 						roles: [],
@@ -57,9 +168,119 @@ function createUserStore() {
 						loading: false,
 						initialized: true
 					});
+					lastCacheTime = Date.now();
 				}
 			} catch (error) {
-				console.error('Error inicializando usuario:', error);
+				console.error('❌ Error inicializando usuario:', error);
+			
+				// Si es timeout de sesión, intentar un enfoque alternativo
+				if (error instanceof Error && error.message === 'Timeout obteniendo sesión') {
+					console.log('🔍 Timeout en getSession, intentando fallback...');
+					try {
+						// Intentar obtener usuario directamente (sin sesión completa)
+						const { data: { user }, error: userError } = await Promise.race([
+							supabase.auth.getUser(),
+							new Promise<never>((_, reject) => 
+								setTimeout(() => reject(new Error('Timeout obteniendo usuario')), 500)
+							)
+						]);
+						
+						if (user && !userError) {
+							console.log('🔍 Usuario obtenido via fallback, cargando permisos...');
+							const userPermissions = await getUserRolesAndPermissions(user.id);
+							
+							set({
+								user,
+								roles: userPermissions.roles,
+								permissions: userPermissions.permissions,
+								loading: false,
+								initialized: true
+							});
+							lastCacheTime = Date.now();
+							return;
+						}
+					} catch (fallbackError) {
+						console.error('❌ Error en fallback:', fallbackError);
+					}
+				}
+			
+				// Si todo falla, intentar extraer roles del token JWT (fallback ultra rápido)
+				console.log('🔍 Intentando extraer roles del token JWT...');
+				try {
+					// Intentar obtener token de localStorage directamente (más rápido)
+					const token = localStorage.getItem('sb-access-token') || 
+								  localStorage.getItem('supabase.auth.token');
+					
+					if (token) {
+						console.log('🔍 Token encontrado en localStorage');
+						// Decodificar JWT (sin verificar firma, solo para extraer datos)
+						const tokenParts = token.split('.');
+						if (tokenParts.length === 3) {
+							const payload = JSON.parse(atob(tokenParts[1]));
+							console.log('🔍 Payload del token:', payload);
+							
+							// Extraer roles del token (si existen)
+							const roles = payload.user_roles || payload.roles || payload.app_metadata?.roles || [];
+							const permissions = payload.permissions || payload.app_metadata?.permissions || [];
+							
+							if (roles.length > 0 || permissions.length > 0) {
+								console.log('🔍 Roles/permisos encontrados en token:', { roles, permissions });
+								
+								// Reconstruir objeto user básico del payload
+								const user: any = {
+									id: payload.sub,
+									email: payload.email,
+									user_metadata: payload.user_metadata || {},
+									app_metadata: payload.app_metadata || {}
+								};
+								
+								set({
+									user,
+									roles: Array.isArray(roles) ? roles : [],
+									permissions: Array.isArray(permissions) ? permissions : [],
+									loading: false,
+									initialized: true
+								});
+								lastCacheTime = Date.now();
+								console.log('✅ Autenticación vía JWT completada');
+								return;
+							} else {
+								console.log('🔍 No se encontraron roles en el token');
+							}
+						}
+					} else {
+						console.log('🔍 No se encontró token en localStorage');
+					}
+				} catch (tokenError) {
+					console.warn('Error extrayendo roles del token:', tokenError);
+				}
+
+				// Si todo falla, intentar modo offline con cache persistente
+				console.log('🔍 Intentando modo offline...');
+				try {
+					const cached = localStorage.getItem('user_cache');
+					if (cached) {
+						const { timestamp, ...state } = JSON.parse(cached);
+						const age = Date.now() - timestamp;
+						
+						// Usar cache si tiene menos de 2 minutos
+						if (age < 2 * 60 * 1000) {
+							console.log(`🔍 Usando modo offline (cache de ${Math.round(age/1000)}s)`);
+							set({
+								...state,
+								loading: false,
+								initialized: true
+							});
+							lastCacheTime = Date.now();
+							return;
+						}
+					}
+				} catch (offlineError) {
+					console.warn('Error en modo offline:', offlineError);
+				}
+
+				// Si todo falla, establecer como no autenticado
+				console.log('🔍 Modo offline no disponible, estableciendo como no autenticado');
 				set({
 					user: null,
 					roles: [],
@@ -67,6 +288,7 @@ function createUserStore() {
 					loading: false,
 					initialized: true
 				});
+				lastCacheTime = Date.now();
 			}
 		},
 
@@ -82,14 +304,36 @@ function createUserStore() {
 		 */
 		async setUser(user: User | null) {
 			if (user) {
-				const userPermissions = await getUserRolesAndPermissions(user.id);
-				set({
-					user,
-					roles: userPermissions.roles,
-					permissions: userPermissions.permissions,
-					loading: false,
-					initialized: true
-				});
+				// Si el cache es válido (menos de 5 minutos), no recargar roles
+				const cacheAge = Date.now() - lastCacheTime;
+				if (cacheAge < CACHE_DURATION) {
+					console.log('🔍 setUser: usando cache existente, no recargando roles');
+					update(state => ({ ...state, user, loading: false, initialized: true }));
+					return;
+				}
+
+				// Solo recargar roles si el cache expiró
+				console.log('🔍 setUser: cache expirado, recargando roles en background');
+				
+				// Actualizar usuario inmediatamente con roles del cache
+				update(state => ({ ...state, user, loading: false, initialized: true }));
+				
+				// Recargar roles en background sin bloquear
+				getUserRolesAndPermissions(user.id)
+					.then(userPermissions => {
+						set({
+							user,
+							roles: userPermissions.roles,
+							permissions: userPermissions.permissions,
+							loading: false,
+							initialized: true
+						});
+						lastCacheTime = Date.now();
+					})
+					.catch(error => {
+						console.warn('⚠️ Error recargando roles en background:', error);
+						// No hacer nada, mantener el estado actual
+					});
 			} else {
 				set({
 					user: null,
@@ -112,6 +356,61 @@ function createUserStore() {
 				loading: false,
 				initialized: true
 			});
+			// Limpiar cache
+			lastCacheTime = 0;
+		},
+
+		/**
+		 * Maneja reautenticación exitosa
+		 */
+		async handleReauthSuccess(session: any, user: any) {
+			console.log('🔍 Procesando reautenticación exitosa...');
+			sessionExpired = false;
+			
+			// Actualizar el store con el nuevo usuario
+			try {
+				const userPermissions = await getUserRolesAndPermissions(user.id);
+				
+				set({
+					user,
+					roles: userPermissions.roles,
+					permissions: userPermissions.permissions,
+					loading: false,
+					initialized: true
+				});
+				
+				// Guardar cache persistente
+				try {
+					localStorage.setItem('user_cache', JSON.stringify({
+						user,
+						roles: userPermissions.roles,
+						permissions: userPermissions.permissions,
+						loading: false,
+						initialized: true,
+						timestamp: Date.now()
+					}));
+				} catch (cacheError) {
+					console.warn('No se pudo guardar cache persistente:', cacheError);
+				}
+				
+				// Reiniciar monitoreo de sesión
+				startSessionMonitoring();
+				lastCacheTime = Date.now();
+				
+				console.log('✅ Reautenticación completada exitosamente');
+			} catch (error) {
+				console.error('❌ Error en reautenticación:', error);
+				sessionExpired = true;
+			}
+		},
+
+		/**
+		 * Fuerza la recarga ignorando el cache
+		 */
+		forceRefresh() {
+			console.log('🔍 Forzando refresh de userStore (ignorando cache)');
+			lastCacheTime = 0;
+			return this.init();
 		}
 	};
 }

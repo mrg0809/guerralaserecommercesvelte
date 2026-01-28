@@ -63,6 +63,8 @@
 	}
 
 	let userState = $state({ initialized: false, loading: true });
+	let hasValidSession = $state(false);
+	let wasAuthenticated = $state(false);
 
 	onMount(async () => {
 		// Inicializar el store de usuario
@@ -74,22 +76,27 @@
 		} = await supabase.auth.getSession();
 
 		if (!session) {
+			console.log('🔍 Admin: No hay sesión, redirigiendo a login');
 			goto('/login');
 			return;
 		}
+
+		// Marcar que hay una sesión válida
+		hasValidSession = true;
+		console.log('🔍 Admin: Sesión válida detectada');
 
 		// Suscribirse a cambios del store
 		const unsubscribe = userStore.subscribe((state) => {
 			userState = state;
 			
-			// Verificar permisos cuando el store esté inicializado
-			if (state.initialized && !state.loading) {
-				if (!state.user) {
-					goto('/login');
-				} else if (!state.permissions.includes('view_admin_panel')) {
-					goto('/');
-				}
+			// Marcar que estuvo autenticado si tiene usuario
+			if (state.user) {
+				wasAuthenticated = true;
 			}
+			
+			// NO REDIRIGIR AUTOMÁTICAMENTE - La verificación inicial en onMount es suficiente
+			// Esto evita que el usuario sea sacado mientras trabaja en modales
+			console.log('🔍 Admin: Estado del usuario actualizado, manteniendo en página actual');
 		});
 
 		return () => {

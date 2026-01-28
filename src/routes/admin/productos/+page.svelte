@@ -268,61 +268,186 @@
 	});
 
 	onMount(async () => {
-		await loadProducts();
-		await loadCategories();
-		await loadDiscounts();
-		await loadTags();
-		await loadAllProductVariants();
+		console.log('🔍 Iniciando carga de datos del módulo de productos...');
+		
+		try {
+			// Primero probar la conexión
+			const connectionOk = await testSupabaseConnection();
+			if (!connectionOk) {
+				console.error('❌ No se puede continuar sin conexión a Supabase');
+				return;
+			}
+			
+			// Cargar secuencialmente para evitar sobrecargar la base de datos
+			console.log('🔍 Paso 1/5: Cargando productos...');
+			await loadProducts();
+			
+			console.log('🔍 Paso 2/5: Cargando categorías...');
+			await loadCategories();
+			
+			console.log('🔍 Paso 3/5: Cargando descuentos...');
+			await loadDiscounts();
+			
+			console.log('🔍 Paso 4/5: Cargando etiquetas...');
+			await loadTags();
+			
+			console.log('🔍 Paso 5/5: Cargando variantes...');
+			await loadAllProductVariants();
+			
+			console.log('✅ Todos los datos cargados exitosamente');
+		} catch (error) {
+			console.error('❌ Error en la carga inicial:', error);
+		}
 	});
 
 	async function loadProducts() {
+		console.log('🔍 Cargando productos...');
 		loading = true;
-		const { data } = await supabase
-			.from('products')
-			.select(`
-				id,
-				name,
-				slug,
-				base_price,
-				stock_quantity,
-				sku,
-				category_id,
-				is_active,
-				is_featured,
-				created_at
-			`)
-			.order('created_at', { ascending: false });
+		
+		try {
+			const startTime = Date.now();
+			console.log('🔍 Iniciando consulta a Supabase...');
+			
+			// Aumentar timeout a 30 segundos y agregar diagnóstico
+			const timeoutPromise = new Promise((_, reject) => {
+				setTimeout(() => reject(new Error('Timeout al cargar productos (30s)')), 30000);
+			});
+			
+			const dataPromise = supabase
+				.from('products')
+				.select(`
+					id,
+					name,
+					slug,
+					description,
+					short_description,
+					base_price,
+					stock_quantity,
+					sku,
+					category_id,
+					is_active,
+					is_featured,
+					created_at
+				`)
+				.order('created_at', { ascending: false });
 
-		if (data) {
-			products = data;
+			console.log('🔍 Esperando respuesta de Supabase...');
+			const result = await Promise.race([dataPromise, timeoutPromise]);
+			const { data, error } = result as any;
+			
+			const endTime = Date.now();
+			console.log(`🔍 Respuesta recibida en ${endTime - startTime}ms`);
+
+			if (error) {
+				console.error('❌ Error de Supabase:', error);
+				throw error;
+			}
+
+			if (data) {
+				products = data;
+				console.log(`✅ ${products.length} productos cargados en ${endTime - startTime}ms`);
+			} else {
+				console.log('🔍 No se encontraron productos');
+				products = [];
+			}
+		} catch (error) {
+			console.error('❌ Error cargando productos:', error);
+			// No lanzar el error para no bloquear la UI, solo mostrar en consola
+			products = [];
 		}
+		
 		loading = false;
 	}
 
 	async function loadAllProductVariants() {
-		// Cargar todas las variantes de una vez
-		const { data } = await supabase
-			.from('product_variants')
-			.select('*')
-			.order('created_at');
+		console.log('🔍 Cargando variantes de productos...');
+		
+		try {
+			const startTime = Date.now();
+			console.log('🔍 Iniciando consulta de variantes a Supabase...');
+			
+			// Timeout de 15 segundos para variantes
+			const timeoutPromise = new Promise((_, reject) => {
+				setTimeout(() => reject(new Error('Timeout al cargar variantes (15s)')), 15000);
+			});
+			
+			const dataPromise = supabase
+				.from('product_variants')
+				.select('*')
+				.order('created_at');
 
-		if (data) {
-			// Agrupar variantes por product_id
-			productVariantsMap = {};
-			for (const variant of data) {
-				if (!productVariantsMap[variant.product_id]) {
-					productVariantsMap[variant.product_id] = [];
-				}
-				productVariantsMap[variant.product_id].push(variant);
+			console.log('🔍 Esperando respuesta de variantes...');
+			const result = await Promise.race([dataPromise, timeoutPromise]);
+			const { data, error } = result as any;
+			
+			const endTime = Date.now();
+			console.log(`🔍 Respuesta de variantes recibida en ${endTime - startTime}ms`);
+
+			if (error) {
+				console.error('❌ Error de Supabase en variantes:', error);
+				throw error;
 			}
+
+			if (data) {
+				// Agrupar variantes por product_id
+				productVariantsMap = {};
+				for (const variant of data) {
+					if (!productVariantsMap[variant.product_id]) {
+						productVariantsMap[variant.product_id] = [];
+					}
+					productVariantsMap[variant.product_id].push(variant);
+				}
+				console.log(`✅ ${data.length} variantes cargadas y agrupadas para ${Object.keys(productVariantsMap).length} productos`);
+			} else {
+				console.log('🔍 No se encontraron variantes');
+				productVariantsMap = {};
+			}
+		} catch (error) {
+			console.error('❌ Error cargando variantes:', error);
+			productVariantsMap = {};
+		}
+	}
+
+	// Función para probar la conexión con Supabase
+	async function testSupabaseConnection() {
+		console.log('🔍 Probando conexión con Supabase...');
+		try {
+			const startTime = Date.now();
+			
+			// Consulta simple y rápida
+			const { data, error } = await supabase
+				.from('products')
+				.select('id')
+				.limit(1);
+			
+			const endTime = Date.now();
+			console.log(`🔍 Conexión probada en ${endTime - startTime}ms`);
+			
+			if (error) {
+				console.error('❌ Error en conexión:', error);
+				return false;
+			}
+			
+			console.log('✅ Conexión con Supabase exitosa');
+			return true;
+		} catch (error) {
+			console.error('❌ Error crítico de conexión:', error);
+			return false;
 		}
 	}
 
 	async function loadCategories() {
-		const { data } = await supabase.from('categories').select('id, name, parent_id, is_active').eq('is_active', true);
-		if (data) {
-			categories = data;
-			buildCategoryHierarchy();
+		console.log('🔍 Cargando categorías...');
+		try {
+			const { data } = await supabase.from('categories').select('id, name, parent_id, is_active').eq('is_active', true);
+			if (data) {
+				categories = data;
+				buildCategoryHierarchy();
+				console.log(`✅ ${data.length} categorías cargadas`);
+			}
+		} catch (error) {
+			console.error('❌ Error cargando categorías:', error);
+			categories = [];
 		}
 	}
 
@@ -371,8 +496,15 @@
 	}
 
 	function openModal(product?: Product) {
+		console.log('🔍 openModal llamado con:', product ? 'producto existente' : 'nuevo producto');
 		activeTab = 'general';
 		if (product) {
+			console.log('🔍 Datos del producto:', {
+				name: product.name,
+				description: product.description,
+				short_description: product.short_description
+			});
+			
 			editingProduct = product;
 			formData = {
 				name: product.name,
@@ -382,10 +514,15 @@
 				base_price: product.base_price,
 				category_id: product.category_id || '',
 				is_active: product.is_active,
-				is_featured: product.is_featured,
-				stock_quantity: product.stock_quantity,
+				is_featured: product.is_featured || false,
+				stock_quantity: product.stock_quantity || 0,
 				sku: product.sku || ''
 			};
+			
+			console.log('🔍 formData después de cargar:', {
+				description: formData.description,
+				short_description: formData.short_description
+			});
 			loadProductSpecifications(product.id);
 			loadProductDiscounts(product.id);
 			loadProductTags(product.id);
@@ -888,18 +1025,35 @@
 	}
 
 	async function saveProduct() {
+		console.log('🔍 saveProduct() iniciado');
+		const formDataSnapshot = $state.snapshot(formData);
+		console.log('🔍 formData completo:', formDataSnapshot);
+		console.log('🔍 Campos de descripción:', {
+			description: formDataSnapshot.description,
+			short_description: formDataSnapshot.short_description
+		});
+		console.log('🔍 editingProduct:', $state.snapshot(editingProduct));
+		
 		try {
 			let productId: string;
 
 			if (editingProduct) {
+				console.log('🔍 Actualizando producto existente...');
+				// Usar snapshot para evitar problemas con proxies
+				const formDataSnapshot = $state.snapshot(formData);
 				const { error } = await supabase
 					.from('products')
-					.update(formData)
+					.update(formDataSnapshot)
 					.eq('id', editingProduct.id);
 
-				if (error) throw error;
+				if (error) {
+					console.error('❌ Error de Supabase:', error);
+					throw error;
+				}
 				productId = editingProduct.id;
+				console.log('✅ Producto actualizado:', productId);
 			} else {
+				console.log('🔍 Creando nuevo producto...');
 				const { data, error } = await supabase
 					.from('products')
 					.insert([formData])
@@ -908,10 +1062,12 @@
 				if (error) throw error;
 				if (!data || data.length === 0) throw new Error('No se pudo crear el producto');
 				productId = data[0].id;
+				console.log('✅ Producto creado:', productId);
 			}
 
 			// Subir imágenes nuevas
 			if (selectedFiles.length > 0) {
+				console.log('🔍 Subiendo imágenes...');
 				const uploadSuccess = await uploadProductImages(productId);
 				if (!uploadSuccess) {
 					alert('El producto se guardó pero hubo errores al subir algunas imágenes');
@@ -919,73 +1075,122 @@
 			}
 
 			// Guardar descuentos
+			console.log('🔍 Guardando descuentos...');
 			await saveProductDiscounts(productId);
 
 			// Guardar etiquetas
+			console.log('🔍 Guardando etiquetas...');
 			await saveProductTags(productId);
 
 			// Guardar variantes
+			console.log('🔍 Guardando variantes...');
 			await saveProductVariants(productId);
 
 			// Guardar datos PIM
+			console.log('🔍 Guardando datos PIM...');
 			await saveSatData(productId);
 			await saveAmazonData(productId);
 			await saveMercadolibreData(productId);
 
+			console.log('🔍 Cerrando modal y recargando...');
 			closeModal();
 			await loadProducts();
 			await loadAllProductVariants();
+			console.log('✅ Proceso completado');
 		} catch (error: any) {
+			console.error('❌ Error en saveProduct:', error);
 			alert('Error al guardar producto: ' + error.message);
 		}
 	}
 
 	async function saveProductDiscounts(productId: string) {
-		// Eliminar descuentos existentes
-		await supabase.from('product_discounts').delete().eq('product_id', productId);
+		console.log('🔍 saveProductDiscounts iniciado');
+		try {
+			// Eliminar descuentos existentes con timeout
+			const deletePromise = supabase.from('product_discounts').delete().eq('product_id', productId);
+			await Promise.race([deletePromise, new Promise((_, reject) => {
+				setTimeout(() => reject(new Error('Timeout eliminando descuentos')), 5000);
+			})]);
 
-		// Agregar nuevos descuentos seleccionados
-		if (selectedDiscounts.length > 0) {
-			const discountInserts = selectedDiscounts.map(discountId => ({
-				product_id: productId,
-				discount_id: discountId
-			}));
+			// Agregar nuevos descuentos seleccionados
+			if (selectedDiscounts.length > 0) {
+				const discountInserts = selectedDiscounts.map(discountId => ({
+					product_id: productId,
+					discount_id: discountId
+				}));
 
-			await supabase.from('product_discounts').insert(discountInserts);
+				const insertPromise = supabase.from('product_discounts').insert(discountInserts);
+				await Promise.race([insertPromise, new Promise((_, reject) => {
+				setTimeout(() => reject(new Error('Timeout insertando descuentos')), 5000);
+			})]);
+			}
+			console.log('✅ Descuentos guardados');
+		} catch (error) {
+			console.error('❌ Error en saveProductDiscounts:', error);
+			throw error;
 		}
 	}
 
 	async function saveProductTags(productId: string) {
-		// Eliminar tags existentes
-		await supabase.from('product_tags').delete().eq('product_id', productId);
+		console.log('🔍 saveProductTags iniciado');
+		try {
+			// Eliminar tags existentes con timeout
+			const deletePromise = supabase.from('product_tags').delete().eq('product_id', productId);
+			await Promise.race([deletePromise, new Promise((_, reject) => {
+				setTimeout(() => reject(new Error('Timeout eliminando tags')), 5000);
+			})]);
 
-		// Agregar nuevas tags seleccionadas
-		if (selectedTags.length > 0) {
-			const tagInserts = selectedTags.map(tagId => ({
-				product_id: productId,
-				tag_id: tagId
-			}));
+			// Agregar nuevas tags seleccionadas
+			if (selectedTags.length > 0) {
+				const tagInserts = selectedTags.map(tagId => ({
+					product_id: productId,
+					tag_id: tagId
+				}));
 
-			await supabase.from('product_tags').insert(tagInserts);
+				const insertPromise = supabase.from('product_tags').insert(tagInserts);
+				await Promise.race([insertPromise, new Promise((_, reject) => {
+				setTimeout(() => reject(new Error('Timeout insertando tags')), 5000);
+			})]);
+			}
+			console.log('✅ Tags guardados');
+		} catch (error) {
+			console.error('❌ Error en saveProductTags:', error);
+			throw error;
 		}
 	}
 
 	async function saveProductVariants(productId: string) {
-		// Reemplaza todas las variantes actuales por las definidas en la UI
-		await supabase.from('product_variants').delete().eq('product_id', productId);
+		console.log('🔍 saveProductVariants iniciado');
+		try {
+			// Reemplaza todas las variantes actuales por las definidas en la UI
+			const deletePromise = supabase.from('product_variants').delete().eq('product_id', productId);
+			await Promise.race([deletePromise, new Promise((_, reject) => {
+				setTimeout(() => reject(new Error('Timeout eliminando variantes')), 5000);
+			})]);
 
-		if (variants.length === 0) return;
+			if (variants.length === 0) {
+				console.log('🔍 No hay variantes que guardar');
+				return;
+			}
 
-		const inserts = variants.map(v => ({
-			product_id: productId,
-			name: v.name,
-			sku: v.sku,
-			price: v.price || 0,
-			stock_quantity: v.stock_quantity || 0,
-			is_active: v.is_active
-		}));
+			const inserts = variants.map(v => ({
+				product_id: productId,
+				name: v.name,
+				sku: v.sku,
+				price: v.price,
+				stock_quantity: v.stock_quantity,
+				is_active: v.is_active
+			}));
 
-		await supabase.from('product_variants').insert(inserts);
+			const insertPromise = supabase.from('product_variants').insert(inserts);
+			await Promise.race([insertPromise, new Promise((_, reject) => {
+				setTimeout(() => reject(new Error('Timeout insertando variantes')), 5000);
+			})]);
+			console.log('✅ Variantes guardadas');
+		} catch (error) {
+			console.error('❌ Error en saveProductVariants:', error);
+			throw error;
+		}
 	}
 
 	async function saveSatData(productId: string) {
@@ -1556,7 +1761,11 @@
 			</div>
 
 			<!-- Tab Content -->
-			<form onsubmit={(e) => { e.preventDefault(); saveProduct(); }} class="flex-1 overflow-y-auto">
+			<form onsubmit={(e) => { 
+		console.log('🔍 Formulario enviado'); 
+		e.preventDefault(); 
+		saveProduct(); 
+	}} class="flex-1 overflow-y-auto">
 				<div class="p-6">
 					{#if !editingProduct && formData.name.includes('(Copia)')}
 						<!-- Aviso de duplicación -->
@@ -2492,7 +2701,12 @@
 				<!-- Footer con botones -->
 				<div class="border-t bg-gray-50 px-6 py-4 flex gap-4 rounded-b-lg">
 					<button
-						type="submit"
+						type="button"
+						onclick={() => {
+							console.log('🔍 Botón crear producto clickeado');
+							console.log('🔍 formData actual:', formData);
+							saveProduct();
+						}}
 						disabled={uploadingImages}
 						class="flex-1 bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition disabled:bg-gray-400 disabled:cursor-not-allowed font-medium"
 					>
