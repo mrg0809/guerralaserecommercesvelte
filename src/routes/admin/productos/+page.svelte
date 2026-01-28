@@ -495,7 +495,7 @@
 		return satClavesCategoria[category.slug] || '';
 	}
 
-	function openModal(product?: Product) {
+	async function openModal(product?: Product) {
 		console.log('🔍 openModal llamado con:', product ? 'producto existente' : 'nuevo producto');
 		activeTab = 'general';
 		if (product) {
@@ -523,14 +523,21 @@
 				description: formData.description,
 				short_description: formData.short_description
 			});
-			loadProductSpecifications(product.id);
-			loadProductDiscounts(product.id);
-			loadProductTags(product.id);
-			loadProductImages(product.id);
-			loadProductVariants(product.id);
-			loadSatData(product.id);
-			loadAmazonData(product.id);
-			loadMercadolibreData(product.id);
+			
+			// Limpiar imágenes antes de cargar nuevas para evitar problemas de estado
+			productImages = [];
+			
+			// Cargar todas las funciones de forma paralela, pero asegurar que las imágenes se carguen correctamente
+			await Promise.all([
+				loadProductSpecifications(product.id),
+				loadProductDiscounts(product.id),
+				loadProductTags(product.id),
+				loadProductImages(product.id),
+				loadProductVariants(product.id),
+				loadSatData(product.id),
+				loadAmazonData(product.id),
+				loadMercadolibreData(product.id)
+			]);
 		} else {
 			editingProduct = null;
 			formData = {
@@ -634,14 +641,36 @@
 	}
 
 	async function loadProductImages(productId: string) {
-		const { data } = await supabase
+		const { data, error } = await supabase
 			.from('product_media')
 			.select('*')
 			.eq('product_id', productId)
-			.order('display_order');
+			.order('is_primary', { ascending: false })
+			.order('display_order', { ascending: true });
+
+		if (error) {
+			console.error('Error cargando imágenes:', error);
+			productImages = [];
+			return;
+		}
 
 		if (data) {
-			productImages = data;
+			// Ordenar manualmente para asegurar orden correcto
+			const sortedData = [...data].sort((a, b) => {
+				// Primero por is_primary (true primero)
+				if (a.is_primary !== b.is_primary) {
+					return (b.is_primary ? 1 : 0) - (a.is_primary ? 1 : 0);
+				}
+				// Luego por display_order
+				const orderA = a.display_order ?? 9999;
+				const orderB = b.display_order ?? 9999;
+				return orderA - orderB;
+			});
+			
+			// Forzar reactividad en Svelte 5
+			productImages = sortedData;
+		} else {
+			productImages = [];
 		}
 	}
 
@@ -859,6 +888,7 @@
 				
 				// Guardar en product_media
 				const displayOrder = productImages.length + index;
+				// La primera imagen subida será principal si no hay otras imágenes principales
 				const isPrimary = productImages.length === 0 && index === 0;
 				
 				const { error: mediaError } = await supabase
@@ -917,30 +947,76 @@
 	}
 
 	async function setPrimaryImage(imageId: string) {
-		if (!editingProduct) return;
+		if (!editingProduct) {
+			alert('No hay producto seleccionado');
+			return;
+		}
 		
 		try {
-			// Quitar primary de todas las imágenes
-			await supabase
+			// Verificar que la imagen existe y pertenece al producto
+			const { data: imageCheck, error: checkError } = await supabase
+				.from('product_media')
+				.select('id, product_id, is_primary')
+				.eq('id', imageId)
+				.single();
+			
+			if (checkError || !imageCheck) {
+				console.error('Error verificando imagen:', checkError);
+				throw new Error('Imagen no encontrada: ' + (checkError?.message || 'No existe'));
+			}
+			
+			if (imageCheck.product_id !== editingProduct.id) {
+				throw new Error('La imagen no pertenece a este producto');
+			}
+			
+			// Si ya es principal, no hacer nada
+			if (imageCheck.is_primary) {
+				return;
+			}
+			
+			// Primero, quitar primary de todas las imágenes del producto
+			const { error: resetError } = await supabase
 				.from('product_media')
 				.update({ is_primary: false })
 				.eq('product_id', editingProduct.id);
 			
-			// Establecer la nueva imagen primaria
-			const { error } = await supabase
+			if (resetError) {
+				console.error('Error quitando primary de otras:', resetError);
+				throw resetError;
+			}
+			
+			// Luego, establecer la imagen seleccionada como principal
+			const { error: updateError, data: updateData } = await supabase
 				.from('product_media')
 				.update({ is_primary: true })
-				.eq('id', imageId);
+				.eq('id', imageId)
+				.select();
 			
-			if (error) throw error;
+			if (updateError) {
+				console.error('Error estableciendo primary:', updateError);
+				throw updateError;
+			}
 			
-			// Actualizar estado local
+			if (!updateData || updateData.length === 0) {
+				throw new Error('No se pudo actualizar la imagen. Verifica que la imagen existe y que tienes permisos.');
+			}
+			
+			// Actualizar el estado local inmediatamente para feedback visual
 			productImages = productImages.map(img => ({
 				...img,
 				is_primary: img.id === imageId
 			}));
+			
+			// Recargar desde la base de datos para asegurar consistencia
+			await loadProductImages(editingProduct.id);
+			
 		} catch (error: any) {
+			console.error('Error al establecer imagen principal:', error);
 			alert('Error al establecer imagen principal: ' + error.message);
+			// Recargar imágenes para mantener consistencia
+			if (editingProduct) {
+				await loadProductImages(editingProduct.id);
+			}
 		}
 	}
 
@@ -1071,6 +1147,10 @@
 				const uploadSuccess = await uploadProductImages(productId);
 				if (!uploadSuccess) {
 					alert('El producto se guardó pero hubo errores al subir algunas imágenes');
+				}
+				// Recargar imágenes después de subir nuevas para asegurar orden correcto
+				if (editingProduct) {
+					await loadProductImages(productId);
 				}
 			}
 
