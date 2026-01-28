@@ -634,14 +634,33 @@
 	}
 
 	async function loadProductImages(productId: string) {
-		const { data } = await supabase
+		console.log('🔍 Cargando imágenes para producto:', productId);
+		
+		const { data, error } = await supabase
 			.from('product_media')
 			.select('*')
 			.eq('product_id', productId)
-			.order('display_order');
+			.order('is_primary', { ascending: false })
+			.order('display_order', { ascending: true });
 
+		if (error) {
+			console.error('❌ Error cargando imágenes:', error);
+			return;
+		}
+
+		console.log('🔍 Datos crudos de la base de datos:', data);
+		console.log('🔍 Detalle de imágenes:');
+		data.forEach((img, index) => {
+			console.log(`  ${index}: id=${img.id.substring(0, 8)}..., is_primary=${img.is_primary}, display_order=${img.display_order}`);
+		});
+		
 		if (data) {
-			productImages = data;
+			// Forzar reactividad en Svelte 5
+			productImages = [...data];
+			console.log('🔍 Imágenes cargadas y ordenadas:', productImages);
+		} else {
+			console.log('🔍 No se encontraron imágenes');
+			productImages = [];
 		}
 	}
 
@@ -859,6 +878,7 @@
 				
 				// Guardar en product_media
 				const displayOrder = productImages.length + index;
+				// La primera imagen subida será principal si no hay otras imágenes principales
 				const isPrimary = productImages.length === 0 && index === 0;
 				
 				const { error: mediaError } = await supabase
@@ -919,27 +939,73 @@
 	async function setPrimaryImage(imageId: string) {
 		if (!editingProduct) return;
 		
+		console.log('🔍 Estableciendo imagen principal:', imageId);
+		
 		try {
-			// Quitar primary de todas las imágenes
-			await supabase
+			// Primero, verificar que la imagen existe
+			console.log('🔍 Verificando que la imagen existe...');
+			const { data: imageExists, error: checkError } = await supabase
 				.from('product_media')
-				.update({ is_primary: false })
+				.select('*')
+				.eq('id', imageId)
+				.single();
+			
+			console.log('🔍 Imagen encontrada:', imageExists);
+			console.log('🔍 Error check:', checkError);
+			
+			if (checkError || !imageExists) {
+				throw new Error('Imagen no encontrada: ' + (checkError?.message || 'No existe'));
+			}
+			
+			// Verificar todas las imágenes del producto
+			console.log('🔍 Verificando todas las imágenes del producto...');
+			const { data: allProductImages, error: allError } = await supabase
+				.from('product_media')
+				.select('*')
 				.eq('product_id', editingProduct.id);
 			
-			// Establecer la nueva imagen primaria
-			const { error } = await supabase
+			console.log('🔍 Todas las imágenes del producto:', allProductImages);
+			console.log('🔍 Error all:', allError);
+			
+			// Intentar actualizar con una consulta más simple
+			console.log('🔍 Intentando actualizar imagen específica...');
+			const { error: directError, data: directData } = await supabase
 				.from('product_media')
 				.update({ is_primary: true })
-				.eq('id', imageId);
+				.eq('id', imageId)
+				.eq('product_id', editingProduct.id)
+				.select();
 			
-			if (error) throw error;
+			console.log('🔍 Resultado actualización directa:', { error: directError, data: directData });
 			
-			// Actualizar estado local
-			productImages = productImages.map(img => ({
-				...img,
-				is_primary: img.id === imageId
-			}));
+			if (directError) {
+				console.error('❌ Error en actualización directa:', directError);
+				throw directError;
+			}
+			
+			// Si funciona, continuar con el resto
+			if (directData && directData.length > 0) {
+				console.log('✅ Actualización directa exitosa, continuando con otras imágenes...');
+				
+				// Quitar primary de las demás
+				const { error: resetError } = await supabase
+					.from('product_media')
+					.update({ is_primary: false })
+					.eq('product_id', editingProduct.id)
+					.neq('id', imageId);
+				
+				if (resetError) {
+					console.error('❌ Error quitando primary de otras:', resetError);
+				}
+				
+				// Recargar y actualizar estado
+				await loadProductImages(editingProduct.id);
+			} else {
+				throw new Error('La actualización no afectó ningún registro');
+			}
+			
 		} catch (error: any) {
+			console.error('❌ Error al establecer imagen principal:', error);
 			alert('Error al establecer imagen principal: ' + error.message);
 		}
 	}
