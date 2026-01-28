@@ -495,7 +495,7 @@
 		return satClavesCategoria[category.slug] || '';
 	}
 
-	function openModal(product?: Product) {
+	async function openModal(product?: Product) {
 		console.log('🔍 openModal llamado con:', product ? 'producto existente' : 'nuevo producto');
 		activeTab = 'general';
 		if (product) {
@@ -523,14 +523,21 @@
 				description: formData.description,
 				short_description: formData.short_description
 			});
-			loadProductSpecifications(product.id);
-			loadProductDiscounts(product.id);
-			loadProductTags(product.id);
-			loadProductImages(product.id);
-			loadProductVariants(product.id);
-			loadSatData(product.id);
-			loadAmazonData(product.id);
-			loadMercadolibreData(product.id);
+			
+			// Limpiar imágenes antes de cargar nuevas para evitar problemas de estado
+			productImages = [];
+			
+			// Cargar todas las funciones de forma paralela, pero asegurar que las imágenes se carguen correctamente
+			await Promise.all([
+				loadProductSpecifications(product.id),
+				loadProductDiscounts(product.id),
+				loadProductTags(product.id),
+				loadProductImages(product.id),
+				loadProductVariants(product.id),
+				loadSatData(product.id),
+				loadAmazonData(product.id),
+				loadMercadolibreData(product.id)
+			]);
 		} else {
 			editingProduct = null;
 			formData = {
@@ -634,8 +641,6 @@
 	}
 
 	async function loadProductImages(productId: string) {
-		console.log('🔍 Cargando imágenes para producto:', productId);
-		
 		const { data, error } = await supabase
 			.from('product_media')
 			.select('*')
@@ -644,22 +649,27 @@
 			.order('display_order', { ascending: true });
 
 		if (error) {
-			console.error('❌ Error cargando imágenes:', error);
+			console.error('Error cargando imágenes:', error);
+			productImages = [];
 			return;
 		}
 
-		console.log('🔍 Datos crudos de la base de datos:', data);
-		console.log('🔍 Detalle de imágenes:');
-		data.forEach((img, index) => {
-			console.log(`  ${index}: id=${img.id.substring(0, 8)}..., is_primary=${img.is_primary}, display_order=${img.display_order}`);
-		});
-		
 		if (data) {
+			// Ordenar manualmente para asegurar orden correcto
+			const sortedData = [...data].sort((a, b) => {
+				// Primero por is_primary (true primero)
+				if (a.is_primary !== b.is_primary) {
+					return (b.is_primary ? 1 : 0) - (a.is_primary ? 1 : 0);
+				}
+				// Luego por display_order
+				const orderA = a.display_order ?? 9999;
+				const orderB = b.display_order ?? 9999;
+				return orderA - orderB;
+			});
+			
 			// Forzar reactividad en Svelte 5
-			productImages = [...data];
-			console.log('🔍 Imágenes cargadas y ordenadas:', productImages);
+			productImages = sortedData;
 		} else {
-			console.log('🔍 No se encontraron imágenes');
 			productImages = [];
 		}
 	}
@@ -937,76 +947,76 @@
 	}
 
 	async function setPrimaryImage(imageId: string) {
-		if (!editingProduct) return;
-		
-		console.log('🔍 Estableciendo imagen principal:', imageId);
+		if (!editingProduct) {
+			alert('No hay producto seleccionado');
+			return;
+		}
 		
 		try {
-			// Primero, verificar que la imagen existe
-			console.log('🔍 Verificando que la imagen existe...');
-			const { data: imageExists, error: checkError } = await supabase
+			// Verificar que la imagen existe y pertenece al producto
+			const { data: imageCheck, error: checkError } = await supabase
 				.from('product_media')
-				.select('*')
+				.select('id, product_id, is_primary')
 				.eq('id', imageId)
 				.single();
 			
-			console.log('🔍 Imagen encontrada:', imageExists);
-			console.log('🔍 Error check:', checkError);
-			
-			if (checkError || !imageExists) {
+			if (checkError || !imageCheck) {
+				console.error('Error verificando imagen:', checkError);
 				throw new Error('Imagen no encontrada: ' + (checkError?.message || 'No existe'));
 			}
 			
-			// Verificar todas las imágenes del producto
-			console.log('🔍 Verificando todas las imágenes del producto...');
-			const { data: allProductImages, error: allError } = await supabase
+			if (imageCheck.product_id !== editingProduct.id) {
+				throw new Error('La imagen no pertenece a este producto');
+			}
+			
+			// Si ya es principal, no hacer nada
+			if (imageCheck.is_primary) {
+				return;
+			}
+			
+			// Primero, quitar primary de todas las imágenes del producto
+			const { error: resetError } = await supabase
 				.from('product_media')
-				.select('*')
+				.update({ is_primary: false })
 				.eq('product_id', editingProduct.id);
 			
-			console.log('🔍 Todas las imágenes del producto:', allProductImages);
-			console.log('🔍 Error all:', allError);
+			if (resetError) {
+				console.error('Error quitando primary de otras:', resetError);
+				throw resetError;
+			}
 			
-			// Intentar actualizar con una consulta más simple
-			console.log('🔍 Intentando actualizar imagen específica...');
-			const { error: directError, data: directData } = await supabase
+			// Luego, establecer la imagen seleccionada como principal
+			const { error: updateError, data: updateData } = await supabase
 				.from('product_media')
 				.update({ is_primary: true })
 				.eq('id', imageId)
-				.eq('product_id', editingProduct.id)
 				.select();
 			
-			console.log('🔍 Resultado actualización directa:', { error: directError, data: directData });
-			
-			if (directError) {
-				console.error('❌ Error en actualización directa:', directError);
-				throw directError;
+			if (updateError) {
+				console.error('Error estableciendo primary:', updateError);
+				throw updateError;
 			}
 			
-			// Si funciona, continuar con el resto
-			if (directData && directData.length > 0) {
-				console.log('✅ Actualización directa exitosa, continuando con otras imágenes...');
-				
-				// Quitar primary de las demás
-				const { error: resetError } = await supabase
-					.from('product_media')
-					.update({ is_primary: false })
-					.eq('product_id', editingProduct.id)
-					.neq('id', imageId);
-				
-				if (resetError) {
-					console.error('❌ Error quitando primary de otras:', resetError);
-				}
-				
-				// Recargar y actualizar estado
-				await loadProductImages(editingProduct.id);
-			} else {
-				throw new Error('La actualización no afectó ningún registro');
+			if (!updateData || updateData.length === 0) {
+				throw new Error('No se pudo actualizar la imagen. Verifica que la imagen existe y que tienes permisos.');
 			}
+			
+			// Actualizar el estado local inmediatamente para feedback visual
+			productImages = productImages.map(img => ({
+				...img,
+				is_primary: img.id === imageId
+			}));
+			
+			// Recargar desde la base de datos para asegurar consistencia
+			await loadProductImages(editingProduct.id);
 			
 		} catch (error: any) {
-			console.error('❌ Error al establecer imagen principal:', error);
+			console.error('Error al establecer imagen principal:', error);
 			alert('Error al establecer imagen principal: ' + error.message);
+			// Recargar imágenes para mantener consistencia
+			if (editingProduct) {
+				await loadProductImages(editingProduct.id);
+			}
 		}
 	}
 
@@ -1137,6 +1147,10 @@
 				const uploadSuccess = await uploadProductImages(productId);
 				if (!uploadSuccess) {
 					alert('El producto se guardó pero hubo errores al subir algunas imágenes');
+				}
+				// Recargar imágenes después de subir nuevas para asegurar orden correcto
+				if (editingProduct) {
+					await loadProductImages(productId);
 				}
 			}
 
