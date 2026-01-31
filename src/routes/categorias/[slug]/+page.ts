@@ -44,10 +44,10 @@ export const load: PageLoad = async ({ params }) => {
 	}
 
 
-	// Consulta: productos con sus imágenes (product_media)
+	// Consulta: productos con sus imágenes (product_media) y variantes (para stock y precio)
 	const { data: rawProducts } = await supabase
 		.from('products')
-		.select('id, name, slug, base_price, stock_quantity, short_description, product_media(*)')
+		.select('id, name, slug, base_price, stock_quantity, short_description, product_media(*), product_variants(id, name, sku, price, stock_quantity, is_active)')
 		.in('category_id', ids)
 		.eq('is_active', true)
 		.order('created_at', { ascending: false })
@@ -59,7 +59,8 @@ export const load: PageLoad = async ({ params }) => {
 
 	const products = (rawProducts || []).map((p: any) => ({
 		...p,
-		media: p.product_media || []
+		media: p.product_media || [],
+		product_variants: p.product_variants || []
 	}));
 
 	return {

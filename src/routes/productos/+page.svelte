@@ -55,7 +55,7 @@
 		loading = true;
 		let query = supabase
 			.from('products')
-			.select('id, name, slug, base_price, stock_quantity, short_description, category_id, product_media(*), categories(*)')
+			.select('id, name, slug, base_price, stock_quantity, short_description, category_id, product_media(*), categories(*), product_variants(id, name, sku, price, stock_quantity, is_active)')
 			.eq('is_active', true);
 
 		if (selectedCategory) {
@@ -68,7 +68,8 @@
 			products = data.map((p: any) => ({
 				...p,
 				media: p.product_media || [],
-				category: p.categories
+				category: p.categories,
+				product_variants: p.product_variants || []
 			}));
 		}
 
