@@ -25,17 +25,22 @@ export function truncateText(text: string, length: number): string {
 	return text.substring(0, length) + '...';
 }
 
-// Calcular el precio mínimo de las variantes
+// Calcular el precio mínimo de las variantes (solo variantes activas)
 export function getMinVariantPrice(variants: any[]): number | null {
 	if (!variants || variants.length === 0) return null;
-	const prices = variants.map(v => v.price).filter(p => p !== null && p !== undefined);
+	const prices = variants
+		.filter((v) => v.is_active !== false)
+		.map((v) => v.price)
+		.filter((p) => p !== null && p !== undefined);
 	return prices.length > 0 ? Math.min(...prices) : null;
 }
 
-// Calcular el stock total de las variantes
+// Calcular el stock total de las variantes (solo variantes activas)
 export function getTotalVariantStock(variants: any[]): number {
 	if (!variants || variants.length === 0) return 0;
-	return variants.reduce((total, v) => total + (v.stock_quantity || 0), 0);
+	return variants
+		.filter((v) => v.is_active !== false)
+		.reduce((total, v) => total + (v.stock_quantity || 0), 0);
 }
 
 // Obtener el precio a mostrar (con "Desde" si tiene variantes)
