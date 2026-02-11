@@ -25,6 +25,9 @@ type ProductRow = {
 const CURRENCY = 'MXN';
 const DEFAULT_BRAND = 'Guerra Laser';
 
+export const prerender = false;
+export const trailingSlash = 'never';
+
 const supabaseAdmin = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
 function escapeXml(value: string): string {
@@ -102,7 +105,9 @@ export const GET: RequestHandler = async ({ url }) => {
 		return new Response(`<!-- Error: ${escapeXml(error.message)} -->`, {
 			status: 500,
 			headers: {
-				'Content-Type': 'application/xml'
+				'Content-Type': 'application/xml; charset=utf-8',
+				'X-Content-Type-Options': 'nosniff',
+				'Cache-Control': 'no-store'
 			}
 		});
 	}
@@ -123,7 +128,9 @@ ${itemsXml}
 	return new Response(xml, {
 		status: 200,
 		headers: {
-			'Content-Type': 'application/xml'
+			'Content-Type': 'application/xml; charset=utf-8',
+			'X-Content-Type-Options': 'nosniff',
+			'Cache-Control': 'no-store'
 		}
 	});
 };
