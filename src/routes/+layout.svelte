@@ -134,9 +134,11 @@ page.subscribe(($page) => {
 			const productMatch = path.match(/^\/productos\/([^\/?#]+)/);
 			if (productMatch && productMatch[1]) {
 				const slug = productMatch[1];
-				context = `\n\n— Enviado desde: ${title}\nSección: Producto\nSlug: ${slug}`;
+				const fullUrl = `https://guerralaser.com/productos/${slug}`;
+				context = `\n\n— Enviado desde: ${title}\nSección: Producto\nRuta: ${fullUrl}`;
 			} else {
-				context = `\n\n— Enviado desde: ${title}\nRuta: ${path}`;
+				const fullUrl = `https://guerralaser.com${path}`;
+				context = `\n\n— Enviado desde: ${title}\nRuta: ${fullUrl}`;
 			}
 		}
 		const fullText = `${base}${context}`;
