@@ -24,6 +24,7 @@ type ProductRow = {
 
 const CURRENCY = 'MXN';
 const DEFAULT_BRAND = 'Guerra Laser';
+const DEFAULT_GOOGLE_PRODUCT_CATEGORY = 'Hardware & Industrial';
 
 export const prerender = false;
 export const trailingSlash = 'never';
@@ -80,14 +81,15 @@ function buildItemXml(product: ProductRow, origin: string): string {
 
 	return `    <item>
       <g:id>${escapeXml(id)}</g:id>
-      <title>${escapeXml(title)}</title>
-      <description>${escapeXml(description)}</description>
+	<title><![CDATA[${title}]]></title>
+	<description><![CDATA[${description}]]></description>
       <link>${escapeXml(link)}</link>
       <g:image_link>${mainImage ? escapeXml(mainImage) : ''}</g:image_link>
       <g:availability>${availability}</g:availability>
       <g:price>${escapeXml(price)}</g:price>
       <g:condition>${condition}</g:condition>
       <g:brand>${escapeXml(brand)}</g:brand>${mpn ? `\n      <g:mpn>${escapeXml(mpn)}</g:mpn>` : ''}${gtin ? `\n      <g:gtin>${escapeXml(gtin)}</g:gtin>` : ''}${additionalImageXml}
+	<g:google_product_category><![CDATA[${DEFAULT_GOOGLE_PRODUCT_CATEGORY}]]></g:google_product_category>
     </item>`;
 }
 
@@ -118,9 +120,9 @@ export const GET: RequestHandler = async ({ url }) => {
 	const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0" xmlns:g="http://base.google.com/ns/1.0">
   <channel>
-    <title>Guerra Láser Ecommerce</title>
+		<title><![CDATA[Guerra Láser Ecommerce]]></title>
     <link>${escapeXml(origin)}</link>
-    <description>Feed de productos para Google Merchant Center</description>
+		<description><![CDATA[Feed de productos para Google Merchant Center]]></description>
 ${itemsXml}
   </channel>
 </rss>`;
