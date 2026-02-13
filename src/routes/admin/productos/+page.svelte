@@ -45,7 +45,9 @@
 		is_active: true,
 		is_featured: false,
 		stock_quantity: 0,
-		sku: ''
+		sku: '',
+		technical_sheet_url: '',
+		manual_pdf_url: ''
 	});
 
 	type VariantForm = {
@@ -324,6 +326,8 @@
 					base_price,
 					stock_quantity,
 					sku,
+					technical_sheet_url,
+					manual_pdf_url,
 					category_id,
 					is_active,
 					is_featured,
@@ -516,7 +520,9 @@
 				is_active: product.is_active,
 				is_featured: product.is_featured || false,
 				stock_quantity: product.stock_quantity || 0,
-				sku: product.sku || ''
+				sku: product.sku || '',
+				technical_sheet_url: product.technical_sheet_url || '',
+				manual_pdf_url: product.manual_pdf_url || ''
 			};
 			
 			console.log('🔍 formData después de cargar:', {
@@ -550,7 +556,9 @@
 				is_active: true,
 				is_featured: false,
 				stock_quantity: 0,
-				sku: ''
+				sku: '',
+				technical_sheet_url: '',
+				manual_pdf_url: ''
 			};
 			specifications = [];
 			selectedDiscounts = [];
@@ -582,7 +590,9 @@
 			is_active: product.is_active,
 			is_featured: false, // No destacar la copia por defecto
 			stock_quantity: product.stock_quantity,
-			sku: product.sku ? `${product.sku}-COPIA` : ''
+			sku: product.sku ? `${product.sku}-COPIA` : '',
+			technical_sheet_url: product.technical_sheet_url || '',
+			manual_pdf_url: product.manual_pdf_url || ''
 		};
 		
 		// Cargar especificaciones del producto original
@@ -1912,6 +1922,34 @@
 									rows="4"
 									class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
 								></textarea>
+							</div>
+
+							<div class="border border-gray-200 rounded-lg p-4 bg-gray-50">
+								<p class="block text-sm font-semibold mb-3">Archivos PDF (Opcional)</p>
+								<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+									<div>
+										<label class="block text-sm font-medium mb-2" for="product-technical-sheet">Ficha técnica (URL)</label>
+										<input
+											id="product-technical-sheet"
+											type="url"
+											placeholder="https://.../ficha-tecnica.pdf"
+											bind:value={formData.technical_sheet_url}
+											class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+										/>
+									</div>
+
+									<div>
+										<label class="block text-sm font-medium mb-2" for="product-manual-pdf">Manual (URL)</label>
+										<input
+											id="product-manual-pdf"
+											type="url"
+											placeholder="https://.../manual.pdf"
+											bind:value={formData.manual_pdf_url}
+											class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+										/>
+									</div>
+								</div>
+								<p class="text-xs text-gray-500 mt-2">Estos enlaces se mostrarán como descargables en el detalle del producto.</p>
 							</div>
 
 							<div class="grid grid-cols-2 gap-4">

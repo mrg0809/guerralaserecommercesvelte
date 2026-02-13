@@ -211,6 +211,48 @@
 										<p class="text-xl text-gray-600 mb-6">{data.product.short_description}</p>
 									{/if}
 
+									{#if data.product.technical_sheet_url || data.product.manual_pdf_url}
+										<div class="mb-6">
+											<p class="text-sm font-semibold text-gray-700 mb-3">Descargables</p>
+											<div class="space-y-2">
+												{#if data.product.technical_sheet_url}
+													<a
+														href={data.product.technical_sheet_url}
+														target="_blank"
+														rel="noopener"
+														download
+														class="inline-flex items-center gap-2 text-red-600 hover:text-red-700 font-medium"
+													>
+														<svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+															<path stroke-linecap="round" stroke-linejoin="round" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+															<path stroke-linecap="round" stroke-linejoin="round" d="M14 2v6h6" />
+															<path stroke-linecap="round" stroke-linejoin="round" d="M8 13h8" />
+															<path stroke-linecap="round" stroke-linejoin="round" d="M8 16h8" />
+														</svg>
+														<span>Ficha técnica (PDF)</span>
+													</a>
+												{/if}
+												{#if data.product.manual_pdf_url}
+													<a
+														href={data.product.manual_pdf_url}
+														target="_blank"
+														rel="noopener"
+														download
+														class="inline-flex items-center gap-2 text-red-600 hover:text-red-700 font-medium"
+													>
+														<svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+															<path stroke-linecap="round" stroke-linejoin="round" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+															<path stroke-linecap="round" stroke-linejoin="round" d="M14 2v6h6" />
+															<path stroke-linecap="round" stroke-linejoin="round" d="M8 13h8" />
+															<path stroke-linecap="round" stroke-linejoin="round" d="M8 16h8" />
+														</svg>
+														<span>Manual (PDF)</span>
+													</a>
+												{/if}
+											</div>
+										</div>
+									{/if}
+
 									<div class="mb-6">
 										<p class="text-4xl font-bold text-blue-600">{formatPrice(finalPrice)}</p>
 										{#if data.product.discounts && data.product.discounts.length > 0}
