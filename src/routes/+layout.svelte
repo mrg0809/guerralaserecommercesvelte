@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
+	import { injectAnalytics } from '@vercel/analytics/sveltekit';
 	import favicon from '$lib/assets/favicon.svg';
 	import { cart } from '$lib/stores/cart';
 	import { userStore } from '$lib/stores/user';
@@ -9,6 +10,9 @@
 	import ReauthModal from '$lib/components/ReauthModal.svelte';
 	import type { Category } from '$lib/types';
 	import '../app.css';
+	
+	// Inicializar Vercel Analytics
+	injectAnalytics();
 
 	let { children } = $props();
 
