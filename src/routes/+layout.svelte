@@ -8,6 +8,8 @@
 	import { supabase } from '$lib/supabaseClient';
 	import { getDisplayPrice } from '$lib/utils';
 	import ReauthModal from '$lib/components/ReauthModal.svelte';
+	import CookieBanner from '$lib/components/CookieBanner.svelte';
+	import MetaPixel from '$lib/components/MetaPixel.svelte';
 	import type { Category } from '$lib/types';
 	import '../app.css';
 	
@@ -724,3 +726,9 @@ page.subscribe(($page) => {
 			window.location.href = '/login';
 		}}
     />
+
+    <!-- Meta Pixel -->
+    <MetaPixel />
+
+    <!-- Banner de Cookies -->
+    <CookieBanner />
