@@ -11,12 +11,73 @@
 	let quantity = $state(1);
 	let addedToCart = $state(false);
 	let shareMessage = $state('');
+	let selectedColor = $state('');
+	let selectedGrosor = $state('');
+	let selectedTamano = $state('');
 
-	$effect(() => {
-		if (!selectedVariant && data.product?.variants?.length > 0) {
-			selectedVariant = data.product.variants[0];
+	const acrylicSpecKey = 'tipo_producto';
+	const acrylicSpecValue = 'acrilico';
+
+	const colorNameMap: Record<string, string> = {
+		verde: '#22c55e',
+		rosa: '#ec4899',
+		naranja: '#f97316',
+		azul: '#3b82f6',
+		rojo: '#ef4444',
+		amarillo: '#facc15',
+		negro: '#111827',
+		blanco: '#ffffff',
+		gris: '#9ca3af',
+		morado: '#a855f7',
+		violeta: '#8b5cf6',
+		transparente: 'transparent'
+	};
+
+	function normalizeValue(value: unknown) {
+		if (value === null || value === undefined) return '';
+		return String(value).trim();
+	}
+
+	function getVariantAttributes(variant: any) {
+		if (variant?.attributes && typeof variant.attributes === 'object') {
+			return variant.attributes as Record<string, any>;
 		}
-	});
+		return {};
+	}
+
+	function getVariantAttribute(variant: any, key: string) {
+		const attributes = getVariantAttributes(variant);
+		return normalizeValue(attributes?.[key]);
+	}
+
+	function getColorSwatch(colorName: string, colorHex: string) {
+		if (colorHex) return colorHex;
+		const normalized = colorName.toLowerCase();
+		return colorNameMap[normalized] || '';
+	}
+
+	function parseNumericValue(value: string) {
+		const match = value.match(/\d+(?:[\.,]\d+)?/);
+		if (!match) return null;
+		return Number(match[0].replace(',', '.'));
+	}
+
+	function sortByNumeric(values: string[]) {
+		return [...values].sort((a, b) => {
+			const na = parseNumericValue(a);
+			const nb = parseNumericValue(b);
+			if (na !== null && nb !== null) return na - nb;
+			if (na !== null) return -1;
+			if (nb !== null) return 1;
+			return a.localeCompare(b, 'es', { numeric: true, sensitivity: 'base' });
+		});
+	}
+
+	function isVariantAvailable(variant: any) {
+		if (variant?.is_active === false) return false;
+		if (variant?.stock_quantity === 0) return false;
+		return true;
+	}
 
 	$effect(() => {
 		if (!selectedImage && data.product?.media?.length > 0) {
@@ -29,6 +90,128 @@
 	// Derived state
 	let currentUrl = $derived(typeof window !== 'undefined' ? window.location.href : '');
 	let shareText = $derived(data.product.short_description || data.product.name);
+	let isAcrylic = $derived.by(() => {
+		const specs = (data as any)?.product?.specifications || [];
+		return specs.some(
+			(spec: any) =>
+				spec?.specification_key?.toLowerCase?.() === acrylicSpecKey &&
+				spec?.specification_value?.toLowerCase?.() === acrylicSpecValue
+		);
+	});
+
+	$effect(() => {
+		if (!selectedVariant && data.product?.variants?.length > 0 && !isAcrylic) {
+			setSelectedVariant(data.product.variants[0]);
+		}
+	});
+
+	let availableVariants = $derived.by(() =>
+		isAcrylic ? (data.product?.variants || []).filter(isVariantAvailable) : []
+	);
+
+	let colorOptions = $derived.by(() => {
+		const colors = new Map<string, { name: string; hex: string }>();
+		for (const variant of availableVariants) {
+			const colorName = getVariantAttribute(variant, 'color');
+			if (!colorName) continue;
+			const colorHex = getVariantAttribute(variant, 'color_hex');
+			if (!colors.has(colorName)) {
+				colors.set(colorName, { name: colorName, hex: colorHex });
+			}
+		}
+		return Array.from(colors.values());
+	});
+
+	let grosorOptions = $derived.by(() => {
+		const variants = selectedColor
+			? availableVariants.filter((variant) => getVariantAttribute(variant, 'color') === selectedColor)
+			: availableVariants;
+		const values = new Set<string>();
+		for (const variant of variants) {
+			const grosor = getVariantAttribute(variant, 'grosor');
+			if (grosor) values.add(grosor);
+		}
+		return sortByNumeric([...values]);
+	});
+
+	let tamanoOptions = $derived.by(() => {
+		const variants = availableVariants.filter((variant) => {
+			const matchesColor = selectedColor
+				? getVariantAttribute(variant, 'color') === selectedColor
+				: true;
+			const matchesGrosor = selectedGrosor
+				? getVariantAttribute(variant, 'grosor') === selectedGrosor
+				: true;
+			return matchesColor && matchesGrosor;
+		});
+		const values = new Set<string>();
+		for (const variant of variants) {
+			const tamano = getVariantAttribute(variant, 'tamano');
+			if (tamano) values.add(tamano);
+		}
+		return sortByNumeric([...values]);
+	});
+
+	$effect(() => {
+		if (!isAcrylic) return;
+		if (!selectedColor && colorOptions.length > 0) {
+			selectedColor = colorOptions[0].name;
+		}
+		if (!selectedGrosor && grosorOptions.length > 0) {
+			selectedGrosor = grosorOptions[0];
+		}
+		if (!selectedTamano && tamanoOptions.length > 0) {
+			selectedTamano = tamanoOptions[0];
+		}
+	});
+
+	$effect(() => {
+		if (!isAcrylic) return;
+		if (!selectedColor) return;
+		const variantsByColor = availableVariants.filter(
+			(variant) => getVariantAttribute(variant, 'color') === selectedColor
+		);
+		const grosorByColor = sortByNumeric(
+			[...new Set(variantsByColor.map((variant) => getVariantAttribute(variant, 'grosor')).filter(Boolean))]
+		);
+		if (grosorByColor.length > 0 && !grosorByColor.includes(selectedGrosor)) {
+			selectedGrosor = grosorByColor[0];
+		}
+		const variantsByColorGrosor = variantsByColor.filter((variant) =>
+			selectedGrosor ? getVariantAttribute(variant, 'grosor') === selectedGrosor : true
+		);
+		const tamanoByColorGrosor = sortByNumeric(
+			[
+				...new Set(
+					variantsByColorGrosor
+						.map((variant) => getVariantAttribute(variant, 'tamano'))
+						.filter(Boolean)
+				)
+			]
+		);
+		if (tamanoByColorGrosor.length > 0 && !tamanoByColorGrosor.includes(selectedTamano)) {
+			selectedTamano = tamanoByColorGrosor[0];
+		}
+	});
+
+	$effect(() => {
+		if (!isAcrylic) return;
+		const matching = (data.product?.variants || []).find((variant: any) => {
+			const matchesColor = selectedColor
+				? getVariantAttribute(variant, 'color') === selectedColor
+				: true;
+			const matchesGrosor = selectedGrosor
+				? getVariantAttribute(variant, 'grosor') === selectedGrosor
+				: true;
+			const matchesTamano = selectedTamano
+				? getVariantAttribute(variant, 'tamano') === selectedTamano
+				: true;
+			return matchesColor && matchesGrosor && matchesTamano;
+		});
+		if (matching && selectedVariant?.id !== matching.id) {
+			setSelectedVariant(matching);
+		}
+	});
 	let finalPrice = $derived.by(() => {
 		// Si hay un bundle seleccionado, usar el precio del bundle
 		if (selectedBundle) {
@@ -84,14 +267,26 @@
 		selectedImage = getImageKitUrl(url);
 	}
 
+	function setSelectedVariant(variant: any) {
+		selectedVariant = variant;
+		if (variant) {
+			selectedBundle = null; // Deseleccionar bundles cuando se selecciona una variante
+		}
+	}
+
 	function selectBundle(bundle: any) {
 		selectedBundle = bundle;
 		selectedVariant = null; // Deseleccionar variantes cuando se selecciona un bundle
 	}
 
 	function selectVariant(variant: any) {
-		selectedVariant = variant;
-		selectedBundle = null; // Deseleccionar bundles cuando se selecciona una variante
+		setSelectedVariant(variant);
+		const color = getVariantAttribute(variant, 'color');
+		const grosor = getVariantAttribute(variant, 'grosor');
+		const tamano = getVariantAttribute(variant, 'tamano');
+		if (color) selectedColor = color;
+		if (grosor) selectedGrosor = grosor;
+		if (tamano) selectedTamano = tamano;
 	}
 
 	async function addToCart() {
@@ -271,19 +466,79 @@
 			<!-- Variants -->
 			{#if data.product.variants && data.product.variants.length > 0}
 				<div class="mb-6">
-					<p class="block text-sm font-semibold mb-2">Variante:</p>
-					<div class="flex flex-wrap gap-2">
-						{#each data.product.variants as variant}
-							<button
-								onclick={() => selectVariant(variant)}
-								class="px-4 py-2 rounded-lg border-2 transition {selectedVariant?.id === variant.id
-									? 'border-blue-600 bg-blue-50'
-									: 'border-gray-300 hover:border-blue-400'}"
-							>
-								{variant.name}
-							</button>
-						{/each}
-					</div>
+					{#if isAcrylic}
+						<p class="block text-sm font-semibold mb-3">Color:</p>
+						{#if colorOptions.length > 0}
+							<div class="flex flex-wrap gap-3">
+								{#each colorOptions as color}
+									<button
+										onclick={() => (selectedColor = color.name)}
+										class="flex items-center gap-2 px-3 py-2 rounded-lg border-2 transition {selectedColor === color.name
+											? 'border-blue-600 bg-blue-50'
+											: 'border-gray-300 hover:border-blue-400'}"
+									>
+										<span
+											class="h-5 w-5 rounded-full border border-gray-300"
+											style={`background-color: ${getColorSwatch(color.name, color.hex) || '#e5e7eb'}`}
+										></span>
+										<span class="text-sm text-gray-700">{color.name}</span>
+									</button>
+								{/each}
+							</div>
+						{:else}
+							<p class="text-sm text-gray-500">No hay colores disponibles.</p>
+						{/if}
+
+						{#if grosorOptions.length > 0}
+							<div class="mt-5">
+								<p class="block text-sm font-semibold mb-2">Grosor:</p>
+								<div class="flex flex-wrap gap-2">
+									{#each grosorOptions as grosor}
+										<button
+											onclick={() => (selectedGrosor = grosor)}
+											class="px-4 py-2 rounded-lg border-2 transition {selectedGrosor === grosor
+												? 'border-blue-600 bg-blue-50'
+												: 'border-gray-300 hover:border-blue-400'}"
+										>
+											{grosor}
+										</button>
+									{/each}
+								</div>
+							</div>
+						{/if}
+
+						{#if tamanoOptions.length > 0}
+							<div class="mt-5">
+								<p class="block text-sm font-semibold mb-2">Tamaño:</p>
+								<div class="flex flex-wrap gap-2">
+									{#each tamanoOptions as tamano}
+										<button
+											onclick={() => (selectedTamano = tamano)}
+											class="px-4 py-2 rounded-lg border-2 transition {selectedTamano === tamano
+												? 'border-blue-600 bg-blue-50'
+												: 'border-gray-300 hover:border-blue-400'}"
+										>
+											{tamano}
+										</button>
+									{/each}
+								</div>
+							</div>
+						{/if}
+					{:else}
+						<p class="block text-sm font-semibold mb-2">Variante:</p>
+						<div class="flex flex-wrap gap-2">
+							{#each data.product.variants as variant}
+								<button
+									onclick={() => selectVariant(variant)}
+									class="px-4 py-2 rounded-lg border-2 transition {selectedVariant?.id === variant.id
+										? 'border-blue-600 bg-blue-50'
+										: 'border-gray-300 hover:border-blue-400'}"
+								>
+									{variant.name}
+								</button>
+							{/each}
+						</div>
+					{/if}
 				</div>
 			{/if}
 

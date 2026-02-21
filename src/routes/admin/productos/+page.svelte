@@ -57,6 +57,10 @@
 		price: number;
 		stock_quantity: number;
 		is_active: boolean;
+		color?: string;
+		color_hex?: string;
+		grosor?: string;
+		tamano?: string;
 	};
 
 	let variants: VariantForm[] = $state([]);
@@ -65,8 +69,94 @@
 		sku: '',
 		price: 0,
 		stock_quantity: 0,
-		is_active: true
+		is_active: true,
+		color: '',
+		color_hex: '',
+		grosor: '',
+		tamano: ''
 	});
+
+	let duplicateColorFrom = $state('');
+	let duplicateColorName = $state('');
+	let duplicateColorHex = $state('');
+	let duplicateColorSkuCode = $state('');
+	const duplicateStockDefault = 1;
+
+	let duplicateColorOptions = $derived.by(() => {
+		const colors = variants.map((v) => (v.color ?? '').trim()).filter(Boolean);
+		return [...new Set(colors)].sort((a, b) =>
+			a.localeCompare(b, 'es', { sensitivity: 'base' })
+		);
+	});
+
+	function escapeRegExp(value: string) {
+		return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+	}
+
+	function buildSkuWithNewColor(sku: string, colorCode: string) {
+		const parts = (sku || '').split('-');
+		if (parts.length >= 5) {
+			parts[2] = colorCode.toUpperCase();
+			return parts.join('-');
+		}
+		return `${sku}-${colorCode.toUpperCase()}`;
+	}
+
+	function buildVariantName(
+		name: string,
+		sourceColor: string,
+		newColor: string,
+		grosor?: string,
+		tamano?: string
+	) {
+		const safeName = (name || '').trim();
+		if (safeName && sourceColor) {
+			const regex = new RegExp(`\\b${escapeRegExp(sourceColor)}\\b`, 'i');
+			if (regex.test(safeName)) return safeName.replace(regex, newColor);
+		}
+		const parts = [newColor, grosor, tamano].filter(Boolean);
+		return parts.join(' ').trim() || safeName || newColor;
+	}
+
+	function duplicateColorVariants() {
+		const source = duplicateColorFrom.trim();
+		const newName = duplicateColorName.trim();
+		const newCode = duplicateColorSkuCode.trim().toUpperCase();
+		const newHex = duplicateColorHex.trim();
+
+		if (!source || !newName || !newCode) {
+			alert('Selecciona un color base y completa Color nuevo + Código SKU.');
+			return;
+		}
+
+		const sourceVariants = variants.filter(
+			(v) => (v.color ?? '').trim().toLowerCase() === source.toLowerCase()
+		);
+
+		if (sourceVariants.length === 0) {
+			alert('No hay variantes del color seleccionado.');
+			return;
+		}
+
+		const duplicates = sourceVariants.map((v) => {
+			const newSku = buildSkuWithNewColor(v.sku, newCode);
+			const newNameFinal = buildVariantName(v.name, source, newName, v.grosor, v.tamano);
+			return {
+				...v,
+				id: undefined,
+				name: newNameFinal,
+				sku: newSku,
+				color: newName,
+				color_hex: newHex || v.color_hex || '',
+				stock_quantity: duplicateStockDefault
+			};
+		});
+
+		variants = [...variants, ...duplicates];
+		duplicateColorName = '';
+		duplicateColorHex = '';
+		duplicateColorSkuCode = '';
+	}
 
 	// Variables para datos PIM (Product Information Management)
 	let satData = $state({
@@ -568,7 +658,17 @@
 			resetPimData();
 		}
 		newSpec = { key: '', value: '', data_type: 'text' };
-		newVariant = { name: '', sku: '', price: 0, stock_quantity: 0, is_active: true };
+		newVariant = {
+			name: '',
+			sku: '',
+			price: 0,
+			stock_quantity: 0,
+			is_active: true,
+			color: '',
+			color_hex: '',
+			grosor: '',
+			tamano: ''
+		};
 		newTagName = '';
 		selectedFiles = [];
 		imagePreviews = [];
@@ -621,7 +721,17 @@
 		productImages = [];
 		
 		newSpec = { key: '', value: '', data_type: 'text' };
-		newVariant = { name: '', sku: '', price: 0, stock_quantity: 0, is_active: true };
+		newVariant = {
+			name: '',
+			sku: '',
+			price: 0,
+			stock_quantity: 0,
+			is_active: true,
+			color: '',
+			color_hex: '',
+			grosor: '',
+			tamano: ''
+		};
 		newTagName = '';
 		selectedFiles = [];
 		imagePreviews = [];
@@ -692,14 +802,23 @@
 			.order('created_at');
 
 		if (data) {
-			variants = data.map((v: ProductVariant) => ({
+			variants = data.map((v: ProductVariant) => {
+				const attributes = (v as any)?.attributes && typeof (v as any).attributes === 'object'
+					? ((v as any).attributes as Record<string, any>)
+					: {};
+				return {
 				id: v.id,
 				name: v.name || '',
 				sku: v.sku || '',
 				price: v.price || 0,
 				stock_quantity: v.stock_quantity || 0,
-				is_active: v.is_active ?? true
-			}));
+				is_active: v.is_active ?? true,
+				color: attributes.color || '',
+				color_hex: attributes.color_hex || '',
+				grosor: attributes.grosor || '',
+				tamano: attributes.tamano || ''
+			};
+			});
 		}
 	}
 
@@ -864,7 +983,17 @@
 		}
 
 		variants = [...variants, { ...newVariant }];
-		newVariant = { name: '', sku: '', price: 0, stock_quantity: 0, is_active: true };
+		newVariant = {
+			name: '',
+			sku: '',
+			price: 0,
+			stock_quantity: 0,
+			is_active: true,
+			color: '',
+			color_hex: '',
+			grosor: '',
+			tamano: ''
+		};
 	}
 
 	function removeVariant(index: number) {
@@ -1263,14 +1392,24 @@
 				return;
 			}
 
-			const inserts = variants.map(v => ({
-				product_id: productId,
-				name: v.name,
-				sku: v.sku,
-				price: v.price,
-				stock_quantity: v.stock_quantity,
-				is_active: v.is_active
-			}));
+			const inserts = variants.map(v => {
+				const attributes = {
+					color: v.color?.trim() || undefined,
+					color_hex: v.color_hex?.trim() || undefined,
+					grosor: v.grosor?.trim() || undefined,
+					tamano: v.tamano?.trim() || undefined
+				};
+				const hasAttributes = Object.values(attributes).some(Boolean);
+				return {
+					product_id: productId,
+					name: v.name,
+					sku: v.sku,
+					price: v.price,
+					stock_quantity: v.stock_quantity,
+					is_active: v.is_active,
+					attributes: hasAttributes ? attributes : null
+				};
+			});
 
 			const insertPromise = supabase.from('product_variants').insert(inserts);
 			await Promise.race([insertPromise, new Promise((_, reject) => {
@@ -2218,6 +2357,10 @@
 											<tr>
 												<th class="px-4 py-3 text-left">Nombre</th>
 												<th class="px-4 py-3 text-left">SKU</th>
+												<th class="px-4 py-3 text-left">Color</th>
+												<th class="px-4 py-3 text-left">Color HEX</th>
+												<th class="px-4 py-3 text-left">Grosor</th>
+												<th class="px-4 py-3 text-left">Tamaño</th>
 												<th class="px-4 py-3 text-left">Precio</th>
 												<th class="px-4 py-3 text-left">Stock</th>
 												<th class="px-4 py-3 text-left">Activo</th>
@@ -2241,6 +2384,38 @@
 															bind:value={variant.sku}
 															placeholder="SKU"
 															class="w-full px-2 py-1 border border-gray-300 rounded font-mono text-xs"
+														/>
+													</td>
+													<td class="px-4 py-3">
+														<input
+															type="text"
+															bind:value={variant.color}
+															placeholder="Ej: verde"
+															class="w-full px-2 py-1 border border-gray-300 rounded"
+														/>
+													</td>
+													<td class="px-4 py-3">
+														<input
+															type="text"
+															bind:value={variant.color_hex}
+															placeholder="#22c55e"
+															class="w-full px-2 py-1 border border-gray-300 rounded font-mono text-xs"
+														/>
+													</td>
+													<td class="px-4 py-3">
+														<input
+															type="text"
+															bind:value={variant.grosor}
+															placeholder="Ej: 3mm"
+															class="w-full px-2 py-1 border border-gray-300 rounded"
+														/>
+													</td>
+													<td class="px-4 py-3">
+														<input
+															type="text"
+															bind:value={variant.tamano}
+															placeholder="Ej: 60x90"
+															class="w-full px-2 py-1 border border-gray-300 rounded"
 														/>
 													</td>
 													<td class="px-4 py-3">
@@ -2287,6 +2462,77 @@
 								</div>
 							{/if}
 
+							{#if variants.length > 0}
+								<div class="bg-white border border-gray-200 rounded-lg p-4 space-y-4">
+									<h4 class="font-semibold text-sm text-gray-800">Duplicar color</h4>
+									<p class="text-xs text-gray-500">
+										Copia todas las medidas del color seleccionado. Stock nuevo en 1.
+									</p>
+
+									<div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+										<div>
+											<label class="block text-sm font-semibold mb-1" for="dup-color-from">Color base</label>
+											<select
+												id="dup-color-from"
+												bind:value={duplicateColorFrom}
+												class="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+											>
+												<option value="">Selecciona un color</option>
+												{#each duplicateColorOptions as colorOption}
+													<option value={colorOption}>{colorOption}</option>
+												{/each}
+											</select>
+										</div>
+
+										<div>
+											<label class="block text-sm font-semibold mb-1" for="dup-color-name">Color nuevo</label>
+											<input
+												id="dup-color-name"
+												type="text"
+												bind:value={duplicateColorName}
+												placeholder="Ej: Azul"
+												class="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+											/>
+										</div>
+
+										<div>
+											<label class="block text-sm font-semibold mb-1" for="dup-color-code">Código SKU color</label>
+											<input
+												id="dup-color-code"
+												type="text"
+												bind:value={duplicateColorSkuCode}
+												placeholder="Ej: AZU"
+												class="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
+											/>
+											<p class="text-xs text-gray-500 mt-1">
+												Reemplaza el 3er bloque del SKU: MAT-ACR-AAA-3MM-2030
+											</p>
+										</div>
+
+										<div>
+											<label class="block text-sm font-semibold mb-1" for="dup-color-hex">Color HEX</label>
+											<input
+												id="dup-color-hex"
+												type="text"
+												bind:value={duplicateColorHex}
+												placeholder="#1d4ed8"
+												class="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
+											/>
+										</div>
+									</div>
+
+									<div class="flex justify-end">
+										<button
+											type="button"
+											onclick={duplicateColorVariants}
+											class="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition font-medium"
+										>
+											Duplicar medidas del color
+										</button>
+									</div>
+								</div>
+							{/if}
+
 							<div class="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-4">
 								<h4 class="font-semibold text-sm text-blue-900">Agregar Nueva Variante</h4>
 							
@@ -2312,6 +2558,49 @@
 										/>
 									</div>
 								</div>
+
+									<div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+										<div>
+											<label class="block text-sm font-semibold mb-1" for="new-variant-color">Color</label>
+											<input
+												id="new-variant-color"
+												type="text"
+												bind:value={newVariant.color}
+												placeholder="Ej: verde"
+												class="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+											/>
+										</div>
+										<div>
+											<label class="block text-sm font-semibold mb-1" for="new-variant-color-hex">Color HEX</label>
+											<input
+												id="new-variant-color-hex"
+												type="text"
+												bind:value={newVariant.color_hex}
+												placeholder="#22c55e"
+												class="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
+											/>
+										</div>
+										<div>
+											<label class="block text-sm font-semibold mb-1" for="new-variant-grosor">Grosor</label>
+											<input
+												id="new-variant-grosor"
+												type="text"
+												bind:value={newVariant.grosor}
+												placeholder="Ej: 3mm"
+												class="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+											/>
+										</div>
+										<div>
+											<label class="block text-sm font-semibold mb-1" for="new-variant-tamano">Tamaño</label>
+											<input
+												id="new-variant-tamano"
+												type="text"
+												bind:value={newVariant.tamano}
+												placeholder="Ej: 60x90"
+												class="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+											/>
+										</div>
+									</div>
 
 								<div class="grid grid-cols-1 md:grid-cols-3 gap-3">
 									<div>

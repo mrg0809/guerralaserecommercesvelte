@@ -5,7 +5,7 @@ import { error } from '@sveltejs/kit';
 export const load: PageLoad = async ({ params }) => {
 	const { data: productData } = await supabase
 		.from('products')
-		.select('*, product_media(*), product_variants(*), categories(*)')
+		.select('*, product_media(*), product_variants(*), categories(*), product_specifications(*)')
 		.eq('slug', params.slug)
 		.eq('is_active', true)
 		.single();
@@ -77,7 +77,8 @@ export const load: PageLoad = async ({ params }) => {
 			variants: sortedVariants,
 			bundles: bundlesWithCalculations,
 			category: productData.categories,
-			discounts: activeDiscounts || []
+			discounts: activeDiscounts || [],
+			specifications: productData.product_specifications
 		}
 	};
 };
