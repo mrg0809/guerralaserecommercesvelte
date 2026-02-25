@@ -7,6 +7,7 @@
 	import { userStore } from '$lib/stores/user';
 	import { supabase } from '$lib/supabaseClient';
 	import { getDisplayPrice } from '$lib/utils';
+	import { trackPageView, trackWhatsAppContact } from '$lib/gtag';
 	import ReauthModal from '$lib/components/ReauthModal.svelte';
 	import CookieBanner from '$lib/components/CookieBanner.svelte';
 	import MetaPixel from '$lib/components/MetaPixel.svelte';
@@ -27,10 +28,12 @@ let searchTimeout: NodeJS.Timeout;
 let currentPath = $state('/');
 let isAdminRoute = $state(false);
 	
-// Detectar cambios de ruta
+// Detectar cambios de ruta y rastrear con Google Analytics
 page.subscribe(($page) => {
 	currentPath = $page.url.pathname;
 	isAdminRoute = currentPath.startsWith('/admin');
+	// Rastrear page_view en cambios de URL (SPA)
+	trackPageView(currentPath);
 });
 	
 	cart.subscribe((items) => {
@@ -149,6 +152,10 @@ page.subscribe(($page) => {
 		}
 		const fullText = `${base}${context}`;
 		const url = `https://wa.me/${phone}?text=${encodeURIComponent(fullText)}`;
+		
+		// Rastrear evento de contacto por WhatsApp
+		trackWhatsAppContact(context || 'chat_flotante');
+		
 		if (typeof window !== 'undefined') {
 			window.open(url, '_blank', 'noopener,noreferrer');
 		}
