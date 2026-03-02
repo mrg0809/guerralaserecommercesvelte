@@ -293,6 +293,7 @@
 		if (stock === 0) return;
 		cart.addItem({
 			product: data.product,
+			shipping_type_name: data.product.shipping_types?.name,
 			variant: selectedVariant || undefined,
 			bundle: selectedBundle || undefined,
 			quantity,

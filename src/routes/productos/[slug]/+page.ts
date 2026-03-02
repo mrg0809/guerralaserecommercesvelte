@@ -5,7 +5,7 @@ import { error } from '@sveltejs/kit';
 export const load: PageLoad = async ({ params }) => {
 	const { data: productData } = await supabase
 		.from('products')
-		.select('*, product_media(*), product_variants(*), categories(*), product_specifications(*)')
+		.select('*, product_media(*), product_variants(*), categories(*), product_specifications(*), shipping_types(name)')
 		.eq('slug', params.slug)
 		.eq('is_active', true)
 		.single();
