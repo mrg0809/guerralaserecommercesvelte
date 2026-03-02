@@ -89,6 +89,15 @@
 		);
 	});
 
+	// Categorías ordenadas alfabéticamente por su jerarquía
+	let sortedCategories = $derived.by(() => {
+		return [...categories].sort((a, b) => {
+			const nameA = categoryHierarchy[a.id] || a.name;
+			const nameB = categoryHierarchy[b.id] || b.name;
+			return nameA.localeCompare(nameB, 'es', { sensitivity: 'base' });
+		});
+	});
+
 	function escapeRegExp(value: string) {
 		return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 	}
@@ -535,7 +544,7 @@
 		try {
 			const { data } = await supabase.from('categories').select('id, name, parent_id, is_active').eq('is_active', true);
 			if (data) {
-				categories = data;
+				categories = data.sort((a, b) => a.name.localeCompare(b.name, 'es', { sensitivity: 'base' }));
 				buildCategoryHierarchy();
 				console.log(`✅ ${data.length} categorías cargadas`);
 			}
@@ -1701,7 +1710,7 @@
 						class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
 					>
 						<option value="">Todas las categorías</option>
-						{#each categories as category}
+						{#each sortedCategories as category}
 							<option value={category.id}>
 								{categoryHierarchy[category.id] || category.name}
 							</option>

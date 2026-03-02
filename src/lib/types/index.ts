@@ -34,7 +34,8 @@ export interface TestimonialVideo {
 }
 
 export interface CartItem {
-	product: Product;
+	product: Product & { shipping_types?: { name: string } | null };
+	shipping_type_name?: string;
 	variant?: ProductVariant;
 	bundle?: ProductBundle;
 	quantity: number;
