@@ -26,6 +26,7 @@
 	},
 	"dependencies": {
 		"@google/generative-ai": "^0.24.1",
+		"@stripe/stripe-js": "^4.0.0",
 		"@supabase/auth-helpers-sveltekit": "latest",
 		"@supabase/supabase-js": "^2.87.1",
 		"@vercel/analytics": "^1.6.1",
