@@ -3,15 +3,33 @@ import { supabase } from '$lib/supabaseClient';
 import { error } from '@sveltejs/kit';
 
 export const load: PageLoad = async ({ params }) => {
-	const { data: productData } = await supabase
+	console.log('🔍 Buscando producto con slug:', params.slug);
+	
+	const { data: productData, error: err } = await supabase
 		.from('products')
-		.select('*, product_media(*), product_variants(*), categories(*), product_specifications(*), shipping_types(name)')
+		.select('*, product_media(*), product_variants(*), categories(*), product_specifications(*)')
 		.eq('slug', params.slug)
-		.eq('is_active', true)
 		.single();
 
+	console.log('📊 Resultado de búsqueda:', { found: !!productData, error: err?.message });
+	
+	if (err) {
+		console.error('❌ Error en consulta:', err);
+		// Si no encuentra nada, intenta buscar todos los productos para debug
+		const { data: allProducts } = await supabase
+			.from('products')
+			.select('id, name, slug')
+			.limit(5);
+		console.log('📝 Primeros 5 productos en la BD:', allProducts);
+	}
+
 	if (!productData) {
-		throw error(404, 'Producto no encontrado');
+		throw error(404, `Producto no encontrado. Slug buscado: ${params.slug}`);
+	}
+
+	// Verificar que el producto está activo
+	if (!productData.is_active) {
+		throw error(404, 'Producto no disponible');
 	}
 
 	// Get active discounts
