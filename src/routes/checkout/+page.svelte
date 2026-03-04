@@ -225,8 +225,8 @@
 					discount_amount: 0,
 					tax_amount: tax,
 					shipping_amount: shipping,
-					shipping_carrier: selectedShippingOption.carrier,
-					shipping_service: selectedShippingOption.service,
+					shipping_carrier: selectedShippingOption.carrier || 'custom',
+					shipping_service: selectedShippingOption.service || selectedShippingOption.name || 'standard',
 					total_amount: total,
 					status: 'pending',
 					payment_status: 'pending',
@@ -260,7 +260,7 @@
 			}
 
 			// Update order with payment intent ID
-			await supabase
+			await (supabase as any)
 				.from('orders')
 				.update({
 					stripe_payment_intent_id: paymentData.paymentIntentId
@@ -361,7 +361,6 @@
 
 <svelte:head>
 	<title>Checkout - Guerra Láser</title>
-	<script src="https://js.stripe.com/v3/"></script>
 </svelte:head>
 
 {#if showQuotationModal && cartRequiresQuotation(cartItems)}
@@ -710,7 +709,7 @@
 										<div class="flex-1">
 											<div class="flex justify-between items-start">
 												<div>
-													<p class="font-semibold">{option.carrier.toUpperCase()} - {option.service}</p>
+													<p class="font-semibold">{(option.carrier || 'Envío').toUpperCase()} - {option.service || option.name}</p>
 													<p class="text-sm text-gray-600">{option.description}</p>
 													{#if option.estimatedDays}
 														<p class="text-xs text-gray-500">Entrega estimada: {option.estimatedDays} días hábiles</p>

@@ -61,8 +61,16 @@ CREATE POLICY "Only admins can insert shipping types"
   ON shipping_types
   FOR INSERT
   WITH CHECK (
-    (auth.jwt() -> 'app_metadata' ->> 'role') = 'admin'
-    OR auth.role() = 'service_role'
+    auth.role() = 'service_role'
+    OR EXISTS (
+      SELECT 1
+      FROM user_roles ur
+      JOIN roles r ON r.id = ur.role_id
+      WHERE ur.user_id = auth.uid()
+        AND ur.is_active = true
+        AND r.is_active = true
+        AND r.name IN ('admin', 'superadmin', 'super_admin')
+    )
   );
 
 -- Only admins can update shipping types
@@ -70,12 +78,28 @@ CREATE POLICY "Only admins can update shipping types"
   ON shipping_types
   FOR UPDATE
   USING (
-    (auth.jwt() -> 'app_metadata' ->> 'role') = 'admin'
-    OR auth.role() = 'service_role'
+    auth.role() = 'service_role'
+    OR EXISTS (
+      SELECT 1
+      FROM user_roles ur
+      JOIN roles r ON r.id = ur.role_id
+      WHERE ur.user_id = auth.uid()
+        AND ur.is_active = true
+        AND r.is_active = true
+        AND r.name IN ('admin', 'superadmin', 'super_admin')
+    )
   )
   WITH CHECK (
-    (auth.jwt() -> 'app_metadata' ->> 'role') = 'admin'
-    OR auth.role() = 'service_role'
+    auth.role() = 'service_role'
+    OR EXISTS (
+      SELECT 1
+      FROM user_roles ur
+      JOIN roles r ON r.id = ur.role_id
+      WHERE ur.user_id = auth.uid()
+        AND ur.is_active = true
+        AND r.is_active = true
+        AND r.name IN ('admin', 'superadmin', 'super_admin')
+    )
   );
 
 -- Only admins can delete shipping types
@@ -83,8 +107,16 @@ CREATE POLICY "Only admins can delete shipping types"
   ON shipping_types
   FOR DELETE
   USING (
-    (auth.jwt() -> 'app_metadata' ->> 'role') = 'admin'
-    OR auth.role() = 'service_role'
+    auth.role() = 'service_role'
+    OR EXISTS (
+      SELECT 1
+      FROM user_roles ur
+      JOIN roles r ON r.id = ur.role_id
+      WHERE ur.user_id = auth.uid()
+        AND ur.is_active = true
+        AND r.is_active = true
+        AND r.name IN ('admin', 'superadmin', 'super_admin')
+    )
   );
 
 -- Comments
