@@ -67,9 +67,9 @@
 		}, 0)
 	);
 
-	let tax = $derived(subtotal * 0.16);
+	// IVA ya está incluido en los precios
 	let shipping = $derived(selectedShippingOption ? selectedShippingOption.price : 0);
-	let total = $derived(subtotal + tax + shipping);
+	let total = $derived(subtotal + shipping);
 
 	// Watch for cart changes and check if quotation is needed
 	$effect(() => {
@@ -298,7 +298,7 @@
 					billing_address: formData.shipping_address,
 					subtotal,
 					discount_amount: 0,
-					tax_amount: tax,
+					tax_amount: 0,
 					shipping_amount: shipping,
 					shipping_carrier: selectedShippingOption.carrier || 'custom',
 					shipping_service: selectedShippingOption.service || selectedShippingOption.name || 'standard',
@@ -894,10 +894,7 @@
 							<span>{formatPrice(subtotal)}</span>
 						</div>
 						<div class="flex justify-between">
-							<span class="text-gray-600">IVA (16%):</span>
-							<span>{formatPrice(tax)}</span>
-						</div>
-						<div class="flex justify-between">
+
 							<span class="text-gray-600">Envío:</span>
 							<span>{cartRequiresQuotation(cartItems) ? 'Por cotizar' : (selectedShippingOption ? formatPrice(shipping) : 'Pendiente')}</span>
 						</div>

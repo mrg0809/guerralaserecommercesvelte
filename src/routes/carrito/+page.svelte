@@ -35,8 +35,8 @@
 		}, 0)
 	);
 
-	let tax = $derived(subtotal * 0.16); // 16% IVA
-	let total = $derived(subtotal + tax);
+	// IVA ya está incluido en los precios
+	let total = $derived(subtotal);
 
 	function proceedToCheckout() {
 		goto('/checkout');
@@ -171,10 +171,6 @@
 						<div class="flex justify-between">
 							<span class="text-gray-600">Subtotal:</span>
 							<span>{formatPrice(subtotal)}</span>
-						</div>
-						<div class="flex justify-between">
-							<span class="text-gray-600">IVA (16%):</span>
-							<span>{formatPrice(tax)}</span>
 						</div>
 						<div class="border-t pt-2 flex justify-between font-bold text-lg">
 							<span>Total:</span>
