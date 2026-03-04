@@ -8,7 +8,11 @@ const staticEntries = [
 	{ loc: `${SITE_URL}/categorias/maquinaria`, priority: 0.9 },
 	{ loc: `${SITE_URL}/categorias/refacciones`, priority: 0.9 },
 	{ loc: `${SITE_URL}/categorias/chillers-compresores-extractores`, priority: 0.9 },
-	{ loc: `${SITE_URL}/categorias/tubos-laser`, priority: 0.9 }
+	{ loc: `${SITE_URL}/categorias/tubos-laser`, priority: 0.9 },
+	{ loc: `${SITE_URL}/privacidad`, priority: 0.8 },
+	{ loc: `${SITE_URL}/politica-envios`, priority: 0.8 },
+	{ loc: `${SITE_URL}/politica-devoluciones`, priority: 0.8 },
+	{ loc: `${SITE_URL}/terminos`, priority: 0.8 }
 ];
 
 function xmlUrl({ loc, lastmod, priority }: { loc: string; lastmod?: string; priority: number }) {
