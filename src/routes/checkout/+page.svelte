@@ -325,19 +325,37 @@
 					(item.variant ? item.variant.price : item.product.base_price) * item.quantity
 			}));
 
-			const { error: itemsError } = await supabase.from('order_items').insert(orderItems);
-			if (itemsError) throw itemsError;
+			const itemsResponse = await fetch('/api/orders/items', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					orderId: order.id,
+					items: orderItems
+				})
+			});
+
+			if (!itemsResponse.ok) {
+				const itemsData = await itemsResponse.json();
+				throw new Error(itemsData.error || 'Error guardando items del pedido');
+			}
 
 			const paymentData = await initializeStripePayment();
 			if (!paymentData) throw new Error('Failed to initialize payment');
 
 			// Update order with payment intent ID
-			await (supabase as any)
-				.from('orders')
-				.update({
-					stripe_payment_intent_id: paymentData.paymentIntentId
+			const attachPiResponse = await fetch('/api/orders/payment-intent', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					orderId: order.id,
+					paymentIntentId: paymentData.paymentIntentId
 				})
-				.eq('id', order.id);
+			});
+
+			if (!attachPiResponse.ok) {
+				const attachPiData = await attachPiResponse.json();
+				throw new Error(attachPiData.error || 'No se pudo asociar el pago al pedido');
+			}
 
 			// Confirm payment with Stripe
 			const { error: stripeError } = await stripe.confirmPayment({
