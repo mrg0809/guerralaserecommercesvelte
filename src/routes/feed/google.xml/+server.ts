@@ -162,15 +162,15 @@ function buildItemXml(
 
 	return `    <item>
       <g:id>${escapeXml(id)}</g:id>
-	<title><![CDATA[${title}]]></title>
-	<description><![CDATA[${description}]]></description>
+      <title><![CDATA[${title}]]></title>
+      <description><![CDATA[${description}]]></description>
       <link>${escapeXml(link)}</link>
       <g:image_link>${mainImage ? escapeXml(mainImage) : ''}</g:image_link>
       <g:availability>${availability}</g:availability>
       <g:price>${escapeXml(price)}</g:price>
       <g:condition>${condition}</g:condition>
       <g:brand>${escapeXml(brand)}</g:brand>${mpn ? `\n      <g:mpn>${escapeXml(mpn)}</g:mpn>` : ''}${gtin ? `\n      <g:gtin>${escapeXml(gtin)}</g:gtin>` : ''}${additionalImageXml}${shippingXml}
-	<g:google_product_category>${escapeXml(googleCategory.id)}</g:google_product_category>
+      <g:google_product_category>${escapeXml(googleCategory.id)}</g:google_product_category>
     </item>`;
 }
 
