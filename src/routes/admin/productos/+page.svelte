@@ -111,6 +111,11 @@
 		});
 	});
 
+	let sortedCategoryHierarchy = $derived.by(() => {
+		const entries = Object.entries(categoryHierarchy);
+		return entries.sort((a, b) => a[1].localeCompare(b[1], 'es', { sensitivity: 'base' }));
+	});
+
 	function escapeRegExp(value: string) {
 		return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 	}
@@ -2234,7 +2239,7 @@
 										class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
 									>
 										<option value="">Sin categoría</option>
-										{#each Object.entries(categoryHierarchy) as [id, label]}
+										{#each sortedCategoryHierarchy as [id, label]}
 											<option value={id}>{label}</option>
 										{/each}
 									</select>
