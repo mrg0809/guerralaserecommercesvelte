@@ -129,6 +129,8 @@
 							Se usarán tarifas de prueba
 						</p>
 					{/if}
+					</div>
+				</div>
 				<div class="bg-white rounded-lg shadow-md p-6">
 					<h2 class="text-xl font-bold mb-4">📋 Datos de Prueba</h2>
 
@@ -138,8 +140,9 @@
 							<h3 class="font-semibold mb-3">Destino</h3>
 							<div class="space-y-3">
 								<div>
-									<label class="block text-sm font-medium mb-1">Calle</label>
+									<label for="test-street" class="block text-sm font-medium mb-1">Calle</label>
 									<input
+										id="test-street"
 										type="text"
 										bind:value={testData.destination.street}
 										class="w-full px-3 py-2 border border-gray-300 rounded-lg"
@@ -147,16 +150,18 @@
 								</div>
 								<div class="grid grid-cols-2 gap-3">
 									<div>
-										<label class="block text-sm font-medium mb-1">Ciudad</label>
+										<label for="test-city" class="block text-sm font-medium mb-1">Ciudad</label>
 										<input
+											id="test-city"
 											type="text"
 											bind:value={testData.destination.city}
 											class="w-full px-3 py-2 border border-gray-300 rounded-lg"
 										/>
 									</div>
 									<div>
-										<label class="block text-sm font-medium mb-1">Estado</label>
+										<label for="test-state" class="block text-sm font-medium mb-1">Estado</label>
 										<input
+											id="test-state"
 											type="text"
 											bind:value={testData.destination.state}
 											class="w-full px-3 py-2 border border-gray-300 rounded-lg"
@@ -165,16 +170,18 @@
 								</div>
 								<div class="grid grid-cols-2 gap-3">
 									<div>
-										<label class="block text-sm font-medium mb-1">CP</label>
+										<label for="test-zip" class="block text-sm font-medium mb-1">CP</label>
 										<input
+											id="test-zip"
 											type="text"
 											bind:value={testData.destination.zip}
 											class="w-full px-3 py-2 border border-gray-300 rounded-lg"
 										/>
 									</div>
 									<div>
-										<label class="block text-sm font-medium mb-1">País</label>
+										<label for="test-country" class="block text-sm font-medium mb-1">País</label>
 										<input
+											id="test-country"
 											type="text"
 											bind:value={testData.destination.country}
 											class="w-full px-3 py-2 border border-gray-300 rounded-lg"
@@ -189,24 +196,27 @@
 							<h3 class="font-semibold mb-3">Información del Cliente</h3>
 							<div class="space-y-3">
 								<div>
-									<label class="block text-sm font-medium mb-1">Nombre</label>
+									<label for="test-customer-name" class="block text-sm font-medium mb-1">Nombre</label>
 									<input
+										id="test-customer-name"
 										type="text"
 										bind:value={testData.customerInfo.name}
 										class="w-full px-3 py-2 border border-gray-300 rounded-lg"
 									/>
 								</div>
 								<div>
-									<label class="block text-sm font-medium mb-1">Email</label>
+									<label for="test-customer-email" class="block text-sm font-medium mb-1">Email</label>
 									<input
+										id="test-customer-email"
 										type="email"
 										bind:value={testData.customerInfo.email}
 										class="w-full px-3 py-2 border border-gray-300 rounded-lg"
 									/>
 								</div>
 								<div>
-									<label class="block text-sm font-medium mb-1">Teléfono</label>
+									<label for="test-customer-phone" class="block text-sm font-medium mb-1">Teléfono</label>
 									<input
+										id="test-customer-phone"
 										type="tel"
 										bind:value={testData.customerInfo.phone}
 										class="w-full px-3 py-2 border border-gray-300 rounded-lg"
