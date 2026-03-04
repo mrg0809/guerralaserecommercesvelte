@@ -3,9 +3,9 @@
 	import { formatPrice, generateOrderNumber } from '$lib/utils';
 	import { supabase } from '$lib/supabaseClient';
 	import { goto } from '$app/navigation';
-	import { detectShippingType, cartRequiresShippingQuotation, getCheckoutButtonLabel } from '$lib/services/shippingResolver';
+	import { cartRequiresQuotation, getCheckoutButtonLabel } from '$lib/services/shippingService';
 	import { loadStripe } from '@stripe/stripe-js';
-	import type { Stripe, StripeElements, PaymentIntent } from '@stripe/stripe-js';
+	import type { Stripe, StripeElements } from '@stripe/stripe-js';
 	import { onMount } from 'svelte';
 
 	let cartItems = $state<any[]>([]);
@@ -13,10 +13,9 @@
 	let error = $state('');
 	let showQuotationModal = $state(false);
 	let showShippingOptions = $state(false);
-	let loadingShippingRates = $state(false);
-	let shippingRates = $state<any[]>([]);
-	let selectedShippingRate = $state<any>(null);
-	let shippingType = $state<'standard' | 'delicate' | 'heavy' | null>(null);
+	let loadingShippingOptions = $state(false);
+	let shippingOptions = $state<any[]>([]);
+	let selectedShippingOption = $state<any>(null);
 	let stripe: Stripe | null = null;
 	let elements: StripeElements | null = null;
 	let paymentElement: any = null;
@@ -68,28 +67,36 @@
 	);
 
 	let tax = $derived(subtotal * 0.16);
-	let shipping = $derived(selectedShippingRate ? selectedShippingRate.price : 0);
+	let shipping = $derived(selectedShippingOption ? selectedShippingOption.price : 0);
 	let total = $derived(subtotal + tax + shipping);
 
-	// Watch for cart changes and detect shipping type
+	// Watch for cart changes and check if quotation is needed
 	$effect(() => {
 		cart.subscribe((items) => {
 			cartItems = items;
-			shippingType = detectShippingType(items);
-			if (cartRequiresShippingQuotation(items)) {
-				// If cart contains heavy items, show quotation modal instead of checkout
+			shippingOptions = [];
+			selectedShippingOption = null;
+			showShippingOptions = false;
+			if (cartRequiresQuotation(items)) {
+				// If cart contains items requiring quotation, show modal instead
 				showQuotationModal = true;
 			}
 		})();
 	});
 
-	async function loadShippingRates() {
-		if (!formData.shipping_address.city || !formData.shipping_address.state || !formData.shipping_address.zip_code) {
-			error = 'Por favor completa la dirección de envío primero';
-			return;
+	$effect(() => {
+		if (
+			cartItems.length > 0 &&
+			!cartRequiresQuotation(cartItems) &&
+			!loadingShippingOptions &&
+			!showShippingOptions
+		) {
+			loadShippingOptions();
 		}
+	});
 
-		loadingShippingRates = true;
+	async function loadShippingOptions() {
+		loadingShippingOptions = true;
 		error = '';
 
 		try {
@@ -97,38 +104,26 @@
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
-					cartItems,
-					destination: {
-						street: formData.shipping_address.street,
-						city: formData.shipping_address.city,
-						state: formData.shipping_address.state,
-						zip: formData.shipping_address.zip_code,
-						country: 'MX'
-					},
-					customerInfo: {
-						name: formData.customer_name,
-						email: formData.customer_email,
-						phone: formData.customer_phone
-					}
+					cartItems
 				})
 			});
 
 			if (!response.ok) {
-				throw new Error('Failed to get shipping rates');
+				throw new Error('Failed to get shipping options');
 			}
 
 			const data = await response.json();
-			shippingRates = data.rates || [];
+			shippingOptions = data.options || [];
 			showShippingOptions = true;
 
-			// Auto-select cheapest option
-			if (shippingRates.length > 0) {
-				selectedShippingRate = shippingRates[0];
+			// Auto-select first option
+			if (shippingOptions.length > 0) {
+				selectedShippingOption = shippingOptions[0];
 			}
 		} catch (e: any) {
 			error = e.message || 'Error al obtener opciones de envío';
 		} finally {
-			loadingShippingRates = false;
+			loadingShippingOptions = false;
 		}
 	}
 
@@ -184,7 +179,7 @@
 		}
 
 		// If cart requires quotation, show modal instead
-		if (cartRequiresShippingQuotation(cartItems)) {
+		if (cartRequiresQuotation(cartItems)) {
 			showQuotationModal = true;
 			return;
 		}
@@ -200,7 +195,7 @@
 			return;
 		}
 
-		if (!selectedShippingRate) {
+		if (!selectedShippingOption) {
 			error = 'Por favor selecciona una opción de envío';
 			return;
 		}
@@ -230,8 +225,8 @@
 					discount_amount: 0,
 					tax_amount: tax,
 					shipping_amount: shipping,
-					shipping_carrier: selectedShippingRate.carrier,
-					shipping_service: selectedShippingRate.service,
+					shipping_carrier: selectedShippingOption.carrier,
+					shipping_service: selectedShippingOption.service,
 					total_amount: total,
 					status: 'pending',
 					payment_status: 'pending',
@@ -298,35 +293,6 @@
 			// If we get here without redirect, payment succeeded
 			// Clear cart
 			cart.clear();
-
-			// Create shipping label
-			try {
-				await fetch('/api/shipping/create', {
-					method: 'POST',
-					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({
-						orderId: order.id,
-						carrier: selectedShippingRate.carrier,
-						service: selectedShippingRate.service,
-						destination: {
-							street: formData.shipping_address.street,
-							city: formData.shipping_address.city,
-							state: formData.shipping_address.state,
-							zip: formData.shipping_address.zip_code,
-							country: 'MX'
-						},
-						customerInfo: {
-							name: formData.customer_name,
-							email: formData.customer_email,
-							phone: formData.customer_phone
-						},
-						cartItems
-					})
-				});
-			} catch (shippingError) {
-				console.error('Error creating shipping label:', shippingError);
-				// Don't fail the order, just log it
-			}
 
 			// Redirect to order confirmation
 			goto(`/pedido/${orderNumber}?payment=success`);
@@ -398,7 +364,7 @@
 	<script src="https://js.stripe.com/v3/"></script>
 </svelte:head>
 
-{#if showQuotationModal && cartRequiresShippingQuotation(cartItems)}
+{#if showQuotationModal && cartRequiresQuotation(cartItems)}
 	<!-- Quotation Modal for Heavy Items -->
 	<div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
 		<div class="bg-white rounded-lg shadow-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
@@ -713,41 +679,44 @@
 								></textarea>
 							</div>
 
-							<!-- Load Shipping Rates Button -->
+							<!-- Load Shipping Options Button -->
 							<button
 								type="button"
-								onclick={loadShippingRates}
-								disabled={loadingShippingRates || !formData.shipping_address.city || !formData.shipping_address.zip_code}
+								onclick={loadShippingOptions}
+								disabled={loadingShippingOptions}
 								class="w-full bg-green-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-green-700 transition disabled:bg-gray-400"
 							>
-								{loadingShippingRates ? 'Consultando...' : 'Consultar Opciones de Envío'}
+								{loadingShippingOptions ? 'Consultando...' : 'Consultar Opciones de Envío'}
 							</button>
 						</div>
 					</div>
 
 					<!-- Shipping Options -->
-					{#if showShippingOptions && shippingRates.length > 0}
+					{#if showShippingOptions && shippingOptions.length > 0}
 						<div class="bg-white rounded-lg shadow-md p-6">
 							<h2 class="text-2xl font-bold mb-4">Opciones de Envío</h2>
 							
 							<div class="space-y-3">
-								{#each shippingRates as rate}
-									<label class="flex items-center p-4 border-2 rounded-lg cursor-pointer transition hover:border-blue-500 {selectedShippingRate?.service === rate.service ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}">
+								{#each shippingOptions as option}
+									<label class="flex items-center p-4 border-2 rounded-lg cursor-pointer transition hover:border-blue-500 {selectedShippingOption?.id === option.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}">
 										<input
 											type="radio"
 											name="shipping"
-											value={rate}
-											checked={selectedShippingRate?.service === rate.service}
-											onchange={() => selectedShippingRate = rate}
+											value={option}
+											checked={selectedShippingOption?.id === option.id}
+											onchange={() => selectedShippingOption = option}
 											class="mr-3"
 										/>
 										<div class="flex-1">
 											<div class="flex justify-between items-start">
 												<div>
-													<p class="font-semibold">{rate.carrier.toUpperCase()} - {rate.description}</p>
-													<p class="text-sm text-gray-600">Entrega estimada: {rate.deliveryDays} días hábiles</p>
+													<p class="font-semibold">{option.carrier.toUpperCase()} - {option.service}</p>
+													<p class="text-sm text-gray-600">{option.description}</p>
+													{#if option.estimatedDays}
+														<p class="text-xs text-gray-500">Entrega estimada: {option.estimatedDays} días hábiles</p>
+													{/if}
 												</div>
-												<p class="font-bold text-blue-600">{formatPrice(rate.price)}</p>
+												<p class="font-bold text-blue-600">{formatPrice(option.price)}</p>
 											</div>
 										</div>
 									</label>
@@ -756,8 +725,14 @@
 						</div>
 					{/if}
 
+					{#if showShippingOptions && shippingOptions.length === 0}
+						<div class="bg-amber-50 border border-amber-200 rounded-lg p-4 text-amber-800">
+							No hay opciones de envío disponibles para los productos del carrito. Asigna un tipo de envío en administración.
+						</div>
+					{/if}
+
 					<!-- Payment Section -->
-					{#if selectedShippingRate}
+					{#if selectedShippingOption}
 						<div class="bg-white rounded-lg shadow-md p-6">
 							<h2 class="text-2xl font-bold mb-4">Método de Pago</h2>
 							
@@ -779,15 +754,15 @@
 
 					<button
 						type="submit"
-						disabled={submitting || !selectedShippingRate}
+						disabled={submitting || !selectedShippingOption}
 						class="w-full bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 transition disabled:bg-gray-400"
 					>
-						{submitting ? 'Procesando Pago...' : selectedShippingRate ? 'Pagar y Finalizar Compra' : 'Selecciona envío primero'}
+						{submitting ? 'Procesando Pago...' : selectedShippingOption ? 'Pagar y Finalizar Compra' : 'Selecciona envío primero'}
 					</button>
 
-					{#if selectedShippingRate}
+					{#if selectedShippingOption}
 						<p class="text-center text-sm text-gray-600">
-							Al hacer clic en "Pagar y Finalizar Compra", se procesará tu pago y se generará automáticamente tu guía de envío.
+							Al hacer clic en "Pagar y Finalizar Compra", se procesará tu pago de forma segura.
 						</p>
 					{/if}
 				</form>
@@ -825,7 +800,7 @@
 						</div>
 						<div class="flex justify-between">
 							<span class="text-gray-600">Envío:</span>
-							<span>{shipping === 0 ? 'GRATIS' : formatPrice(shipping)}</span>
+							<span>{cartRequiresQuotation(cartItems) ? 'Por cotizar' : (selectedShippingOption ? formatPrice(shipping) : 'Pendiente')}</span>
 						</div>
 						<div class="border-t pt-2 flex justify-between font-bold text-lg">
 							<span>Total:</span>

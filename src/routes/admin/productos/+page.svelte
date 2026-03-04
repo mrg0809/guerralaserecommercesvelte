@@ -9,6 +9,18 @@
 	let categories: Category[] = $state([]);
 	let discounts: Discount[] = $state([]);
 	let allTags: Tag[] = $state([]);
+	type ShippingTypeOption = {
+		id: string;
+		name: string;
+		description: string | null;
+		carrier: string | null;
+		service: string | null;
+		base_price: number;
+		estimated_days: number | null;
+		is_active: boolean | null;
+	};
+	let shippingTypes: ShippingTypeOption[] = $state([]);
+	let selectedShippingTypeIds: string[] = $state([]);
 	let loading = $state(true);
 	let showModal = $state(false);
 	let editingProduct = $state<Product | null>(null);
@@ -46,6 +58,7 @@
 		is_featured: false,
 		stock_quantity: 0,
 		sku: '',
+		shipping_type_id: '',
 		technical_sheet_url: '',
 		manual_pdf_url: ''
 	});
@@ -386,13 +399,16 @@
 			console.log('🔍 Paso 2/5: Cargando categorías...');
 			await loadCategories();
 			
-			console.log('🔍 Paso 3/5: Cargando descuentos...');
+			console.log('🔍 Paso 3/6: Cargando descuentos...');
 			await loadDiscounts();
 			
-			console.log('🔍 Paso 4/5: Cargando etiquetas...');
+			console.log('🔍 Paso 4/6: Cargando etiquetas...');
 			await loadTags();
 			
-			console.log('🔍 Paso 5/5: Cargando variantes...');
+			console.log('🔍 Paso 5/6: Cargando tipos de envío...');
+			await loadShippingTypes();
+			
+			console.log('🔍 Paso 6/6: Cargando variantes...');
 			await loadAllProductVariants();
 			
 			console.log('✅ Todos los datos cargados exitosamente');
@@ -425,6 +441,7 @@
 					base_price,
 					stock_quantity,
 					sku,
+					shipping_type_id,
 					technical_sheet_url,
 					manual_pdf_url,
 					category_id,
@@ -588,6 +605,22 @@
 		}
 	}
 
+	async function loadShippingTypes() {
+		const { data, error } = await (supabase as any)
+			.from('shipping_types')
+			.select('id, name, description, carrier, service, base_price, estimated_days, is_active')
+			.eq('is_active', true)
+			.order('display_order', { ascending: true });
+
+		if (error) {
+			console.error('❌ Error cargando tipos de envío:', error);
+			shippingTypes = [];
+			return;
+		}
+
+		shippingTypes = data || [];
+	}
+
 	// Función para sugerir clave SAT basada en la categoría del producto
 	function getSuggestedSatCode(categoryId: number | null): string {
 		if (!categoryId) return '';
@@ -620,6 +653,7 @@
 				is_featured: product.is_featured || false,
 				stock_quantity: product.stock_quantity || 0,
 				sku: product.sku || '',
+				shipping_type_id: (product as any).shipping_type_id || '',
 				technical_sheet_url: product.technical_sheet_url || '',
 				manual_pdf_url: product.manual_pdf_url || ''
 			};
@@ -637,6 +671,7 @@
 				loadProductSpecifications(product.id),
 				loadProductDiscounts(product.id),
 				loadProductTags(product.id),
+				loadProductShippingTypes(product.id),
 				loadProductImages(product.id),
 				loadProductVariants(product.id),
 				loadSatData(product.id),
@@ -656,12 +691,14 @@
 				is_featured: false,
 				stock_quantity: 0,
 				sku: '',
+				shipping_type_id: '',
 				technical_sheet_url: '',
 				manual_pdf_url: ''
 			};
 			specifications = [];
 			selectedDiscounts = [];
 			selectedTags = [];
+			selectedShippingTypeIds = [];
 			productImages = [];
 			variants = [];
 			resetPimData();
@@ -700,6 +737,7 @@
 			is_featured: false, // No destacar la copia por defecto
 			stock_quantity: product.stock_quantity,
 			sku: product.sku ? `${product.sku}-COPIA` : '',
+			shipping_type_id: (product as any).shipping_type_id || '',
 			technical_sheet_url: product.technical_sheet_url || '',
 			manual_pdf_url: product.manual_pdf_url || ''
 		};
@@ -712,6 +750,9 @@
 		
 		// Cargar etiquetas del producto original
 		await loadProductTags(product.id);
+
+		// Cargar tipos de envío del producto original
+		await loadProductShippingTypes(product.id);
 		
 		// Cargar variantes del producto original (sin IDs para crear nuevas)
 		await loadProductVariants(product.id);
@@ -745,6 +786,30 @@
 		selectedFiles = [];
 		imagePreviews = [];
 		showModal = true;
+	}
+
+	async function loadProductShippingTypes(productId: string) {
+		const { data, error } = await (supabase as any)
+			.from('product_shipping_types')
+			.select('shipping_type_id')
+			.eq('product_id', productId);
+
+		if (error) {
+			console.error('❌ Error cargando tipos de envío del producto:', error);
+			selectedShippingTypeIds = [];
+			return;
+		}
+
+		if (data && data.length > 0) {
+			selectedShippingTypeIds = data.map((row: any) => row.shipping_type_id);
+		} else {
+			const fallbackId = (editingProduct as any)?.shipping_type_id || '';
+			selectedShippingTypeIds = fallbackId ? [fallbackId] : [];
+		}
+
+		if (!formData.shipping_type_id && selectedShippingTypeIds.length > 0) {
+			formData.shipping_type_id = selectedShippingTypeIds[0];
+		}
 	}
 
 	async function loadProductDiscounts(productId: string) {
@@ -1310,6 +1375,10 @@
 			console.log('🔍 Guardando etiquetas...');
 			await saveProductTags(productId);
 
+			// Guardar tipos de envío compatibles
+			console.log('🔍 Guardando tipos de envío...');
+			await saveProductShippingTypes(productId);
+
 			// Guardar variantes
 			console.log('🔍 Guardando variantes...');
 			await saveProductVariants(productId);
@@ -1328,6 +1397,36 @@
 		} catch (error: any) {
 			console.error('❌ Error en saveProduct:', error);
 			alert('Error al guardar producto: ' + error.message);
+		}
+	}
+
+	async function saveProductShippingTypes(productId: string) {
+		try {
+			await (supabase as any).from('product_shipping_types').delete().eq('product_id', productId);
+
+			if (selectedShippingTypeIds.length > 0) {
+				const rows = selectedShippingTypeIds.map((shippingTypeId) => ({
+					product_id: productId,
+					shipping_type_id: shippingTypeId
+				}));
+
+				const { error } = await (supabase as any).from('product_shipping_types').insert(rows);
+				if (error) throw error;
+
+				// Keep compatibility with existing single-column usage (first selection)
+				await (supabase as any)
+					.from('products')
+					.update({ shipping_type_id: selectedShippingTypeIds[0] })
+					.eq('id', productId);
+			} else {
+				await (supabase as any)
+					.from('products')
+					.update({ shipping_type_id: null })
+					.eq('id', productId);
+			}
+		} catch (error) {
+			console.error('❌ Error guardando tipos de envío del producto:', error);
+			throw error;
 		}
 	}
 
@@ -2150,6 +2249,44 @@
 										class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
 									/>
 								</div>
+							</div>
+
+							<div>
+								<p class="block text-sm font-semibold mb-2">Tipos de envío compatibles</p>
+								<div class="border border-gray-300 rounded-lg p-3 space-y-2 max-h-48 overflow-y-auto">
+									{#if shippingTypes.length === 0}
+										<p class="text-sm text-gray-500">No hay tipos de envío activos.</p>
+									{:else}
+										{#each shippingTypes as shippingType}
+											<label class="flex items-start gap-2 py-1">
+												<input
+													type="checkbox"
+													checked={selectedShippingTypeIds.includes(shippingType.id)}
+													onchange={(e) => {
+														if (e.currentTarget.checked) {
+															selectedShippingTypeIds = [...selectedShippingTypeIds, shippingType.id];
+														} else {
+															selectedShippingTypeIds = selectedShippingTypeIds.filter((id) => id !== shippingType.id);
+														}
+
+														formData.shipping_type_id = selectedShippingTypeIds[0] || '';
+													}}
+													class="w-4 h-4 mt-0.5"
+												/>
+												<span class="text-sm">
+													<strong>{shippingType.name}</strong> — {formatPrice(shippingType.base_price)}
+													{#if shippingType.description}
+														<span class="text-gray-600"> · {shippingType.description}</span>
+													{/if}
+												</span>
+											</label>
+										{/each}
+									{/if}
+								</div>
+								<p class="text-xs text-gray-500 mt-1">
+									Puedes seleccionar varios tipos. En checkout se mostrarán solo los compatibles.
+									Si no seleccionas ninguno, se intentará usar FedEx Standard por defecto.
+								</p>
 							</div>
 
 							<!-- Descuentos -->
