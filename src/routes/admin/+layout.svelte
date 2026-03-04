@@ -52,6 +52,7 @@
 			icon: '⚙️',
 			permission: 'view_admin_panel',
 			subItems: [
+				{ href: '/admin/tipos-envio', label: 'Tipos de Envío', permission: 'view_admin_panel' },
 				{ href: '/admin/videos', label: 'Videos', permission: 'view_admin_panel' },
 				{ href: '/admin/usuarios', label: 'Usuarios', permission: 'view_admin_panel' }
 			]
