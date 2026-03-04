@@ -6,7 +6,7 @@
 	import { cartRequiresQuotation, getCheckoutButtonLabel } from '$lib/services/shippingService';
 	import { loadStripe } from '@stripe/stripe-js';
 	import type { Stripe, StripeElements } from '@stripe/stripe-js';
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 
 	let cartItems = $state<any[]>([]);
 	let submitting = $state(false);
@@ -19,6 +19,7 @@
 	let stripe: Stripe | null = null;
 	let elements: StripeElements | null = null;
 	let paymentElement: any = null;
+	const WHATSAPP_PHONE = '523334758653';
 
 	// Initialize Stripe
 	onMount(async () => {
@@ -95,6 +96,60 @@
 		}
 	});
 
+	function isQuotationShippingOption(option: any): boolean {
+		if (!option) return false;
+		const name = String(option.name || '').toLowerCase();
+		const service = String(option.service || '').toLowerCase();
+		const description = String(option.description || '').toLowerCase();
+		return (
+			name.includes('cotización') ||
+			name.includes('cotizacion') ||
+			service.includes('cotización') ||
+			service.includes('cotizacion') ||
+			description.includes('cotización') ||
+			description.includes('cotizacion') ||
+			Number(option.price || 0) === 0
+		);
+	}
+
+	function redirectToWhatsAppShippingQuotation() {
+		const itemsText = cartItems
+			.map((item) => `${item.product.name} x${item.quantity}`)
+			.join(', ');
+
+		const message = `Hola, quiero cotizar envío para mi pedido en Guerra Láser.%0A` +
+			`Cliente: ${formData.customer_name || 'Sin nombre'}%0A` +
+			`Email: ${formData.customer_email || 'Sin email'}%0A` +
+			`Ciudad/Estado: ${formData.shipping_address.city || '-'}, ${formData.shipping_address.state || '-'}%0A` +
+			`Productos: ${itemsText}`;
+
+		window.location.href = `https://wa.me/${WHATSAPP_PHONE}?text=${message}`;
+	}
+
+	$effect(() => {
+		(async () => {
+			if (!selectedShippingOption || isQuotationShippingOption(selectedShippingOption)) {
+				if (paymentElement) {
+					paymentElement.unmount();
+					paymentElement = null;
+				}
+				elements = null;
+				return;
+			}
+
+			if (!stripe) return;
+			await tick();
+			const mountNode = document.getElementById('payment-element');
+			if (!mountNode) return;
+
+			try {
+				await initializeStripePayment();
+			} catch (e: any) {
+				error = e.message || 'No se pudo inicializar el pago con tarjeta';
+			}
+		})();
+	});
+
 	async function loadShippingOptions() {
 		loadingShippingOptions = true;
 		error = '';
@@ -133,6 +188,11 @@
 			return null;
 		}
 
+		if (paymentElement) {
+			paymentElement.unmount();
+			paymentElement = null;
+		}
+
 		// Create payment intent
 		const paymentIntentResponse = await fetch('/api/stripe/create-payment-intent', {
 			method: 'POST',
@@ -167,7 +227,9 @@
 
 		// Create and mount payment element
 		paymentElement = elements.create('payment');
-		paymentElement.mount('#payment-element');
+		if (document.getElementById('payment-element')) {
+			paymentElement.mount('#payment-element');
+		}
 
 		return { clientSecret, paymentIntentId };
 	}
@@ -200,9 +262,22 @@
 			return;
 		}
 
-		if (!stripe || !elements) {
+		if (isQuotationShippingOption(selectedShippingOption)) {
+			redirectToWhatsAppShippingQuotation();
+			return;
+		}
+
+		if (!stripe) {
 			error = 'Error de configuración de pago. Por favor recarga la página.';
 			return;
+		}
+
+		if (!elements) {
+			const paymentData = await initializeStripePayment();
+			if (!paymentData || !elements) {
+				error = 'No se pudo inicializar el pago. Intenta nuevamente.';
+				return;
+			}
 		}
 
 		submitting = true;
@@ -253,11 +328,8 @@
 			const { error: itemsError } = await supabase.from('order_items').insert(orderItems);
 			if (itemsError) throw itemsError;
 
-			// Initialize Stripe payment
 			const paymentData = await initializeStripePayment();
-			if (!paymentData) {
-				throw new Error('Failed to initialize payment');
-			}
+			if (!paymentData) throw new Error('Failed to initialize payment');
 
 			// Update order with payment intent ID
 			await (supabase as any)
@@ -731,7 +803,7 @@
 					{/if}
 
 					<!-- Payment Section -->
-					{#if selectedShippingOption}
+					{#if selectedShippingOption && !isQuotationShippingOption(selectedShippingOption)}
 						<div class="bg-white rounded-lg shadow-md p-6">
 							<h2 class="text-2xl font-bold mb-4">Método de Pago</h2>
 							
@@ -756,12 +828,22 @@
 						disabled={submitting || !selectedShippingOption}
 						class="w-full bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 transition disabled:bg-gray-400"
 					>
-						{submitting ? 'Procesando Pago...' : selectedShippingOption ? 'Pagar y Finalizar Compra' : 'Selecciona envío primero'}
+						{submitting
+							? 'Procesando...'
+							: selectedShippingOption
+								? (isQuotationShippingOption(selectedShippingOption)
+									? 'Continuar por WhatsApp para cotizar envío'
+									: 'Pagar y Finalizar Compra')
+								: 'Selecciona envío primero'}
 					</button>
 
 					{#if selectedShippingOption}
 						<p class="text-center text-sm text-gray-600">
-							Al hacer clic en "Pagar y Finalizar Compra", se procesará tu pago de forma segura.
+							{#if isQuotationShippingOption(selectedShippingOption)}
+								Te enviaremos a WhatsApp para cotizar el envío antes de cobrar.
+							{:else}
+								Al hacer clic en "Pagar y Finalizar Compra", se procesará tu pago de forma segura.
+							{/if}
 						</p>
 					{/if}
 				</form>
