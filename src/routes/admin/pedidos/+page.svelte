@@ -4,11 +4,21 @@
 	import { formatPrice } from '$lib/utils';
 	import type { Order } from '$lib/types';
 
-	let orders: (Order & { order_items?: any[] })[] = $state([]);
+	type AdminOrder = Order & {
+		order_items?: any[];
+		shipping_carrier?: string | null;
+		shipping_tracking_number?: string | null;
+		shipping_status?: string | null;
+	};
+
+	let orders: AdminOrder[] = $state([]);
 	let loading = $state(true);
-	let selectedOrder = $state<(Order & { order_items?: any[] }) | null>(null);
+	let selectedOrder = $state<AdminOrder | null>(null);
 	let showModal = $state(false);
 	let filterStatus = $state<string>('all');
+	let shippingCarrierInput = $state('');
+	let shippingTrackingInput = $state('');
+	let savingShipping = $state(false);
 
 	const statusOptions = [
 		{ value: 'pending', label: 'Pendiente', color: 'orange' },
@@ -23,7 +33,11 @@
 
 	async function loadOrders() {
 		loading = true;
-		let query = supabase.from('orders').select('*, order_items(*)').order('created_at', { ascending: false });
+		let query = supabase
+			.from('orders')
+			.select('*, order_items(*)')
+			.eq('payment_status', 'paid')
+			.order('created_at', { ascending: false });
 
 		if (filterStatus !== 'all') {
 			query = query.eq('status', filterStatus);
@@ -32,7 +46,7 @@
 		const { data } = await query;
 
 		if (data) {
-			orders = data;
+			orders = data as AdminOrder[];
 		}
 		loading = false;
 	}
@@ -42,10 +56,13 @@
 			.from('orders')
 			.select('*, order_items(*)')
 			.eq('id', order.id)
+			.eq('payment_status', 'paid')
 			.single();
 
 		if (data) {
-			selectedOrder = data;
+			selectedOrder = data as AdminOrder;
+			shippingCarrierInput = selectedOrder.shipping_carrier || '';
+			shippingTrackingInput = selectedOrder.shipping_tracking_number || '';
 			showModal = true;
 		}
 	}
@@ -53,6 +70,8 @@
 	function closeModal() {
 		showModal = false;
 		selectedOrder = null;
+		shippingCarrierInput = '';
+		shippingTrackingInput = '';
 	}
 
 	async function updateOrderStatus(orderId: string, status: string) {
@@ -70,12 +89,75 @@
 		}
 	}
 
-	function getStatusColor(status: string) {
+	async function saveShippingInfo() {
+		if (!selectedOrder) return;
+
+		const shippingCarrier = shippingCarrierInput.trim();
+		const shippingTrackingNumber = shippingTrackingInput.trim();
+
+		if (!shippingCarrier || !shippingTrackingNumber) {
+			alert('Captura la paquetería y el número de guía');
+			return;
+		}
+
+		savingShipping = true;
+		try {
+			const {
+				data: { session }
+			} = await supabase.auth.getSession();
+
+			if (!session) {
+				throw new Error('Sesión no válida');
+			}
+
+			const response = await fetch('/api/admin/orders/update-shipping', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+					Authorization: `Bearer ${session.access_token}`
+				},
+				body: JSON.stringify({
+					orderId: selectedOrder.id,
+					shippingCarrier,
+					shippingTrackingNumber
+				})
+			});
+
+			const result = await response.json();
+			if (!response.ok || !result.success) {
+				throw new Error(result.error || 'No se pudo guardar la guía');
+			}
+
+			selectedOrder.shipping_carrier = shippingCarrier;
+			selectedOrder.shipping_tracking_number = shippingTrackingNumber;
+			selectedOrder.shipping_status = 'in_transit';
+
+			orders = orders.map((order) =>
+				order.id === selectedOrder!.id
+					? {
+						...order,
+						shipping_carrier: shippingCarrier,
+						shipping_tracking_number: shippingTrackingNumber,
+						shipping_status: 'in_transit'
+					}
+					: order
+			);
+
+			alert('Guía guardada y correo enviado al cliente');
+		} catch (error: any) {
+			alert('Error al guardar guía: ' + error.message);
+		} finally {
+			savingShipping = false;
+		}
+	}
+
+	function getStatusColor(status: string | null) {
 		const option = statusOptions.find((s) => s.value === status);
 		return option?.color || 'gray';
 	}
 
-	function formatDate(dateString: string) {
+	function formatDate(dateString: string | null) {
+		if (!dateString) return '-';
 		return new Date(dateString).toLocaleDateString('es-MX', {
 			year: 'numeric',
 			month: 'long',
@@ -137,7 +219,7 @@
 		</div>
 	{:else if orders.length === 0}
 		<div class="bg-gray-50 rounded-lg p-8 text-center">
-			<p class="text-xl text-gray-600">No hay pedidos registrados</p>
+			<p class="text-xl text-gray-600">No hay pedidos pagados registrados</p>
 		</div>
 	{:else}
 		<div class="bg-white rounded-lg shadow-md overflow-hidden">
@@ -148,6 +230,7 @@
 						<th class="px-4 py-3 text-left">Cliente</th>
 						<th class="px-4 py-3 text-left">Fecha</th>
 						<th class="px-4 py-3 text-left">Total</th>
+						<th class="px-4 py-3 text-left">Pago</th>
 						<th class="px-4 py-3 text-left">Estado</th>
 						<th class="px-4 py-3 text-right">Acciones</th>
 					</tr>
@@ -164,6 +247,11 @@
 							</td>
 							<td class="px-4 py-3 text-sm">{formatDate(order.created_at)}</td>
 							<td class="px-4 py-3 font-semibold">{formatPrice(order.total_amount)}</td>
+							<td class="px-4 py-3">
+								<span class="px-3 py-1 rounded-full text-sm bg-green-100 text-green-800">
+									Pagado
+								</span>
+							</td>
 							<td class="px-4 py-3">
 								<span
 									class="px-3 py-1 rounded-full text-sm bg-{getStatusColor(
@@ -201,6 +289,10 @@
 			</div>
 
 			<div class="p-6 space-y-6">
+				<div class="bg-green-50 border border-green-200 rounded-lg p-4 text-green-800 text-sm">
+					Mostrando únicamente pedidos con pago confirmado.
+				</div>
+
 				<!-- Order Status -->
 				<div>
 					<label class="block text-sm font-semibold mb-2" for="order-status-select">Estado del Pedido</label>
@@ -214,6 +306,42 @@
 							<option value={option.value}>{option.label}</option>
 						{/each}
 					</select>
+				</div>
+
+				<!-- Shipping Tracking -->
+				<div class="border rounded-lg p-4 bg-blue-50">
+					<h3 class="font-bold mb-3">Datos de Envío (Guía Manual)</h3>
+					<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+						<div>
+							<label class="block text-sm font-semibold mb-2" for="shipping-carrier">Paquetería / Compañía</label>
+							<input
+								id="shipping-carrier"
+								type="text"
+								bind:value={shippingCarrierInput}
+								placeholder="Ej: FedEx, DHL, Estafeta"
+								class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+							/>
+						</div>
+						<div>
+							<label class="block text-sm font-semibold mb-2" for="shipping-tracking">Número de guía</label>
+							<input
+								id="shipping-tracking"
+								type="text"
+								bind:value={shippingTrackingInput}
+								placeholder="Ej: 7890123456"
+								class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+							/>
+						</div>
+					</div>
+					<div class="mt-4">
+						<button
+							onclick={saveShippingInfo}
+							disabled={savingShipping}
+							class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:bg-gray-400"
+						>
+							{savingShipping ? 'Guardando...' : 'Guardar guía y enviar correo'}
+						</button>
+					</div>
 				</div>
 
 				<!-- Customer Info -->
@@ -230,7 +358,7 @@
 					<div>
 						<h3 class="font-bold mb-2">Dirección de Envío</h3>
 						{#if selectedOrder.shipping_address}
-							{@const addr = selectedOrder.shipping_address}
+							{@const addr = selectedOrder.shipping_address as any}
 							<p>{addr.street}</p>
 							<p>
 								{addr.city}{addr.state ? `, ${addr.state}` : ''}
@@ -273,11 +401,11 @@
 						</div>
 						<div class="flex justify-between">
 							<span>IVA:</span>
-							<span>{formatPrice(selectedOrder.tax_amount)}</span>
+							<span>{formatPrice(selectedOrder.tax_amount ?? 0)}</span>
 						</div>
 						<div class="flex justify-between">
 							<span>Envío:</span>
-							<span>{formatPrice(selectedOrder.shipping_amount)}</span>
+							<span>{formatPrice(selectedOrder.shipping_amount ?? 0)}</span>
 						</div>
 						<div class="flex justify-between font-bold text-lg border-t pt-2">
 							<span>Total:</span>
