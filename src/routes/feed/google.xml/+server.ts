@@ -20,7 +20,8 @@ type CategoryRow = {
 
 type ShippingTypeRow = {
 	name: string;
-	requires_quotation: boolean;
+	carrier: string | null;
+	service: string | null;
 };
 
 type ProductRow = {
@@ -146,12 +147,13 @@ function buildItemXml(
 		.map((img) => `\n      <g:additional_image_link>${escapeXml(img)}</g:additional_image_link>`)
 		.join('');
 
-	// Build shipping element for heavy items (requires quotation)
+	// Build shipping element for heavy items or special quotation
 	const shippingType = product.shipping_types?.name;
-	const requiresQuotation = product.shipping_types?.requires_quotation;
+	const service = product.shipping_types?.service;
 	
 	let shippingXml = '';
-	if (shippingType === 'heavy' || shippingType === 'delicate' || requiresQuotation) {
+	// Productos que requieren cotización personalizada o envío pesado
+	if (service === 'heavy' || shippingType?.toLowerCase().includes('cotización') || shippingType?.toLowerCase().includes('pesado')) {
 		shippingXml = `
       <g:shipping>
         <g:country>MX</g:country>
@@ -192,7 +194,7 @@ export const GET: RequestHandler = async ({ url }) => {
 		.from('products')
 		.select(
 			`id, name, slug, description, short_description, base_price, stock_quantity, sku, category_id, shipping_type_id,
-			 shipping_types(name, requires_quotation),
+			 shipping_types(name, carrier, service),
 			 product_media(url, is_primary, display_order)`
 		)
 		.eq('is_active', true)
@@ -222,9 +224,9 @@ export const GET: RequestHandler = async ({ url }) => {
 	const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0" xmlns:g="http://base.google.com/ns/1.0">
   <channel>
-		<title><![CDATA[Guerra Láser Ecommerce]]></title>
+    <title><![CDATA[Guerra Láser Ecommerce]]></title>
     <link>${escapeXml(origin)}</link>
-		<description><![CDATA[Feed de productos para Google Merchant Center]]></description>
+    <description><![CDATA[Feed de productos para Google Merchant Center]]></description>
 ${itemsXml}
   </channel>
 </rss>`;
