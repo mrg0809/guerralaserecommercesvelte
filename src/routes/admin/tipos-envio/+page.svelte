@@ -15,12 +15,30 @@
 		is_active: boolean | null;
 	};
 
+	type Category = {
+		id: string;
+		name: string;
+		parent_id: string | null;
+		is_active: boolean | null;
+	};
+
+	type CategoryOption = {
+		id: string;
+		name: string;
+		depth: number;
+	};
+
 	let shippingTypes = $state<ShippingType[]>([]);
+	let categories = $state<Category[]>([]);
 	let loading = $state(true);
 	let showModal = $state(false);
 	let editingType = $state<ShippingType | null>(null);
 	let saving = $state(false);
 	let error = $state('');
+	let assigningByCategory = $state(false);
+	let selectedCategoryId = $state('');
+	let selectedAssignmentShippingTypeIds = $state<string[]>([]);
+	let assignMessage = $state('');
 
 	let formData = $state({
 		name: '',
@@ -34,7 +52,7 @@
 	});
 
 	onMount(async () => {
-		await loadShippingTypes();
+		await Promise.all([loadShippingTypes(), loadCategories()]);
 	});
 
 	async function loadShippingTypes() {
@@ -55,6 +73,96 @@
 		}
 
 		loading = false;
+	}
+
+	async function loadCategories() {
+		const { data, error: dbError } = await (supabase as any)
+			.from('categories')
+			.select('id, name, parent_id, is_active')
+			.order('name', { ascending: true });
+
+		if (dbError) {
+			console.error('Error cargando categorías:', dbError);
+			categories = [];
+			return;
+		}
+
+		categories = data || [];
+	}
+
+	const categoryOptions = $derived.by(() => {
+		const byParent = new Map<string | null, Category[]>();
+		for (const category of categories) {
+			const key = category.parent_id ?? null;
+			const list = byParent.get(key) || [];
+			list.push(category);
+			byParent.set(key, list);
+		}
+
+		for (const list of byParent.values()) {
+			list.sort((a, b) => a.name.localeCompare(b.name, 'es'));
+		}
+
+		const result: CategoryOption[] = [];
+		const walk = (parentId: string | null, depth: number) => {
+			const children = byParent.get(parentId) || [];
+			for (const child of children) {
+				result.push({ id: child.id, name: child.name, depth });
+				walk(child.id, depth + 1);
+			}
+		};
+
+		walk(null, 0);
+		return result;
+	});
+
+	async function assignShippingTypesToCategoryTree() {
+		if (!selectedCategoryId) {
+			assignMessage = 'Selecciona una categoría';
+			return;
+		}
+
+		if (selectedAssignmentShippingTypeIds.length === 0) {
+			assignMessage = 'Selecciona al menos un tipo de envío';
+			return;
+		}
+
+		assigningByCategory = true;
+		assignMessage = '';
+
+		try {
+			const {
+				data: { session }
+			} = await supabase.auth.getSession();
+
+			if (!session) {
+				throw new Error('Sesión no válida');
+			}
+
+			const response = await fetch('/api/admin/shipping/assign-category-types', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+					Authorization: `Bearer ${session.access_token}`
+				},
+				body: JSON.stringify({
+					mode: 'replace',
+					categoryId: selectedCategoryId,
+					shippingTypeIds: selectedAssignmentShippingTypeIds
+				})
+			});
+
+			const result = await response.json();
+			if (!response.ok || !result.success) {
+				throw new Error(result.error || 'No se pudo aplicar la configuración');
+			}
+
+			assignMessage = `Reemplazo aplicado en ${result.categoriesCount} categorías y ${result.productsCount} productos.`;
+		} catch (e: any) {
+			assignMessage = e.message || 'Error al aplicar tipos de envío por categoría';
+		} finally {
+			assigningByCategory = false;
+		}
 	}
 
 	function openModal(shippingType?: ShippingType) {
@@ -166,6 +274,79 @@
 		>
 			+ Nuevo tipo
 		</button>
+	</div>
+
+	<div class="bg-white rounded-lg shadow p-5 mb-6 border border-blue-100">
+		<div class="mb-4">
+			<h2 class="text-xl font-bold">Asignación masiva por categoría</h2>
+			<p class="text-gray-600 text-sm mt-1">
+				Reemplaza los tipos de envío de una categoría y todos sus descendientes (hijos, nietos, etc.).
+			</p>
+		</div>
+
+		<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+			<div>
+				<label class="block text-sm font-semibold mb-1" for="mass-assign-category">Categoría raíz</label>
+				<select
+					id="mass-assign-category"
+					bind:value={selectedCategoryId}
+					class="w-full px-3 py-2 border rounded-lg"
+				>
+					<option value="">Selecciona una categoría</option>
+					{#each categoryOptions as option}
+						<option value={option.id}>
+							{'— '.repeat(option.depth)}{option.name}
+						</option>
+					{/each}
+				</select>
+			</div>
+
+			<div>
+				<p class="block text-sm font-semibold mb-1">Tipos de envío a aplicar</p>
+				<div class="border rounded-lg p-3 max-h-40 overflow-y-auto space-y-2">
+					{#if shippingTypes.length === 0}
+						<p class="text-sm text-gray-500">No hay tipos de envío.</p>
+					{:else}
+						{#each shippingTypes as shippingType}
+							<label class="flex items-start gap-2 text-sm">
+								<input
+									type="checkbox"
+									checked={selectedAssignmentShippingTypeIds.includes(shippingType.id)}
+									onchange={(e) => {
+										if (e.currentTarget.checked) {
+											selectedAssignmentShippingTypeIds = [...selectedAssignmentShippingTypeIds, shippingType.id];
+										} else {
+											selectedAssignmentShippingTypeIds = selectedAssignmentShippingTypeIds.filter((id) => id !== shippingType.id);
+										}
+									}}
+									class="w-4 h-4 mt-0.5"
+								/>
+								<span>
+									<strong>{shippingType.name}</strong>
+									{#if shippingType.carrier || shippingType.service}
+										<span class="text-gray-600"> — {shippingType.carrier || '-'} / {shippingType.service || '-'}</span>
+									{/if}
+								</span>
+							</label>
+						{/each}
+					{/if}
+				</div>
+			</div>
+		</div>
+
+		<div class="mt-4 flex items-center gap-3">
+			<button
+				onclick={assignShippingTypesToCategoryTree}
+				disabled={assigningByCategory}
+				class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:bg-gray-400"
+			>
+				{assigningByCategory ? 'Reemplazando...' : 'Reemplazar en categoría + descendientes'}
+			</button>
+
+			{#if assignMessage}
+				<p class="text-sm text-gray-700">{assignMessage}</p>
+			{/if}
+		</div>
 	</div>
 
 	{#if error}
