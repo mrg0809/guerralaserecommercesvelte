@@ -12,6 +12,7 @@ export type Order = Database['public']['Tables']['orders']['Row'];
 export type OrderItem = Database['public']['Tables']['order_items']['Row'];
 export type ProductBundle = Database['public']['Tables']['product_bundles']['Row'];
 export type BundleItem = Database['public']['Tables']['bundle_items']['Row'];
+export type Promotion = Database['public']['Tables']['promotions']['Row'];
 
 // PIM (Product Information Management) Types
 export type SATProductInfo = Database['public']['Tables']['sat_product_info']['Row'];
@@ -29,8 +30,8 @@ export interface TestimonialVideo {
 	thumbnail_url: string | null;
 	display_order: number;
 	is_active: boolean;
-	created_at: string;
-	updated_at: string;
+	created_at: string | null;
+	updated_at: string | null;
 }
 
 export interface CartItem {
