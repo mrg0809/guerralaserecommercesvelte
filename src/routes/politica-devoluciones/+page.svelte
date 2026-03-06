@@ -1,8 +1,8 @@
 <svelte:head>
-	<title>Política de Cambios y Devoluciones - Guerra Láser</title>
+	<title>Política de Cambios y Garantías - Guerra Láser</title>
 	<meta
 		name="description"
-		content="Política de Cambios y Devoluciones de Guerra Láser. Conoce los plazos, condiciones y procedimiento para solicitar cambios o devoluciones de productos."
+		content="Política de Cambios y Garantías de Guerra Láser. Conoce los plazos, condiciones y procedimiento para solicitar cambios o garantías de productos."
 	/>
 </svelte:head>
 
