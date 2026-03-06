@@ -104,6 +104,36 @@ function escapeXml(value: string): string {
 		.replace(/'/g, '&apos;');
 }
 
+/**
+ * Determina la etiqueta de envío para Google Merchant basada en el tipo de envío del producto
+ * @param shippingType - Nombre del tipo de envío (ej: 'standard', 'delicate', 'heavy')
+ * @param service - Servicio específico (ej: 'fedex', 'express', 'heavy')
+ * @returns 'fedex', 'central', o 'cotizar'
+ */
+function getShippingLabel(shippingType: string | null | undefined, service: string | null | undefined): string {
+	if (!shippingType) return 'fedex'; // Default
+
+	const type = shippingType.toLowerCase();
+	const svc = service?.toLowerCase() || '';
+
+	// Artículos con cotización personalizada o tipo 'heavy'
+	if (type.includes('heavy') || type.includes('pesado') || type.includes('cotización')) {
+		return 'cotizar';
+	}
+
+	// FedEx para estándares (standard, express)
+	if (type.includes('standard') || svc.includes('fedex')) {
+		return 'fedex';
+	}
+
+	// Central para otros tipos
+	if (type.includes('central') || type.includes('local')) {
+		return 'central';
+	}
+
+	return 'fedex'; // Default fallback
+}
+
 function buildImageList(media: ProductMediaRow[] | null | undefined): string[] {
 	if (!media || media.length === 0) return [];
 	const sorted = [...media].sort((a, b) => {
@@ -150,6 +180,7 @@ function buildItemXml(
 	// Build shipping element for heavy items or special quotation
 	const shippingType = product.shipping_types?.name;
 	const service = product.shipping_types?.service;
+	const shippingLabel = getShippingLabel(shippingType, service);
 	
 	let shippingXml = '';
 	// Productos que requieren cotización personalizada o envío pesado
@@ -162,6 +193,9 @@ function buildItemXml(
       </g:shipping>`;
 	}
 
+	const shippingLabelXml = `
+      <g:shipping_label>${escapeXml(shippingLabel)}</g:shipping_label>`;
+
 	return `    <item>
       <g:id>${escapeXml(id)}</g:id>
       <title><![CDATA[${title}]]></title>
@@ -171,7 +205,7 @@ function buildItemXml(
       <g:availability>${availability}</g:availability>
       <g:price>${escapeXml(price)}</g:price>
       <g:condition>${condition}</g:condition>
-      <g:brand>${escapeXml(brand)}</g:brand>${mpn ? `\n      <g:mpn>${escapeXml(mpn)}</g:mpn>` : ''}${gtin ? `\n      <g:gtin>${escapeXml(gtin)}</g:gtin>` : ''}${additionalImageXml}${shippingXml}
+      <g:brand>${escapeXml(brand)}</g:brand>${mpn ? `\n      <g:mpn>${escapeXml(mpn)}</g:mpn>` : ''}${gtin ? `\n      <g:gtin>${escapeXml(gtin)}</g:gtin>` : ''}${additionalImageXml}${shippingLabelXml}${shippingXml}
       <g:google_product_category>${escapeXml(googleCategory.id)}</g:google_product_category>
     </item>`;
 }
