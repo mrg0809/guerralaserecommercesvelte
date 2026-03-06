@@ -3,21 +3,22 @@
 	import { supabase } from '$lib/supabaseClient';
 	import { formatPrice, getDisplayPrice, getDisplayStock } from '$lib/utils';
 	import { getBannerVideoUrl, getImageKitUrl } from '$lib/storage';
-	import type { Product, Category, ProductMedia, TestimonialVideo } from '$lib/types';
+	import type { Product, Category, ProductMedia, Promotion, TestimonialVideo } from '$lib/types';
 
 	let featuredProducts: (Product & { media?: ProductMedia[]; category?: Category })[] = $state([]);
 	let categories: Category[] = $state([]);
+	let promotions: Promotion[] = $state([]);
 	let loading = $state(true);
-	
+
 	const bannerVideoUrl = getImageKitUrl(getBannerVideoUrl());
 	
 	// Variables para el carrusel de videos
 	let currentVideoIndex = $state(0);
-	let autoplayInterval: number | null = null;
+	let videoAutoplayInterval: ReturnType<typeof setInterval> | null = null;
 	let testimonialVideos: TestimonialVideo[] = $state([]);
 
 	// Variables para el carrusel de productos destacados
-	let productsCarouselRef: HTMLDivElement;
+	let productsCarouselRef = $state<HTMLDivElement | null>(null);
 	let canScrollLeft = $state(false);
 	let canScrollRight = $state(false);
 
@@ -39,66 +40,87 @@
 		}
 	}
 
-	onMount(async () => {
-		// Load featured products
-		const { data: products } = await supabase
-			.from('products')
-			.select('*, product_media(*), categories(*), product_variants(*)')
-			.eq('is_featured', true)
-			.eq('is_active', true)
-			.limit(12);
+	onMount(() => {
+		const init = async () => {
+			const { data: promos } = await supabase
+				.from('promotions')
+				.select('*')
+				.eq('is_active', true)
+				.order('display_order');
 
-		if (products) {
-			featuredProducts = products.map((p: any) => ({
-				...p,
-				media: p.product_media,
-				category: p.categories
-			}));
-		}
+			if (promos) {
+				promotions = promos;
+			}
 
-		// Load categories
-		const { data: cats } = await supabase
-			.from('categories')
-			.select('*')
-			.eq('is_active', true)
-			.order('display_order');
+			// Load featured products
+			const { data: products } = await supabase
+				.from('products')
+				.select('*, product_media(*), categories(*), product_variants(*)')
+				.eq('is_featured', true)
+				.eq('is_active', true)
+				.limit(12);
 
-		if (cats) {
-			categories = cats;
-		}
+			if (products) {
+				featuredProducts = products.map((p: any) => ({
+					...p,
+					media: p.product_media,
+					category: p.categories
+				}));
+			}
 
-		// Load testimonial videos from database
-		const { data: videos } = await supabase
-			.from('testimonial_videos')
-			.select('*')
-			.eq('is_active', true)
-			.order('display_order');
+			// Load categories
+			const { data: cats } = await supabase
+				.from('categories')
+				.select('*')
+				.eq('is_active', true)
+				.order('display_order');
 
-		if (videos) {
-			testimonialVideos = videos;
-		}
+			if (cats) {
+				categories = cats;
+			}
 
-		loading = false;
-		
-		// Inicializar botones del carrusel de productos
-		setTimeout(checkScrollButtons, 100);
-		
-		// Iniciar autoplay del carrusel de videos si hay videos
-		if (testimonialVideos.length > 0) {
-			startVideoCarousel();
-		}
-		
-		// Limpiar interval al desmontar
+			// Load testimonial videos from database
+			const { data: videos } = await supabase
+				.from('testimonial_videos')
+				.select('*')
+				.eq('is_active', true)
+				.order('display_order');
+
+			if (videos) {
+				testimonialVideos = videos.map((video) => ({
+					...video,
+					video_type: video.video_type === 'tiktok' ? 'tiktok' : 'youtube'
+				}));
+			}
+
+			loading = false;
+
+			// Inicializar botones del carrusel de productos
+			setTimeout(checkScrollButtons, 100);
+
+			// Iniciar autoplay del carrusel de videos si hay videos
+			if (testimonialVideos.length > 0) {
+				startVideoCarousel();
+			}
+		};
+
+		void init();
+
 		return () => {
-			if (autoplayInterval) {
-				clearInterval(autoplayInterval);
+			if (videoAutoplayInterval) {
+				clearInterval(videoAutoplayInterval);
 			}
 		};
 	});
+
+	function getLoopPromotions(): Promotion[] {
+		if (promotions.length === 0) return [];
+		return [...promotions, ...promotions];
+	}
 	
 	function startVideoCarousel() {
 		// Cambiar video cada 5 segundos
-		autoplayInterval = setInterval(() => {
+		videoAutoplayInterval = setInterval(() => {
 			nextVideo();
 		}, 5000);
 	}
@@ -114,16 +136,18 @@
 	function goToVideo(index: number) {
 		currentVideoIndex = index;
 		// Reiniciar autoplay
-		if (autoplayInterval) {
-			clearInterval(autoplayInterval);
+		if (videoAutoplayInterval) {
+			clearInterval(videoAutoplayInterval);
 		}
 		startVideoCarousel();
 	}
 
 	function getChildCategories(parentId: string): Category[] {
 		return categories.filter(c => c.parent_id === parentId).sort((a, b) => {
-			if (a.display_order !== b.display_order) {
-				return a.display_order - b.display_order;
+			const orderA = a.display_order ?? 0;
+			const orderB = b.display_order ?? 0;
+			if (orderA !== orderB) {
+				return orderA - orderB;
 			}
 			return a.name.localeCompare(b.name);
 		});
@@ -131,8 +155,10 @@
 
 	function getRootCategories(): Category[] {
 		return categories.filter(c => !c.parent_id).sort((a, b) => {
-			if (a.display_order !== b.display_order) {
-				return a.display_order - b.display_order;
+			const orderA = a.display_order ?? 0;
+			const orderB = b.display_order ?? 0;
+			if (orderA !== orderB) {
+				return orderA - orderB;
 			}
 			return a.name.localeCompare(b.name);
 		});
@@ -156,30 +182,60 @@
 
 <!-- Hero Banner with Video -->
 <section class="relative w-full h-[500px] overflow-hidden">
-	<!-- Video de fondo -->
-	<video
-		autoplay
-		loop
-		muted
-		playsinline
-		class="absolute inset-0 w-full h-full object-cover"
-	>
-		<source
-			src={bannerVideoUrl}
-			type="video/mp4"
-		/>
+	<video autoplay loop muted playsinline class="absolute inset-0 w-full h-full object-cover">
+		<source src={bannerVideoUrl} type="video/mp4" />
 		Tu navegador no soporta el elemento de video.
 	</video>
 
-	<!-- Overlay azul translúcido para dar tono azulado al video -->
 	<div class="absolute inset-0 bg-blue-900 bg-opacity-30"></div>
 
-	<!-- Contenido del banner -->
 	<div class="relative z-10 container mx-auto px-4 h-full flex flex-col items-center justify-center text-center text-white">
 		<h1 class="text-5xl md:text-6xl font-bold mb-6 drop-shadow-lg">ESPECIALISTAS EN VENTA DE MAQUINARIA</h1>
 		<p class="text-xl md:text-2xl drop-shadow-lg">En corte de metales, corte laser co2, fibra óptica, plasma, router, etc.</p>
 	</div>
 </section>
+
+<!-- Sección de Promociones -->
+{#if promotions.length > 0}
+	<section class="relative w-full py-10 md:py-14 overflow-hidden bg-gradient-to-b from-slate-100 to-white">
+		<div class="container mx-auto px-4">
+			<div class="text-center mb-6 md:mb-8">
+				<h2 class="text-2xl md:text-4xl font-bold text-gray-900">PROMOCIONES</h2>
+			</div>
+
+			<div class="promo-marquee" aria-label="Carrusel de promociones">
+				<div
+					class="promo-track"
+					style="--promo-duration: {Math.max(promotions.length * 4, 16)}s;"
+				>
+					{#each getLoopPromotions() as promotion, index (`${promotion.id}-${index}`)}
+						{#if promotion.link_url}
+							<a
+								href={promotion.link_url}
+								class="promo-item"
+								aria-label={promotion.title}
+							>
+								<img
+									src={getImageKitUrl(promotion.image_url)}
+									alt={promotion.title}
+									class="w-full h-full object-contain"
+								/>
+							</a>
+						{:else}
+							<div class="promo-item">
+								<img
+									src={getImageKitUrl(promotion.image_url)}
+									alt={promotion.title}
+									class="w-full h-full object-contain"
+								/>
+							</div>
+						{/if}
+					{/each}
+				</div>
+			</div>
+		</div>
+	</section>
+{/if}
 
 <!-- Categories Section -->
 {#if getMaquinariaSubcategories().length > 0}
@@ -508,8 +564,47 @@
 	/* Limitar líneas de texto */
 	.line-clamp-2 {
 		display: -webkit-box;
+		line-clamp: 2;
 		-webkit-line-clamp: 2;
 		-webkit-box-orient: vertical;
 		overflow: hidden;
+	}
+
+	.promo-marquee {
+		overflow: hidden;
+		mask-image: linear-gradient(to right, transparent 0%, black 6%, black 94%, transparent 100%);
+	}
+
+	.promo-track {
+		display: flex;
+		gap: 1rem;
+		width: max-content;
+		animation: promo-scroll var(--promo-duration) linear infinite;
+		will-change: transform;
+	}
+
+	.promo-track:hover {
+		animation-play-state: paused;
+	}
+
+	.promo-item {
+		flex: 0 0 min(76vw, 280px);
+		aspect-ratio: 1 / 1;
+		overflow: hidden;
+	}
+
+	@media (min-width: 768px) {
+		.promo-item {
+			flex-basis: min(28vw, 340px);
+		}
+	}
+
+	@keyframes promo-scroll {
+		from {
+			transform: translateX(0);
+		}
+		to {
+			transform: translateX(-50%);
+		}
 	}
 </style>

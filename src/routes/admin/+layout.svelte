@@ -53,6 +53,7 @@
 			permission: 'view_admin_panel',
 			subItems: [
 				{ href: '/admin/tipos-envio', label: 'Tipos de Envío', permission: 'view_admin_panel' },
+				{ href: '/admin/promociones', label: 'Promociones', permission: 'view_admin_panel' },
 				{ href: '/admin/videos', label: 'Videos', permission: 'view_admin_panel' },
 				{ href: '/admin/usuarios', label: 'Usuarios', permission: 'view_admin_panel' }
 			]
@@ -67,38 +68,41 @@
 	let hasValidSession = $state(false);
 	let wasAuthenticated = $state(false);
 
-	onMount(async () => {
-		// Inicializar el store de usuario
-		await userStore.init();
-
-		// Verificar autenticación
-		const {
-			data: { session }
-		} = await supabase.auth.getSession();
-
-		if (!session) {
-			console.log('🔍 Admin: No hay sesión, redirigiendo a login');
-			goto('/login');
-			return;
-		}
-
-		// Marcar que hay una sesión válida
-		hasValidSession = true;
-		console.log('🔍 Admin: Sesión válida detectada');
-
-		// Suscribirse a cambios del store
+	onMount(() => {
 		const unsubscribe = userStore.subscribe((state) => {
 			userState = state;
-			
+
 			// Marcar que estuvo autenticado si tiene usuario
 			if (state.user) {
 				wasAuthenticated = true;
 			}
-			
+
 			// NO REDIRIGIR AUTOMÁTICAMENTE - La verificación inicial en onMount es suficiente
 			// Esto evita que el usuario sea sacado mientras trabaja en modales
 			console.log('🔍 Admin: Estado del usuario actualizado, manteniendo en página actual');
 		});
+
+		const init = async () => {
+			// Inicializar el store de usuario
+			await userStore.init();
+
+			// Verificar autenticación
+			const {
+				data: { session }
+			} = await supabase.auth.getSession();
+
+			if (!session) {
+				console.log('🔍 Admin: No hay sesión, redirigiendo a login');
+				goto('/login');
+				return;
+			}
+
+			// Marcar que hay una sesión válida
+			hasValidSession = true;
+			console.log('🔍 Admin: Sesión válida detectada');
+		};
+
+		void init();
 
 		return () => {
 			unsubscribe();
