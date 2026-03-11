@@ -77,6 +77,30 @@ page.subscribe(($page) => {
 		});
 	});
 
+	onMount(() => {
+		ensureWhatsAppAudio();
+
+		const primeSound = () => {
+			prepareWhatsAppSound();
+			if (waSoundEnabled) {
+				window.removeEventListener('pointerdown', primeSound);
+				window.removeEventListener('keydown', primeSound);
+			}
+		};
+
+		window.addEventListener('pointerdown', primeSound, { passive: true });
+		window.addEventListener('keydown', primeSound);
+		waRevealTimeout = window.setTimeout(revealWhatsAppButton, WA_APPEAR_DELAY_MS);
+
+		return () => {
+			window.removeEventListener('pointerdown', primeSound);
+			window.removeEventListener('keydown', primeSound);
+			if (waRevealTimeout) {
+				clearTimeout(waRevealTimeout);
+			}
+		};
+	});
+
 	function getChildCategories(parentId: string): Category[] {
 		return categories.filter(c => c.parent_id === parentId).sort((a, b) => {
 			if (a.display_order !== b.display_order) {
@@ -127,7 +151,84 @@ page.subscribe(($page) => {
 
 	// Floating WhatsApp widget state and handlers
 	let showWA = $state(false);
+	let showWAButton = $state(false);
 	let waMessage = $state('Hola 👋 me interesa más información sobre sus productos.');
+	const WA_APPEAR_DELAY_MS = 2200;
+	const WA_SOUND_SRC = '/sounds/whatsapp-float-chime.wav';
+	const WA_AUTO_OPEN_KEY = 'wa_product_chat_opened';
+	let waRevealTimeout: number | undefined;
+	let waNotificationAudio: HTMLAudioElement | null = null;
+	let waSoundEnabled = false;
+	let waSoundPlayed = false;
+
+	function ensureWhatsAppAudio() {
+		if (typeof window === 'undefined' || waNotificationAudio) {
+			return;
+		}
+
+		waNotificationAudio = new Audio(WA_SOUND_SRC);
+		waNotificationAudio.preload = 'auto';
+		waNotificationAudio.volume = 0.42;
+		waNotificationAudio.setAttribute('playsinline', 'true');
+		waNotificationAudio.load();
+	}
+
+	function prepareWhatsAppSound() {
+		if (typeof window === 'undefined') {
+			return;
+		}
+
+		ensureWhatsAppAudio();
+		waSoundEnabled = true;
+	}
+
+	async function playWhatsAppSound() {
+		if (!waSoundEnabled || waSoundPlayed) {
+			return;
+		}
+
+		ensureWhatsAppAudio();
+
+		if (!waNotificationAudio) {
+			return;
+		}
+
+		try {
+			waNotificationAudio.currentTime = 0;
+			await waNotificationAudio.play();
+			waSoundPlayed = true;
+		} catch {
+			// Algunos navegadores bloquean autoplay hasta la primera interacción del usuario.
+		}
+	}
+
+	// Abre el chat automáticamente una sola vez por sesión al entrar a un producto
+	function tryAutoOpenWAOnProduct() {
+		if (!showWAButton || showWA) {
+			return;
+		}
+		if (!currentPath.match(/^\/productos\/[^/?#]+/)) {
+			return;
+		}
+		if (sessionStorage.getItem(WA_AUTO_OPEN_KEY)) {
+			return;
+		}
+		sessionStorage.setItem(WA_AUTO_OPEN_KEY, '1');
+		showWA = true;
+	}
+
+	// $effect sólo corre en el navegador (no en SSR), reacciona a cambios de ruta
+	$effect(() => {
+		const _path = currentPath;
+		tryAutoOpenWAOnProduct();
+	});
+
+	function revealWhatsAppButton() {
+		showWAButton = true;
+		void playWhatsAppSound();
+		// Pequeña pausa para que termine la animación de entrada del botón
+		window.setTimeout(tryAutoOpenWAOnProduct, 900);
+	}
 
 	function toggleWA() {
 		showWA = !showWA;
@@ -701,7 +802,15 @@ page.subscribe(($page) => {
 
     <!-- Floating WhatsApp Chat -->
     {#if !isAdminRoute}
-    <div class="fixed bottom-6 right-6 z-50">
+	<div
+		class="fixed bottom-5 right-5 z-50 transition-all duration-500 sm:bottom-6 sm:right-6"
+		class:opacity-0={!showWAButton}
+		class:pointer-events-none={!showWAButton}
+		class:translate-y-6={!showWAButton}
+		class:opacity-100={showWAButton}
+		class:pointer-events-auto={showWAButton}
+		class:translate-y-0={showWAButton}
+	>
     	{#if showWA}
     		<div class="mb-3 w-80 max-w-[92vw] bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden">
     			<div class="flex items-center gap-2 px-4 py-3 bg-green-500 text-white">
@@ -743,11 +852,12 @@ page.subscribe(($page) => {
 
     	<button
     		onclick={toggleWA}
-    		class="w-16 h-16 rounded-full bg-green-500 hover:bg-green-600 text-white shadow-xl flex items-center justify-center transition-colors"
+	    		class="whatsapp-float-button relative flex h-[5.25rem] w-[5.25rem] items-center justify-center rounded-full bg-[linear-gradient(145deg,#25d366_0%,#22c55e_50%,#128c48_100%)] text-white shadow-xl transition-all duration-300 hover:scale-[1.07] sm:h-[5.5rem] sm:w-[5.5rem]"
     		aria-label="Abrir chat de WhatsApp"
     		title="Chatea por WhatsApp"
     	>
-    		<svg class="w-9 h-9" viewBox="0 0 24 24" fill="currentColor">
+	    		<span class="whatsapp-float-ring" aria-hidden="true"></span>
+	    		<svg class="relative z-10 h-11 w-11 drop-shadow-[0_2px_4px_rgba(0,0,0,0.18)] sm:h-[3rem] sm:w-[3rem]" viewBox="0 0 24 24" fill="currentColor">
     			<path
     				d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884"
     			/>
