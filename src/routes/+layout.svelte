@@ -693,7 +693,7 @@ page.subscribe(($page) => {
 				</div>
 			</div>
 			<div class="mt-8 pt-8 border-t border-gray-700 text-center text-gray-400">
-				© 2024 Guerra Láser. Todos los derechos reservados.
+				© 2026 Guerra Láser marca operada por Luis Enrique Guerra Zavala
 			</div>
 		</div>
 	</footer>
