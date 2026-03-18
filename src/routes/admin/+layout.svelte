@@ -31,11 +31,22 @@
 			permission: 'view_products',
 			subItems: [
 				{ href: '/admin/productos', label: 'Gestión de Productos', permission: 'view_products' },
+				{ href: '/admin/importar', label: 'Importar', permission: 'create_products' },
 				{ href: '/admin/categorias', label: 'Categorías', permission: 'view_categories' },
 				{ href: '/admin/bundles', label: 'Bundles', permission: 'view_bundles' }
 			]
 		},
 		{ href: '/admin/inventario', label: 'Inventario', icon: '📋', permission: 'view_inventory' },
+		{ href: '/admin/ordenes-compra', label: 'Órdenes de Compra', icon: '🧾', permission: 'manage_inventory' },
+		{
+			label: 'POS',
+			icon: '🧾',
+			permission: 'manage_inventory',
+			subItems: [
+				{ href: '/admin/punto-venta', label: 'Punto de Venta', permission: 'manage_inventory' },
+				{ href: '/admin/pos-reportes', label: 'Reportes', permission: 'manage_inventory' }
+			]
+		},
 		{
 			label: 'Ventas',
 			icon: '🛍️',
@@ -46,7 +57,6 @@
 				{ href: '/admin/cotizacion-chat', label: 'Cotización IA', permission: 'view_admin_panel' }
 			]
 		},
-		{ href: '/admin/importar', label: 'Importar', icon: '📊', permission: 'create_products' },
 		{
 			label: 'Configuración',
 			icon: '⚙️',
@@ -54,6 +64,7 @@
 			subItems: [
 				{ href: '/admin/tipos-envio', label: 'Tipos de Envío', permission: 'view_admin_panel' },
 				{ href: '/admin/promociones', label: 'Promociones', permission: 'view_admin_panel' },
+				{ href: '/admin/tipo-cambio', label: 'Tipo de Cambio', permission: 'manage_settings' },
 				{ href: '/admin/videos', label: 'Videos', permission: 'view_admin_panel' },
 				{ href: '/admin/usuarios', label: 'Usuarios', permission: 'view_admin_panel' }
 			]
@@ -112,7 +123,8 @@
 	// Filtrar menú según permisos
 	const visibleMenuItems = $derived(menuItems.filter((item) => {
 		if (!item.permission) return true;
-		if (!userState.initialized || userState.loading) return false;
+		// No ocultar el menú por la bandera `loading`; solo necesitamos que el store esté inicializado.
+		if (!userState.initialized) return false;
 		const hasPermission = checkPermission(item.permission);
 		
 		// Si tiene subItems, filtrarlos también
@@ -131,7 +143,6 @@
 		if (!item.subItems) return [];
 		return item.subItems.filter(subItem => {
 			if (!subItem.permission) return true;
-			if (!userState.initialized || userState.loading) return false;
 			return checkPermission(subItem.permission);
 		});
 	}

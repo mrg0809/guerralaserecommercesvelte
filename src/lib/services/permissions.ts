@@ -87,7 +87,8 @@ export async function getUserPermissions(userId: string): Promise<Permission[]> 
 		'delete_bundles',
 		'manage_users',
 		'manage_roles',
-		'view_reports'
+		'view_reports',
+		'manage_settings'
 	] as Permission[];
 }
 

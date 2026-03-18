@@ -34,7 +34,11 @@
 		// Cargar productos - solo columnas necesarias (sin expandir relaciones)
 		const { data: productsData } = await supabase
 			.from('products')
-			.select('id, sku, name, base_price, stock_quantity, category_id, product_variants(name, stock_quantity, price)')
+			.select(
+				'id, sku, name, base_price, cost, stock_quantity, category_id,' +
+					' product_variants(id, name, stock_quantity, price, is_active),' +
+					' mercadolibre_listings(price)'
+			)
 			.eq('is_active', true)
 			.order('name');
 
@@ -289,10 +293,101 @@
 					{ wch: 12 }, // Inventario
 					{ wch: 12 } // Conteo
 				];
+
+			// Importante: agregar la hoja al workbook (si no, XLSX.writeFile marca "Workbook is empty")
+			XLSX.utils.book_append_sheet(workbook, worksheet, 'Conteo');
+		}
+
+		// Si no se agregó ninguna hoja (por ejemplo, no hay productos en las categorías seleccionadas),
+		// evitamos descargar un archivo vacío.
+		if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
+			alert('No hay productos para las categorías seleccionadas');
+			return;
 		}
 
 		// Descargar archivo
 		const fileName = `Hoja_Conteo_${new Date().toISOString().split('T')[0]}.xlsx`;
+		XLSX.writeFile(workbook, fileName);
+	}
+
+	function exportStockReportExcel() {
+		if (selectedCategories.size > 0) {
+			// El reporte nuevo debe imprimir TODO el inventario, sin filtrar por categorías.
+			// (El control de categorías aplica a "Hoja de Conteo" / otros exports.)
+		}
+
+		if (loading) return;
+		if (!products || products.length === 0) {
+			alert('No hay productos para generar el reporte de stock');
+			return;
+		}
+
+		const rows: any[] = [];
+
+		for (const product of products) {
+			const { family, category: catName, subcategory } = product.category_id
+				? getCategoryLevels(product.category_id)
+				: { family: '', category: '', subcategory: '' };
+
+			// Costo viene de `products.cost` (por defecto 0).
+			const costo = (product as any)?.costo ?? (product as any)?.cost ?? 0;
+
+			// Precio Mercado Libre está en mercadolibre_listings (1:1 por product_id),
+			// pero dependiendo del shape del select puede venir como objeto o arreglo.
+			const mlListing = (product as any)?.mercadolibre_listings;
+			const precioMercadoLibre = Array.isArray(mlListing) ? mlListing[0]?.price ?? '' : mlListing?.price ?? '';
+
+			if (product.product_variants && product.product_variants.length > 0) {
+				for (const variant of product.product_variants) {
+					rows.push({
+						// Orden requerido:
+						Familia: family,
+						Categoria: catName,
+						Subcategoria: subcategory,
+						SKU: product.sku || '-',
+						Nombre: product.name,
+						Variante: variant.name || 'Variante sin nombre',
+						Inventario: variant.stock_quantity || 0,
+						Costo: costo,
+						'Precio Publico': variant.price ?? product.base_price ?? 0,
+						'Precio Mercado Libre': precioMercadoLibre
+					});
+				}
+			} else {
+				rows.push({
+					Familia: family,
+					Categoria: catName,
+					Subcategoria: subcategory,
+					SKU: product.sku || '-',
+					Nombre: product.name,
+					Variante: '-',
+					Inventario: product.stock_quantity || 0,
+					Costo: costo,
+					'Precio Publico': product.base_price ?? 0,
+					'Precio Mercado Libre': precioMercadoLibre
+				});
+			}
+		}
+
+		const workbook = XLSX.utils.book_new();
+		const worksheet = XLSX.utils.json_to_sheet(rows);
+
+		worksheet['!cols'] = [
+			{ wch: 18 }, // Familia
+			{ wch: 22 }, // Categoria
+			{ wch: 22 }, // Subcategoria
+			{ wch: 15 }, // SKU
+			{ wch: 30 }, // Nombre
+			{ wch: 22 }, // Variante
+			{ wch: 12 }, // Inventario
+			{ wch: 12 }, // Costo
+			{ wch: 18 }, // Precio Publico
+			{ wch: 22 } // Precio Mercado Libre
+		];
+
+		XLSX.utils.book_append_sheet(workbook, worksheet, 'Stock');
+
+		const fileName = `Reporte_Stock_${new Date().toISOString().split('T')[0]}.xlsx`;
 		XLSX.writeFile(workbook, fileName);
 	}
 
@@ -571,11 +666,19 @@
 			<p class="text-gray-600">Exporta productos con foto, nombre, SKU y precio en PDF o Excel</p>
 		</div>
 
-		<!-- Próximas funcionalidades -->
-		<div class="bg-gray-100 rounded-lg shadow-md p-6 opacity-50 cursor-not-allowed">
+		<!-- Reporte de Stock -->
+		<div class="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition">
 			<div class="text-4xl mb-4 grayscale">📊</div>
 			<h2 class="text-xl font-bold mb-2 text-gray-500">Reporte de Stock</h2>
-			<p class="text-gray-500">Próximamente</p>
+			<p class="text-gray-500">Generar Excel con todo el inventario</p>
+			<button
+				type="button"
+				onclick={() => exportStockReportExcel()}
+				disabled={loading || !products || products.length === 0}
+				class="mt-4 w-full px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:bg-gray-400 disabled:cursor-not-allowed font-medium"
+			>
+				Descargar Excel
+			</button>
 		</div>
 
 		<div class="bg-gray-100 rounded-lg shadow-md p-6 opacity-50 cursor-not-allowed">

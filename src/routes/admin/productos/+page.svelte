@@ -53,6 +53,7 @@
 		description: '',
 		short_description: '',
 		base_price: 0,
+		cost: 0,
 		category_id: '',
 		is_active: true,
 		is_featured: false,
@@ -444,6 +445,7 @@
 					description,
 					short_description,
 					base_price,
+					cost,
 					stock_quantity,
 					sku,
 					shipping_type_id,
@@ -653,6 +655,7 @@
 				description: product.description || '',
 				short_description: product.short_description || '',
 				base_price: product.base_price,
+				cost: (product as any).cost ?? 0,
 				category_id: product.category_id || '',
 				is_active: product.is_active,
 				is_featured: product.is_featured || false,
@@ -691,6 +694,7 @@
 				description: '',
 				short_description: '',
 				base_price: 0,
+				cost: 0,
 				category_id: '',
 				is_active: true,
 				is_featured: false,
@@ -737,6 +741,7 @@
 			description: product.description || '',
 			short_description: product.short_description || '',
 			base_price: product.base_price,
+			cost: (product as any).cost ?? 0,
 			category_id: product.category_id || '',
 			is_active: product.is_active,
 			is_featured: false, // No destacar la copia por defecto
@@ -1337,7 +1342,7 @@
 				const formDataSnapshot = $state.snapshot(formData);
 				const { error } = await supabase
 					.from('products')
-					.update(formDataSnapshot)
+					.update(formDataSnapshot as any)
 					.eq('id', editingProduct.id);
 
 				if (error) {
@@ -1350,7 +1355,7 @@
 				console.log('🔍 Creando nuevo producto...');
 				const { data, error } = await supabase
 					.from('products')
-					.insert([formData])
+					.insert([formData as any])
 					.select();
 
 				if (error) throw error;
@@ -2204,7 +2209,7 @@
 								<p class="text-xs text-gray-500 mt-2">Estos enlaces se mostrarán como descargables en el detalle del producto.</p>
 							</div>
 
-							<div class="grid grid-cols-2 gap-4">
+							<div class="grid grid-cols-3 gap-4">
 								<div>
 									<label class="block text-sm font-semibold mb-2" for="product-base-price">Precio Base *</label>
 									<input
@@ -2214,6 +2219,18 @@
 										step="0.01"
 										min="0"
 										required
+										class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+									/>
+								</div>
+
+								<div>
+									<label class="block text-sm font-semibold mb-2" for="product-cost">Costo USD</label>
+									<input
+										id="product-cost"
+										type="number"
+										bind:value={formData.cost}
+										step="0.01"
+										min="0"
 										class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
 									/>
 								</div>
