@@ -129,3 +129,51 @@
 		animation: none;
 	}
 }
+
+/* Desktop navigation dropdown behavior */
+.menu-item > .js-submenu {
+	overflow: visible;
+}
+
+/* Panel raíz ancho + varias columnas (sin scroll interno; submenús laterales no se recortan) */
+.submenu-root-mega {
+	min-width: min(36rem, calc(100vw - 2rem));
+	max-width: min(56rem, calc(100vw - 1.5rem));
+	width: max-content;
+}
+
+.submenu-root-mega .nav-submenu-list {
+	overflow: visible;
+}
+
+.submenu-root-cols-2 .nav-submenu-list {
+	column-count: 2;
+	column-gap: 1.25rem;
+	column-fill: balance;
+}
+
+.submenu-root-cols-3 .nav-submenu-list {
+	column-count: 3;
+	column-gap: 1rem;
+	column-fill: balance;
+}
+
+.submenu-root-cols-2 .nav-submenu-list > .menu-item,
+.submenu-root-cols-3 .nav-submenu-list > .menu-item {
+	break-inside: avoid;
+	page-break-inside: avoid;
+	-webkit-column-break-inside: avoid;
+}
+
+.menu-item.open-left > .js-submenu.submenu-root {
+	left: auto;
+	right: 0;
+	margin-left: 0;
+}
+
+.menu-item.open-left > .js-submenu.submenu-nested {
+	left: auto;
+	right: 100%;
+	margin-left: 0;
+	margin-right: 0.25rem;
+}

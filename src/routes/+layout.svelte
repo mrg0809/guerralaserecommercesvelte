@@ -286,6 +286,44 @@ page.subscribe(($page) => {
 	function toggleChild(id: string) {
 		openChildren[id] = !openChildren[id];
 	}
+
+	/** Listas largas (p. ej. Refacciones): panel ancho + varias columnas (sin scroll en el menú) */
+	const ROOT_COLS_2_MIN = 8;
+	const ROOT_COLS_3_MIN = 18;
+
+	function rootSubmenuClass(count: number, slug: string): string {
+		const slugLower = slug.toLowerCase();
+		const forceWide =
+			slugLower === 'refacciones' ||
+			slugLower.includes('refaccion') ||
+			count >= ROOT_COLS_2_MIN;
+		if (count >= ROOT_COLS_3_MIN) return 'submenu-root-mega submenu-root-cols-3';
+		if (forceWide) return 'submenu-root-mega submenu-root-cols-2';
+		return '';
+	}
+
+	function positionSubmenu(event: MouseEvent) {
+		if (typeof window === 'undefined') return;
+
+		const menuItem = event.currentTarget as HTMLElement | null;
+		if (!menuItem) return;
+
+		const submenu = menuItem.querySelector(':scope > .js-submenu') as HTMLElement | null;
+		if (!submenu) return;
+
+		menuItem.classList.remove('open-left');
+
+		const viewportPadding = 8;
+		const initialRect = submenu.getBoundingClientRect();
+		if (initialRect.right > window.innerWidth - viewportPadding) {
+			menuItem.classList.add('open-left');
+		}
+
+		const adjustedRect = submenu.getBoundingClientRect();
+		if (adjustedRect.left < viewportPadding && menuItem.classList.contains('open-left')) {
+			menuItem.classList.remove('open-left');
+		}
+	}
 </script>
 
 <svelte:head>
@@ -307,7 +345,8 @@ page.subscribe(($page) => {
 				<!-- Category Navigation (Center) Desktop with dropdowns -->
 				<div class="hidden md:flex items-center gap-1 flex-1 justify-center px-4">
 					{#each getRootCategories() as rootCategory}
-						<div class="relative group">
+						<!-- svelte-ignore a11y_no_static_element_interactions -->
+						<div class="relative group menu-item" onmouseenter={positionSubmenu}>
 							<a
 								href="/categorias/{rootCategory.slug}"
 								class="px-3 py-2 font-semibold text-gray-700 hover:text-white hover:bg-red-600 transition-all rounded-md whitespace-nowrap text-sm flex items-center gap-1.5"
@@ -321,10 +360,17 @@ page.subscribe(($page) => {
 							</a>
 
 							{#if getChildCategories(rootCategory.id).length > 0}
-								<div class="absolute left-0 mt-1 w-64 bg-white rounded-lg shadow-2xl border border-gray-200 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200">
-									<div class="py-2">
-										{#each getChildCategories(rootCategory.id) as level2Cat}
-											<div class="relative group/level2">
+								{@const rootKids = getChildCategories(rootCategory.id)}
+								<div
+									class="js-submenu submenu-root absolute left-0 mt-1 bg-white rounded-lg shadow-2xl border border-gray-200 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 {rootSubmenuClass(
+										rootKids.length,
+										rootCategory.slug
+									) || 'w-64'}"
+								>
+									<div class="nav-submenu-list py-2">
+										{#each rootKids as level2Cat}
+											<!-- svelte-ignore a11y_no_static_element_interactions -->
+											<div class="relative group/level2 menu-item" onmouseenter={positionSubmenu}>
 												<a
 													href="/categorias/{level2Cat.slug}"
 													class="block px-4 py-2.5 text-gray-700 hover:bg-red-50 hover:text-red-600 transition flex justify-between items-center"
@@ -338,10 +384,11 @@ page.subscribe(($page) => {
 												</a>
 
 												{#if getChildCategories(level2Cat.id).length > 0}
-													<div class="absolute left-full top-0 ml-1 w-64 bg-white rounded-lg shadow-2xl border border-gray-200 opacity-0 invisible group-hover/level2:opacity-100 group-hover/level2:visible transition-all duration-200">
+													<div class="js-submenu submenu-nested absolute left-full top-0 ml-1 w-64 bg-white rounded-lg shadow-2xl border border-gray-200 opacity-0 invisible group-hover/level2:opacity-100 group-hover/level2:visible transition-all duration-200">
 														<div class="py-2">
 															{#each getChildCategories(level2Cat.id) as level3Cat}
-																<div class="relative group/level3">
+																<!-- svelte-ignore a11y_no_static_element_interactions -->
+																<div class="relative group/level3 menu-item" onmouseenter={positionSubmenu}>
 																	<a
 																		href="/categorias/{level3Cat.slug}"
 																		class="block px-4 py-2.5 text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition flex justify-between items-center"
@@ -355,7 +402,7 @@ page.subscribe(($page) => {
 																	</a>
 
 																	{#if getChildCategories(level3Cat.id).length > 0}
-																		<div class="absolute left-full top-0 ml-1 w-64 bg-white rounded-lg shadow-2xl border border-gray-200 opacity-0 invisible group-hover/level3:opacity-100 group-hover/level3:visible transition-all duration-200">
+																		<div class="js-submenu submenu-nested absolute left-full top-0 ml-1 w-64 bg-white rounded-lg shadow-2xl border border-gray-200 opacity-0 invisible group-hover/level3:opacity-100 group-hover/level3:visible transition-all duration-200">
 																			<div class="py-2">
 																				{#each getChildCategories(level3Cat.id) as level4Cat}
 																					<a
@@ -375,7 +422,7 @@ page.subscribe(($page) => {
 											{/if}
 										</div>
 									{/each}
-								</div>
+									</div>
 							</div>
 						{/if}
 					</div>

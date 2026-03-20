@@ -103,6 +103,18 @@
 		);
 	});
 
+	/** Misma regla que la tienda y ACRILICO_VARIANTS_GUIDE.md: spec tipo_producto = acrilico */
+	const ACRYLIC_SPEC_KEY = 'tipo_producto';
+	const ACRYLIC_SPEC_VALUE = 'acrilico';
+
+	let isAcrylicSheetProduct = $derived.by(() =>
+		specifications.some(
+			(s) =>
+				s.specification_key?.trim().toLowerCase() === ACRYLIC_SPEC_KEY &&
+				s.specification_value?.trim().toLowerCase() === ACRYLIC_SPEC_VALUE
+		)
+	);
+
 	// Categorías ordenadas alfabéticamente por su jerarquía
 	let sortedCategories = $derived.by(() => {
 		return [...categories].sort((a, b) => {
@@ -1735,22 +1747,6 @@
 			alert('Error al eliminar producto: ' + error.message);
 		}
 	}
-
-	async function toggleActive(product: Product) {
-		try {
-			const { error } = await supabase
-				.from('products')
-				.update({ is_active: !product.is_active })
-				.eq('id', product.id);
-
-			if (error) throw error;
-
-			await loadProducts();
-			await loadAllProductVariants();
-		} catch (error: any) {
-			alert('Error al actualizar producto: ' + error.message);
-		}
-	}
 </script>
 
 <svelte:head>
@@ -1891,8 +1887,6 @@
 						<th class="px-4 py-3 text-left">SKU</th>
 						<th class="px-4 py-3 text-left">Precio</th>
 						<th class="px-4 py-3 text-left">Stock</th>
-						<th class="px-4 py-3 text-left">Estado</th>
-						<th class="px-4 py-3 text-left">Destacado</th>
 						<th class="px-4 py-3 text-left">Variantes</th>
 						<th class="px-4 py-3 text-right">Acciones</th>
 					</tr>
@@ -1917,19 +1911,6 @@
 								{#if productVariantsMap[product.id] && productVariantsMap[product.id].length > 0}
 									<span class="text-xs text-gray-500">(suma)</span>
 								{/if}
-							</td>
-							<td class="px-4 py-3">
-								<button
-									onclick={() => toggleActive(product)}
-									class="px-3 py-1 rounded-full text-sm {product.is_active
-										? 'bg-green-100 text-green-800'
-										: 'bg-red-100 text-red-800'}"
-								>
-									{product.is_active ? 'Activo' : 'Inactivo'}
-								</button>
-							</td>
-							<td class="px-4 py-3">
-								{product.is_featured ? '⭐' : '-'}
 							</td>
 							<td class="px-4 py-3">
 								{#if productVariantsMap[product.id] && productVariantsMap[product.id].length > 0}
@@ -2515,6 +2496,14 @@
 								<div>
 									<h3 class="text-lg font-semibold">Variantes del Producto</h3>
 									<p class="text-sm text-gray-600">Ej: tallas, colores, potencias</p>
+									{#if editingProduct && !isAcrylicSheetProduct}
+										<p class="text-xs text-amber-700 mt-1 max-w-xl">
+											Las columnas Color / HEX / Grosor / Tamaño y la herramienta <strong>Duplicar color</strong> solo
+											aparecen en láminas de acrílico: agrega la especificación
+											<code class="bg-amber-100 px-1 rounded">tipo_producto</code> =
+											<code class="bg-amber-100 px-1 rounded">acrilico</code> en la pestaña Especificaciones.
+										</p>
+									{/if}
 								</div>
 							</div>
 
@@ -2525,10 +2514,12 @@
 											<tr>
 												<th class="px-4 py-3 text-left">Nombre</th>
 												<th class="px-4 py-3 text-left">SKU</th>
-												<th class="px-4 py-3 text-left">Color</th>
-												<th class="px-4 py-3 text-left">Color HEX</th>
-												<th class="px-4 py-3 text-left">Grosor</th>
-												<th class="px-4 py-3 text-left">Tamaño</th>
+												{#if isAcrylicSheetProduct}
+													<th class="px-4 py-3 text-left">Color</th>
+													<th class="px-4 py-3 text-left">Color HEX</th>
+													<th class="px-4 py-3 text-left">Grosor</th>
+													<th class="px-4 py-3 text-left">Tamaño</th>
+												{/if}
 												<th class="px-4 py-3 text-left">Precio</th>
 												<th class="px-4 py-3 text-left">Stock</th>
 												<th class="px-4 py-3 text-left">Activo</th>
@@ -2554,38 +2545,40 @@
 															class="w-full px-2 py-1 border border-gray-300 rounded font-mono text-xs"
 														/>
 													</td>
-													<td class="px-4 py-3">
-														<input
-															type="text"
-															bind:value={variant.color}
-															placeholder="Ej: verde"
-															class="w-full px-2 py-1 border border-gray-300 rounded"
-														/>
-													</td>
-													<td class="px-4 py-3">
-														<input
-															type="text"
-															bind:value={variant.color_hex}
-															placeholder="#22c55e"
-															class="w-full px-2 py-1 border border-gray-300 rounded font-mono text-xs"
-														/>
-													</td>
-													<td class="px-4 py-3">
-														<input
-															type="text"
-															bind:value={variant.grosor}
-															placeholder="Ej: 3mm"
-															class="w-full px-2 py-1 border border-gray-300 rounded"
-														/>
-													</td>
-													<td class="px-4 py-3">
-														<input
-															type="text"
-															bind:value={variant.tamano}
-															placeholder="Ej: 60x90"
-															class="w-full px-2 py-1 border border-gray-300 rounded"
-														/>
-													</td>
+													{#if isAcrylicSheetProduct}
+														<td class="px-4 py-3">
+															<input
+																type="text"
+																bind:value={variant.color}
+																placeholder="Ej: verde"
+																class="w-full px-2 py-1 border border-gray-300 rounded"
+															/>
+														</td>
+														<td class="px-4 py-3">
+															<input
+																type="text"
+																bind:value={variant.color_hex}
+																placeholder="#22c55e"
+																class="w-full px-2 py-1 border border-gray-300 rounded font-mono text-xs"
+															/>
+														</td>
+														<td class="px-4 py-3">
+															<input
+																type="text"
+																bind:value={variant.grosor}
+																placeholder="Ej: 3mm"
+																class="w-full px-2 py-1 border border-gray-300 rounded"
+															/>
+														</td>
+														<td class="px-4 py-3">
+															<input
+																type="text"
+																bind:value={variant.tamano}
+																placeholder="Ej: 60x90"
+																class="w-full px-2 py-1 border border-gray-300 rounded"
+															/>
+														</td>
+													{/if}
 													<td class="px-4 py-3">
 														<input
 															type="number"
@@ -2630,7 +2623,7 @@
 								</div>
 							{/if}
 
-							{#if variants.length > 0}
+							{#if isAcrylicSheetProduct && variants.length > 0}
 								<div class="bg-white border border-gray-200 rounded-lg p-4 space-y-4">
 									<h4 class="font-semibold text-sm text-gray-800">Duplicar color</h4>
 									<p class="text-xs text-gray-500">
@@ -2727,48 +2720,50 @@
 									</div>
 								</div>
 
-									<div class="grid grid-cols-1 md:grid-cols-4 gap-3">
-										<div>
-											<label class="block text-sm font-semibold mb-1" for="new-variant-color">Color</label>
-											<input
-												id="new-variant-color"
-												type="text"
-												bind:value={newVariant.color}
-												placeholder="Ej: verde"
-												class="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-											/>
+									{#if isAcrylicSheetProduct}
+										<div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+											<div>
+												<label class="block text-sm font-semibold mb-1" for="new-variant-color">Color</label>
+												<input
+													id="new-variant-color"
+													type="text"
+													bind:value={newVariant.color}
+													placeholder="Ej: verde"
+													class="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+												/>
+											</div>
+											<div>
+												<label class="block text-sm font-semibold mb-1" for="new-variant-color-hex">Color HEX</label>
+												<input
+													id="new-variant-color-hex"
+													type="text"
+													bind:value={newVariant.color_hex}
+													placeholder="#22c55e"
+													class="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
+												/>
+											</div>
+											<div>
+												<label class="block text-sm font-semibold mb-1" for="new-variant-grosor">Grosor</label>
+												<input
+													id="new-variant-grosor"
+													type="text"
+													bind:value={newVariant.grosor}
+													placeholder="Ej: 3mm"
+													class="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+												/>
+											</div>
+											<div>
+												<label class="block text-sm font-semibold mb-1" for="new-variant-tamano">Tamaño</label>
+												<input
+													id="new-variant-tamano"
+													type="text"
+													bind:value={newVariant.tamano}
+													placeholder="Ej: 60x90"
+													class="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+												/>
+											</div>
 										</div>
-										<div>
-											<label class="block text-sm font-semibold mb-1" for="new-variant-color-hex">Color HEX</label>
-											<input
-												id="new-variant-color-hex"
-												type="text"
-												bind:value={newVariant.color_hex}
-												placeholder="#22c55e"
-												class="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
-											/>
-										</div>
-										<div>
-											<label class="block text-sm font-semibold mb-1" for="new-variant-grosor">Grosor</label>
-											<input
-												id="new-variant-grosor"
-												type="text"
-												bind:value={newVariant.grosor}
-												placeholder="Ej: 3mm"
-												class="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-											/>
-										</div>
-										<div>
-											<label class="block text-sm font-semibold mb-1" for="new-variant-tamano">Tamaño</label>
-											<input
-												id="new-variant-tamano"
-												type="text"
-												bind:value={newVariant.tamano}
-												placeholder="Ej: 60x90"
-												class="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-											/>
-										</div>
-									</div>
+									{/if}
 
 								<div class="grid grid-cols-1 md:grid-cols-3 gap-3">
 									<div>
