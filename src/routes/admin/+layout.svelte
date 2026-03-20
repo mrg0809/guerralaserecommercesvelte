@@ -174,22 +174,29 @@
 				<div class="hidden md:flex items-center gap-1">
 					{#each visibleMenuItems as item}
 						{#if item.subItems}
-							<!-- Dropdown Menu -->
-							<div class="relative">
-								<button
-									onclick={() => toggleDropdown(item.label)}
-									class="px-3 py-1.5 rounded-lg transition text-sm flex items-center gap-1 {isDropdownActive(item)
+							<!-- Dropdown: hover (escritorio), igual que la tienda -->
+							<div class="relative group">
+								<div
+									class="px-3 py-1.5 rounded-lg transition text-sm flex items-center gap-1 cursor-default {isDropdownActive(item)
 										? 'bg-blue-600 text-white'
-										: 'text-gray-700 hover:bg-gray-100'}"
+										: 'text-gray-700 group-hover:bg-gray-100'}"
 								>
 									<span class="mr-1.5">{item.icon}</span>
 									{item.label}
-									<svg class="w-4 h-4 transition-transform {openDropdowns[item.label] ? 'rotate-180' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<svg
+										class="w-4 h-4 transition-transform group-hover:rotate-180"
+										fill="none"
+										stroke="currentColor"
+										viewBox="0 0 24 24"
+									>
 										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
 									</svg>
-								</button>
-								{#if openDropdowns[item.label]}
-									<div class="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-lg border min-w-[200px] z-50">
+								</div>
+								<!-- -mt-1 solapa con el disparador para no perder el hover al bajar al submenú -->
+								<div
+									class="absolute top-full left-0 -mt-1 min-w-[200px] z-50 opacity-0 invisible pointer-events-none group-hover:opacity-100 group-hover:visible group-hover:pointer-events-auto transition-all duration-150"
+								>
+									<div class="bg-white rounded-lg shadow-lg border py-1">
 										{#each getVisibleSubItems(item) as subItem}
 											<a
 												href={subItem.href}
@@ -201,7 +208,7 @@
 											</a>
 										{/each}
 									</div>
-								{/if}
+								</div>
 							</div>
 						{:else}
 							<!-- Regular Menu Item -->

@@ -666,19 +666,16 @@
 			<p class="text-gray-600">Exporta productos con foto, nombre, SKU y precio en PDF o Excel</p>
 		</div>
 
-		<!-- Reporte de Stock -->
-		<div class="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition">
-			<div class="text-4xl mb-4 grayscale">📊</div>
-			<h2 class="text-xl font-bold mb-2 text-gray-500">Reporte de Stock</h2>
-			<p class="text-gray-500">Generar Excel con todo el inventario</p>
-			<button
-				type="button"
-				onclick={() => exportStockReportExcel()}
-				disabled={loading || !products || products.length === 0}
-				class="mt-4 w-full px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:bg-gray-400 disabled:cursor-not-allowed font-medium"
-			>
-				Descargar Excel
-			</button>
+		<!-- Reporte de Stock (mismo patrón que Hoja de Conteo / Listado con Fotos: clic en todo el recuadro) -->
+		<div
+			class="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition {loading || !products?.length
+				? 'opacity-60 cursor-not-allowed'
+				: 'cursor-pointer'}"
+			onclick={() => exportStockReportExcel()}
+		>
+			<div class="text-4xl mb-4">📊</div>
+			<h2 class="text-xl font-bold mb-2">Reporte de Stock</h2>
+			<p class="text-gray-600">Genera un Excel con todo el inventario</p>
 		</div>
 
 		<div class="bg-gray-100 rounded-lg shadow-md p-6 opacity-50 cursor-not-allowed">

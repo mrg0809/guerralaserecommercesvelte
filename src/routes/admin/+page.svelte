@@ -27,12 +27,17 @@
 		isAuthorized = true;
 
 		// Get stats
+		// Misma lógica que /admin/pedidos: solo pedidos con pago confirmado
 		const [products, categories, bundles, orders, pending] = await Promise.all([
 			supabase.from('products').select('id', { count: 'exact', head: true }),
 			supabase.from('categories').select('id', { count: 'exact', head: true }),
 			supabase.from('product_bundles').select('id', { count: 'exact', head: true }),
-			supabase.from('orders').select('id', { count: 'exact', head: true }),
-			supabase.from('orders').select('id', { count: 'exact', head: true }).eq('status', 'pending')
+			supabase.from('orders').select('id', { count: 'exact', head: true }).eq('payment_status', 'paid'),
+			supabase
+				.from('orders')
+				.select('id', { count: 'exact', head: true })
+				.eq('payment_status', 'paid')
+				.eq('status', 'pending')
 		]);
 
 		stats.totalProducts = products.count || 0;
@@ -85,7 +90,7 @@
 		<div class="bg-white rounded-lg shadow-md p-6">
 			<div class="flex items-center justify-between">
 				<div>
-					<p class="text-gray-600 text-sm">Total Pedidos</p>
+					<p class="text-gray-600 text-sm">Total Pedidos (pagados)</p>
 					<p class="text-3xl font-bold text-purple-600">{stats.totalOrders}</p>
 				</div>
 				<div class="text-4xl">🛍️</div>
@@ -101,9 +106,12 @@
 					<div class="text-2xl">⏳</div>
 					<div>
 						<p class="font-bold text-orange-800">
-							Tienes {stats.pendingOrders} pedido{stats.pendingOrders !== 1 ? 's' : ''} pendiente{stats.pendingOrders !== 1 ? 's' : ''}
+							Tienes {stats.pendingOrders}
+							{stats.pendingOrders === 1 ? 'pedido pagado' : 'pedidos pagados'} por procesar
 						</p>
-						<p class="text-sm text-orange-700">Revisa y procesa los pedidos pendientes</p>
+						<p class="text-sm text-orange-700">
+							Pedidos pagados aún en estado pendiente de preparación/envío
+						</p>
 					</div>
 				</div>
 				<a
