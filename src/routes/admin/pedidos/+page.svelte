@@ -76,9 +76,23 @@
 
 	async function updateOrderStatus(orderId: string, status: string) {
 		try {
-			const { error } = await supabase.from('orders').update({ status }).eq('id', orderId);
+			const {
+				data: { session }
+			} = await supabase.auth.getSession();
+			if (!session) throw new Error('Sesión no válida');
 
-			if (error) throw error;
+			const response = await fetch('/api/admin/orders/update-status', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+					Authorization: `Bearer ${session.access_token}`
+				},
+				body: JSON.stringify({ orderId, status })
+			});
+			const result = await response.json();
+			if (!response.ok || !result.success) {
+				throw new Error(result.error || 'No se pudo actualizar el estado');
+			}
 
 			await loadOrders();
 			if (selectedOrder && selectedOrder.id === orderId) {
