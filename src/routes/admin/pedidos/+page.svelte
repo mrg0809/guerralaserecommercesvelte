@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import { supabase } from '$lib/supabaseClient';
 	import { formatPrice } from '$lib/utils';
 	import type { Order } from '$lib/types';
@@ -27,44 +26,58 @@
 		{ value: 'cancelled', label: 'Cancelado', color: 'red' }
 	];
 
-	onMount(async () => {
-		await loadOrders();
-	});
-
 	async function loadOrders() {
 		loading = true;
-		let query = supabase
-			.from('orders')
-			.select('*, order_items(*)')
-			.eq('payment_status', 'paid')
-			.order('created_at', { ascending: false });
+		try {
+			const {
+				data: { session }
+			} = await supabase.auth.getSession();
+			if (!session) {
+				orders = [];
+				return;
+			}
 
-		if (filterStatus !== 'all') {
-			query = query.eq('status', filterStatus);
+			const params = new URLSearchParams({ status: filterStatus });
+			const response = await fetch(`/api/admin/orders?${params}`, {
+				headers: { Authorization: `Bearer ${session.access_token}` }
+			});
+			const result = await response.json();
+
+			if (!response.ok || !result.success) {
+				console.error('[pedidos]', result.error || response.statusText);
+				orders = [];
+				return;
+			}
+
+			orders = (result.orders ?? []) as AdminOrder[];
+		} finally {
+			loading = false;
 		}
-
-		const { data } = await query;
-
-		if (data) {
-			orders = data as AdminOrder[];
-		}
-		loading = false;
 	}
 
 	async function viewOrder(order: Order) {
-		const { data } = await supabase
-			.from('orders')
-			.select('*, order_items(*)')
-			.eq('id', order.id)
-			.eq('payment_status', 'paid')
-			.single();
-
-		if (data) {
-			selectedOrder = data as AdminOrder;
-			shippingCarrierInput = selectedOrder.shipping_carrier || '';
-			shippingTrackingInput = selectedOrder.shipping_tracking_number || '';
-			showModal = true;
+		const {
+			data: { session }
+		} = await supabase.auth.getSession();
+		if (!session) {
+			alert('Sesión no válida');
+			return;
 		}
+
+		const response = await fetch(`/api/admin/orders/${order.id}`, {
+			headers: { Authorization: `Bearer ${session.access_token}` }
+		});
+		const result = await response.json();
+
+		if (!response.ok || !result.success || !result.order) {
+			alert(result.error || 'No se pudo cargar el pedido');
+			return;
+		}
+
+		selectedOrder = result.order as AdminOrder;
+		shippingCarrierInput = selectedOrder.shipping_carrier || '';
+		shippingTrackingInput = selectedOrder.shipping_tracking_number || '';
+		showModal = true;
 	}
 
 	function closeModal() {
