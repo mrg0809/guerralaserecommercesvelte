@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { cart } from '$lib/stores/cart';
 	import { formatPrice, generateOrderNumber } from '$lib/utils';
-	import { supabase } from '$lib/supabaseClient';
 	import { goto } from '$app/navigation';
 	import { cartRequiresQuotation, getCheckoutButtonLabel } from '$lib/services/shippingService';
 	import { loadStripe } from '@stripe/stripe-js';
@@ -286,10 +285,11 @@
 		try {
 			const orderNumber = generateOrderNumber();
 
-			// Create order in database first
-			const { data: order, error: orderError } = await supabase
-				.from('orders')
-				.insert({
+			// Create order via server endpoint to avoid anon-key RLS restrictions
+			const orderResponse = await fetch('/api/orders/create', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
 					order_number: orderNumber,
 					customer_name: formData.customer_name,
 					customer_email: formData.customer_email,
@@ -307,10 +307,12 @@
 					payment_status: 'pending',
 					notes: formData.notes
 				})
-				.select()
-				.single();
-
-			if (orderError || !order) throw orderError;
+			});
+			const orderData = await orderResponse.json();
+			if (!orderResponse.ok || !orderData?.order) {
+				throw new Error(orderData?.error || 'Error creando pedido');
+			}
+			const order = orderData.order;
 
 			// Create order items
 			const orderItems = cartItems.map((item) => ({
@@ -366,15 +368,6 @@
 			});
 
 			if (stripeError) {
-				// Payment failed
-				await supabase
-					.from('orders')
-					.update({
-						payment_status: 'failed',
-						status: 'cancelled'
-					})
-					.eq('id', order.id);
-
 				error = stripeError.message || 'Error al procesar el pago';
 				submitting = false;
 				return;
