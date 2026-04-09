@@ -18,6 +18,7 @@
 	let stripe: Stripe | null = null;
 	let elements: StripeElements | null = null;
 	let paymentElement: any = null;
+	let currentPaymentIntentId = $state<string | null>(null);
 	const WHATSAPP_PHONE = '523334758653';
 
 	// Initialize Stripe
@@ -133,6 +134,7 @@
 					paymentElement = null;
 				}
 				elements = null;
+				currentPaymentIntentId = null;
 				return;
 			}
 
@@ -212,6 +214,7 @@
 		}
 
 		const { clientSecret, paymentIntentId } = await paymentIntentResponse.json();
+		currentPaymentIntentId = paymentIntentId;
 
 		// Initialize Stripe Elements
 		elements = stripe.elements({
@@ -271,9 +274,9 @@
 			return;
 		}
 
-		if (!elements) {
-			const paymentData = await initializeStripePayment();
-			if (!paymentData || !elements) {
+		if (!elements || !currentPaymentIntentId) {
+			const initialized = await initializeStripePayment();
+			if (!initialized || !elements || !currentPaymentIntentId) {
 				error = 'No se pudo inicializar el pago. Intenta nuevamente.';
 				return;
 			}
@@ -341,16 +344,13 @@
 				throw new Error(itemsData.error || 'Error guardando items del pedido');
 			}
 
-			const paymentData = await initializeStripePayment();
-			if (!paymentData) throw new Error('Failed to initialize payment');
-
 			// Update order with payment intent ID
 			const attachPiResponse = await fetch('/api/orders/payment-intent', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
 					orderId: order.id,
-					paymentIntentId: paymentData.paymentIntentId
+					paymentIntentId: currentPaymentIntentId
 				})
 			});
 
@@ -418,7 +418,7 @@
 						price: item.variant ? item.variant.price : item.product.base_price
 					})),
 					estimatedSubtotal: subtotal,
-					estimatedTax: tax,
+					estimatedTax: 0,
 					notes: quotationData.notes
 				})
 			});
