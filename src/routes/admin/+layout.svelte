@@ -62,6 +62,7 @@
 			icon: '⚙️',
 			permission: 'view_admin_panel',
 			subItems: [
+				{ href: '/admin/configuracion', label: 'General', permission: 'manage_settings' },
 				{ href: '/admin/tipos-envio', label: 'Tipos de Envío', permission: 'view_admin_panel' },
 				{ href: '/admin/promociones', label: 'Promociones', permission: 'view_admin_panel' },
 				{ href: '/admin/tipo-cambio', label: 'Tipo de Cambio', permission: 'manage_settings' },

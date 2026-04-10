@@ -11,6 +11,7 @@ import Stripe from 'stripe';
 import { supabaseServer } from '$lib/supabaseServer';
 import { Resend } from 'resend';
 import { RESEND_API_KEY } from '$env/static/private';
+import { getOrderNotificationRecipients } from '$lib/server/orderNotificationRecipients';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
 	apiVersion: '2024-04-10'
@@ -18,7 +19,6 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
 
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || '';
 const resend = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null;
-const notificationsEmail = process.env.ORDER_NOTIFICATIONS_EMAIL || 'contacto@guerralaser.com';
 
 async function sendOrderPaidEmails(order: any, items: any[]) {
 	if (!resend) {
@@ -79,6 +79,8 @@ async function sendOrderPaidEmails(order: any, items: any[]) {
 		</div>
 	`;
 
+	const notificationRecipients = await getOrderNotificationRecipients();
+
 	await Promise.all([
 		resend.emails.send({
 			from: 'Guerra Laser <contacto@guerralaser.com>',
@@ -88,7 +90,7 @@ async function sendOrderPaidEmails(order: any, items: any[]) {
 		}),
 		resend.emails.send({
 			from: 'Guerra Laser <contacto@guerralaser.com>',
-			to: notificationsEmail,
+			to: notificationRecipients,
 			subject: `Nuevo pedido pagado ${order.order_number}`,
 			html: adminHtml
 		})

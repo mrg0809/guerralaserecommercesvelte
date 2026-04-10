@@ -3,9 +3,9 @@ import { createClient } from '@supabase/supabase-js';
 import { PUBLIC_SUPABASE_ANON_KEY, PUBLIC_SUPABASE_URL } from '$env/static/public';
 import { SUPABASE_SERVICE_ROLE_KEY, RESEND_API_KEY } from '$env/static/private';
 import { Resend } from 'resend';
+import { getOrderNotificationRecipients } from '$lib/server/orderNotificationRecipients';
 
 const resend = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null;
-const notificationsEmail = process.env.ORDER_NOTIFICATIONS_EMAIL || 'contacto@guerralaser.com';
 
 async function sendTrackingEmail(order: any, shippingCarrier: string, shippingTrackingNumber: string) {
 	if (!resend) {
@@ -35,6 +35,8 @@ async function sendTrackingEmail(order: any, shippingCarrier: string, shippingTr
 		</div>
 	`;
 
+	const notificationRecipients = await getOrderNotificationRecipients();
+
 	await Promise.all([
 		resend.emails.send({
 			from: 'Guerra Laser <contacto@guerralaser.com>',
@@ -44,7 +46,7 @@ async function sendTrackingEmail(order: any, shippingCarrier: string, shippingTr
 		}),
 		resend.emails.send({
 			from: 'Guerra Laser <contacto@guerralaser.com>',
-			to: notificationsEmail,
+			to: notificationRecipients,
 			subject: `Guía capturada para pedido ${order.order_number}`,
 			html: adminHtml
 		})
