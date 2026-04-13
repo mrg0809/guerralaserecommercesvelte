@@ -95,6 +95,24 @@ function resolveGoogleCategory(
 	return FALLBACK_GOOGLE_CATEGORY;
 }
 
+/**
+ * Cadena tipo Merchant: categoría raíz > … > categoría del producto
+ */
+function buildProductType(categories: CategoryRow[], productCategoryId: string | null): string | null {
+	if (!productCategoryId) return null;
+
+	const chain: string[] = [];
+	let current: CategoryRow | undefined = categories.find((c) => c.id === productCategoryId);
+
+	while (current) {
+		chain.unshift(current.name);
+		current = current.parent_id ? categories.find((c) => c.id === current.parent_id) : undefined;
+	}
+
+	if (chain.length === 0) return null;
+	return chain.join(' > ');
+}
+
 function escapeXml(value: string): string {
 	return value
 		.replace(/&/g, '&amp;')
@@ -154,7 +172,8 @@ function buildImageList(media: ProductMediaRow[] | null | undefined): string[] {
 function buildItemXml(
 	product: ProductRow,
 	origin: string,
-	googleCategory: GoogleCategory
+	googleCategory: GoogleCategory,
+	productType: string | null
 ): string {
 	const id = product.sku?.trim() || product.id;
 	const title = product.name;
@@ -206,7 +225,7 @@ function buildItemXml(
       <g:price>${escapeXml(price)}</g:price>
       <g:condition>${condition}</g:condition>
       <g:brand>${escapeXml(brand)}</g:brand>${mpn ? `\n      <g:mpn>${escapeXml(mpn)}</g:mpn>` : ''}${gtin ? `\n      <g:gtin>${escapeXml(gtin)}</g:gtin>` : ''}${additionalImageXml}${shippingLabelXml}${shippingXml}
-      <g:google_product_category>${escapeXml(googleCategory.id)}</g:google_product_category>
+      <g:google_product_category>${escapeXml(googleCategory.id)}</g:google_product_category>${productType ? `\n      <g:product_type>${escapeXml(productType)}</g:product_type>` : ''}
     </item>`;
 }
 
@@ -251,7 +270,8 @@ export const GET: RequestHandler = async ({ url }) => {
 	const itemsXml = (data as ProductRow[])
 		.map((product) => {
 			const googleCategory = resolveGoogleCategory(categories, product.category_id);
-			return buildItemXml(product, origin, googleCategory);
+			const productType = buildProductType(categories, product.category_id);
+			return buildItemXml(product, origin, googleCategory, productType);
 		})
 		.join('\n');
 
