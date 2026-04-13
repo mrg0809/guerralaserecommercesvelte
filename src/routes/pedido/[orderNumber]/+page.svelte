@@ -2,6 +2,7 @@
 	import { formatPrice } from '$lib/utils';
 	import { page } from '$app/stores';
 	import { onMount } from 'svelte';
+	import { trackEvent } from '$lib/gtag';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -10,6 +11,7 @@
 	let loadingTracking = $state(false);
 	
 	const paymentStatus = $page.url.searchParams.get('payment');
+	const PURCHASE_TRACK_KEY_PREFIX = 'purchase_tracked_';
 
 	function formatDate(dateString: string) {
 		return new Date(dateString).toLocaleDateString('es-MX', {
@@ -78,6 +80,28 @@
 		};
 		return statusMap[status] || status;
 	}
+
+	onMount(() => {
+		if (paymentStatus !== 'success') {
+			return;
+		}
+
+		const transactionId = data.order.order_number;
+		const storageKey = `${PURCHASE_TRACK_KEY_PREFIX}${transactionId}`;
+
+		// Evita duplicar el evento si el usuario recarga la confirmación.
+		if (sessionStorage.getItem(storageKey)) {
+			return;
+		}
+
+		trackEvent('purchase', {
+			transaction_id: transactionId,
+			value: Number(data.order.total_amount || 0),
+			currency: 'MXN'
+		});
+
+		sessionStorage.setItem(storageKey, '1');
+	});
 </script>
 
 <svelte:head>
