@@ -94,10 +94,20 @@
 			return;
 		}
 
+		const value = Number(data.order.total_amount || 0);
+
 		trackEvent('purchase', {
 			transaction_id: transactionId,
-			value: Number(data.order.total_amount || 0),
+			value,
 			currency: 'MXN'
+		});
+
+		// Google Ads — conversión "Compra"
+		trackEvent('conversion', {
+			send_to: 'AW-950721855/7wyMCJ7NzJscEL-6q8UD',
+			value,
+			currency: 'MXN',
+			transaction_id: transactionId
 		});
 
 		sessionStorage.setItem(storageKey, '1');
