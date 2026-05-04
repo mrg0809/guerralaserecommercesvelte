@@ -2,10 +2,12 @@
 	import { supabase } from '$lib/supabaseClient';
 	import { formatPrice } from '$lib/utils';
 	import type { Order } from '$lib/types';
+	import { downloadShippingLabelPdf } from '$lib/shippingLabelPdf';
 
 	type AdminOrder = Order & {
 		order_items?: any[];
 		shipping_carrier?: string | null;
+		shipping_service?: string | null;
 		shipping_tracking_number?: string | null;
 		shipping_status?: string | null;
 	};
@@ -18,6 +20,7 @@
 	let shippingCarrierInput = $state('');
 	let shippingTrackingInput = $state('');
 	let savingShipping = $state(false);
+	let printingLabel = $state(false);
 
 	const statusOptions = [
 		{ value: 'pending', label: 'Pendiente', color: 'orange' },
@@ -194,6 +197,27 @@
 		});
 	}
 
+	async function printShippingLabel() {
+		if (!selectedOrder) return;
+		printingLabel = true;
+		try {
+			await downloadShippingLabelPdf({
+				order_number: selectedOrder.order_number,
+				customer_name: selectedOrder.customer_name,
+				customer_email: selectedOrder.customer_email,
+				customer_phone: selectedOrder.customer_phone,
+				shipping_address: (selectedOrder.shipping_address as Record<string, unknown> | null) ?? null,
+				shipping_carrier: selectedOrder.shipping_carrier ?? null,
+				shipping_service: selectedOrder.shipping_service ?? null,
+				shipping_tracking_number: selectedOrder.shipping_tracking_number ?? null
+			});
+		} catch (e: any) {
+			alert(e?.message || 'No se pudo generar la etiqueta');
+		} finally {
+			printingLabel = false;
+		}
+	}
+
 	// Reload orders when filter changes
 	$effect(() => {
 		void filterStatus; // Track filterStatus changes
@@ -308,11 +332,21 @@
 {#if showModal && selectedOrder}
 	<div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
 		<div class="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-			<div class="sticky top-0 bg-white border-b px-6 py-4 flex justify-between items-center">
+			<div class="sticky top-0 bg-white border-b px-6 py-4 flex flex-wrap gap-3 justify-between items-center">
 				<h2 class="text-2xl font-bold">Pedido {selectedOrder.order_number}</h2>
-				<button onclick={closeModal} class="text-gray-500 hover:text-gray-700 text-2xl">
-					×
-				</button>
+				<div class="flex items-center gap-2">
+					<button
+						type="button"
+						onclick={printShippingLabel}
+						disabled={printingLabel}
+						class="px-4 py-2 bg-gray-800 text-white text-sm rounded-lg hover:bg-gray-900 transition disabled:bg-gray-400"
+					>
+						{printingLabel ? 'Generando PDF…' : 'Imprimir etiqueta (PDF 4×6)'}
+					</button>
+					<button onclick={closeModal} class="text-gray-500 hover:text-gray-700 text-2xl leading-none px-1" aria-label="Cerrar">
+						×
+					</button>
+				</div>
 			</div>
 
 			<div class="p-6 space-y-6">
