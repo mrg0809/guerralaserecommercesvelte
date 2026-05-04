@@ -17,6 +17,35 @@ export type ShippingLabelOrderInput = {
 	shipping_tracking_number?: string | null;
 };
 
+/** Dimensiones naturales (px) para calcular escala sin deformar. */
+function naturalSizeFromDataUrl(dataUrl: string): Promise<{ w: number; h: number }> {
+	return new Promise((resolve, reject) => {
+		const img = new Image();
+		img.onload = () =>
+			resolve({ w: img.naturalWidth || img.width, h: img.naturalHeight || img.height });
+		img.onerror = () => reject(new Error('No se pudo leer la imagen del logo'));
+		img.src = dataUrl;
+	});
+}
+
+/** Encaja rectángulo w:h dentro de maxW×maxH (mm) manteniendo proporción. */
+function fitRectMm(
+	naturalW: number,
+	naturalH: number,
+	maxW: number,
+	maxH: number
+): { w: number; h: number } {
+	if (naturalW <= 0 || naturalH <= 0) return { w: maxW, h: maxH };
+	const ratio = naturalW / naturalH;
+	let w = maxW;
+	let h = w / ratio;
+	if (h > maxH) {
+		h = maxH;
+		w = h * ratio;
+	}
+	return { w, h };
+}
+
 async function imageUrlToDataUrl(url: string): Promise<{ dataUrl: string; format: 'PNG' | 'JPEG' } | null> {
 	try {
 		const res = await fetch(url);
@@ -97,10 +126,12 @@ export async function downloadShippingLabelPdf(
 
 	const logo = await imageUrlToDataUrl(logoUrl);
 	if (logo) {
-		const logoW = CONTENT_W;
-		const logoH = 16;
+		const maxLogoH = 16;
 		try {
-			doc.addImage(logo.dataUrl, logo.format, MARGIN, y, logoW, logoH, undefined, 'FAST');
+			const { w: nw, h: nh } = await naturalSizeFromDataUrl(logo.dataUrl);
+			const { w: logoW, h: logoH } = fitRectMm(nw, nh, CONTENT_W, maxLogoH);
+			const logoX = MARGIN + (CONTENT_W - logoW) / 2;
+			doc.addImage(logo.dataUrl, logo.format, logoX, y, logoW, logoH, undefined, 'FAST');
 			y += logoH + 3;
 		} catch {
 			doc.setFontSize(12);
