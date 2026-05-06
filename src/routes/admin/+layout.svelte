@@ -37,6 +37,7 @@
 			]
 		},
 		{ href: '/admin/inventario', label: 'Inventario', icon: '📋', permission: 'view_inventory' },
+		{ href: '/admin/nesting', label: 'Nesting Láser', icon: '🧩', permission: 'view_admin_panel' },
 		{ href: '/admin/ordenes-compra', label: 'Órdenes de Compra', icon: '🧾', permission: 'manage_inventory' },
 		{
 			label: 'POS',
