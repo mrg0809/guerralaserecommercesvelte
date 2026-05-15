@@ -6,25 +6,35 @@ import { supabase } from '$lib/supabaseClient';
 import type { UserRole, Permission, UserPermissions } from '$lib/types/roles';
 
 /**
- * Obtiene los roles de un usuario
+ * Obtiene los roles de un usuario desde la BD
  */
 export async function getUserRoles(userId: string): Promise<UserRole[]> {
-	console.log('🔍 Obteniendo roles para:', userId);
-	
-	// Retornar roles por defecto inmediatamente para evitar bloqueos
-	// Los roles reales se obtienen del JWT en el userStore
-	console.log('⚡ Retornando rol admin por defecto (roles reales vienen del JWT)');
-	return ['admin' as UserRole];
+	const { data, error } = await supabase.rpc('get_user_roles', { user_uuid: userId });
+
+	if (error) {
+		console.error('Error obteniendo roles:', error);
+		const { data: rpcData, error: rpcError } = await supabase.rpc(
+			'get_user_roles_and_permissions' as never,
+			{ user_uuid: userId } as never
+		);
+		if (!rpcError && rpcData && typeof rpcData === 'object') {
+			const roles = (rpcData as { roles?: string[] }).roles || [];
+			return roles as UserRole[];
+		}
+		return [];
+	}
+
+	return (data?.map((row: { role_name: string }) => row.role_name) || []) as UserRole[];
 }
 
 /**
  * Verifica si un usuario tiene un permiso específico
  */
 export async function hasPermission(userId: string, permission: Permission): Promise<boolean> {
-	const { data, error } = await supabase.rpc('user_has_permission' as any, {
+	const { data, error } = await supabase.rpc('user_has_permission' as never, {
 		user_uuid: userId,
 		permission_name: permission
-	});
+	} as never);
 
 	if (error) {
 		console.error('Error verificando permiso:', error);
@@ -38,10 +48,10 @@ export async function hasPermission(userId: string, permission: Permission): Pro
  * Verifica si un usuario tiene un rol específico
  */
 export async function hasRole(userId: string, role: UserRole): Promise<boolean> {
-	const { data, error } = await supabase.rpc('user_has_role' as any, {
+	const { data, error } = await supabase.rpc('user_has_role' as never, {
 		user_uuid: userId,
 		role_name: role
-	});
+	} as never);
 
 	if (error) {
 		console.error('Error verificando rol:', error);
@@ -55,57 +65,46 @@ export async function hasRole(userId: string, role: UserRole): Promise<boolean> 
  * Obtiene todos los permisos de un usuario
  */
 export async function getUserPermissions(userId: string): Promise<Permission[]> {
-	console.log('🔍 Obteniendo permisos para:', userId);
-	
-	// Retornar permisos de admin por defecto para evitar bloqueos
-	// Los permisos reales se obtienen del JWT en el userStore
-	console.log('⚡ Retornando permisos de admin por defecto (permisos reales vienen del JWT)');
-	return [
-		'view_admin_panel',
-		'view_products',
-		'create_products',
-		'edit_products',
-		'delete_products',
-		'manage_product_prices',
-		'view_categories',
-		'manage_categories',
-		'view_customers',
-		'create_customers',
-		'edit_customers',
-		'delete_customers',
-		'view_orders',
-		'manage_orders',
-		'view_quotations',
-		'create_quotations',
-		'edit_quotations',
-		'delete_quotations',
-		'view_inventory',
-		'manage_inventory',
-		'view_bundles',
-		'create_bundles',
-		'edit_bundles',
-		'delete_bundles',
-		'manage_users',
-		'manage_roles',
-		'view_reports',
-		'manage_settings'
-	] as Permission[];
+	const { data, error } = await supabase.rpc('get_user_permissions', { user_uuid: userId });
+
+	if (error) {
+		console.error('Error obteniendo permisos:', error);
+		const { data: rpcData, error: rpcError } = await supabase.rpc(
+			'get_user_roles_and_permissions' as never,
+			{ user_uuid: userId } as never
+		);
+		if (!rpcError && rpcData && typeof rpcData === 'object') {
+			const permissions = (rpcData as { permissions?: string[] }).permissions || [];
+			return permissions as Permission[];
+		}
+		return [];
+	}
+
+	return (data?.map((row: { permission_name: string }) => row.permission_name) ||
+		[]) as Permission[];
 }
 
 /**
  * Obtiene roles y permisos de un usuario
  */
 export async function getUserRolesAndPermissions(userId: string): Promise<UserPermissions> {
-	console.log('🔍 Cargando roles y permisos para usuario:', userId);
-	const startTime = Date.now();
-	
-	// Obtener roles y permisos directamente (sin timeouts)
-	const roles = await getUserRoles(userId);
-	const permissions = await getUserPermissions(userId);
-	
-	const endTime = Date.now();
-	console.log(`✅ Roles y permisos cargados en ${endTime - startTime}ms`);
-	
+	const { data, error } = await supabase.rpc('get_user_roles_and_permissions' as never, {
+		user_uuid: userId
+	} as never);
+
+	if (!error && data && typeof data === 'object') {
+		const payload = data as { roles?: string[]; permissions?: string[] };
+		return {
+			roles: (payload.roles || []) as UserRole[],
+			permissions: (payload.permissions || []) as Permission[]
+		};
+	}
+
+	const [roles, permissions] = await Promise.all([
+		getUserRoles(userId),
+		getUserPermissions(userId)
+	]);
+
 	return { roles, permissions };
 }
 
@@ -153,21 +152,20 @@ export async function assignRoleToUser(
 	roleName: UserRole,
 	assignedBy: string
 ): Promise<{ success: boolean; error?: string }> {
-	// Primero obtener el role_id
-	const { data: roleData, error: roleError } = await (supabase.from('roles' as any)
+	const { data: roleData, error: roleError } = await (supabase.from('roles' as never)
 		.select('id')
 		.eq('name', roleName)
-		.single() as any);
+		.single() as never);
 
 	if (roleError || !roleData) {
 		return { success: false, error: 'Rol no encontrado' };
 	}
 
-	const { error } = await (supabase.from('user_roles' as any).insert({
+	const { error } = await (supabase.from('user_roles' as never).insert({
 		user_id: userId,
-		role_id: roleData.id,
+		role_id: (roleData as { id: string }).id,
 		assigned_by: assignedBy
-	}) as any);
+	}) as never);
 
 	if (error) {
 		return { success: false, error: error.message };
@@ -183,25 +181,37 @@ export async function removeRoleFromUser(
 	userId: string,
 	roleName: UserRole
 ): Promise<{ success: boolean; error?: string }> {
-	// Primero obtener el role_id
-	const { data: roleData, error: roleError } = await (supabase.from('roles' as any)
+	const { data: roleData, error: roleError } = await (supabase.from('roles' as never)
 		.select('id')
 		.eq('name', roleName)
-		.single() as any);
+		.single() as never);
 
 	if (roleError || !roleData) {
 		return { success: false, error: 'Rol no encontrado' };
 	}
 
 	const { error } = await (supabase
-		.from('user_roles' as any)
+		.from('user_roles' as never)
 		.delete()
 		.eq('user_id', userId)
-		.eq('role_id', roleData.id) as any);
+		.eq('role_id', (roleData as { id: string }).id) as never);
 
 	if (error) {
 		return { success: false, error: error.message };
 	}
 
 	return { success: true };
+}
+
+/**
+ * Ruta de redirección tras login según rol
+ */
+export function getPostLoginPath(roles: UserRole[]): string {
+	if (roles.includes('tecnico') && !roles.includes('admin') && !roles.includes('superadmin')) {
+		return '/tecnico/entregas';
+	}
+	if (roles.includes('admin') || roles.includes('superadmin')) {
+		return '/admin';
+	}
+	return '/';
 }

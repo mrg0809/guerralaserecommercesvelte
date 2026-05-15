@@ -52,7 +52,12 @@ export type Permission =
 	| 'manage_inventory'
 	// Bundles
 	| 'view_bundles'
-	| 'manage_bundles';
+	| 'manage_bundles'
+	// Entregas de máquinas
+	| 'view_machine_deliveries'
+	| 'create_machine_deliveries'
+	| 'complete_machine_deliveries'
+	| 'view_technician_panel';
 
 export interface Role {
 	id: string;
@@ -130,7 +135,10 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
 		'manage_inventory',
 		'view_bundles',
 		'manage_bundles',
-		'view_reports'
+		'view_reports',
+		'view_machine_deliveries',
+		'create_machine_deliveries',
+		'complete_machine_deliveries'
 	],
 	superadmin: [
 		// Superadmin tiene todos los permisos
@@ -167,14 +175,20 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
 		'view_inventory',
 		'manage_inventory',
 		'view_bundles',
-		'manage_bundles'
+		'manage_bundles',
+		'view_machine_deliveries',
+		'create_machine_deliveries',
+		'complete_machine_deliveries'
 	],
 	tecnico: [
 		'view_assigned_services',
 		'complete_service_orders',
 		'view_tickets',
 		'resolve_tickets',
-		'view_own_tickets'
+		'view_own_tickets',
+		'view_machine_deliveries',
+		'complete_machine_deliveries',
+		'view_technician_panel'
 	]
 };
 
@@ -219,7 +233,11 @@ export const PERMISSION_DISPLAY_NAMES: Record<Permission, string> = {
 	view_inventory: 'Ver Inventario',
 	manage_inventory: 'Gestionar Inventario',
 	view_bundles: 'Ver Bundles',
-	manage_bundles: 'Gestionar Bundles'
+	manage_bundles: 'Gestionar Bundles',
+	view_machine_deliveries: 'Ver Entregas de Máquinas',
+	create_machine_deliveries: 'Crear Entregas',
+	complete_machine_deliveries: 'Completar Entregas',
+	view_technician_panel: 'Panel Técnico'
 };
 
 /**
