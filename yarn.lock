@@ -1547,6 +1547,11 @@ side-channel@^1.1.0:
     side-channel-map "^1.0.1"
     side-channel-weakmap "^1.0.2"
 
+signature_pad@^5.1.3:
+  version "5.1.3"
+  resolved "https://registry.yarnpkg.com/signature_pad/-/signature_pad-5.1.3.tgz#b89e39732567b4e54df3c2e96274606abe7d3d66"
+  integrity sha512-zyxW5vuJVnQdGcU+kAj9FYl7WaAunY3kA5S7mPg0xJiujL9+sPAWfSQHS5tXaJXDUa4FuZeKhfdCDQ6K3wfkpQ==
+
 sirv@^3.0.0:
   version "3.0.2"
   resolved "https://registry.npmjs.org/sirv/-/sirv-3.0.2.tgz"

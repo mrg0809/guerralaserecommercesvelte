@@ -2,7 +2,7 @@ services:
   nesting:
     build: .
     ports:
-      - "8002:8000"
+      - "8002:8081"
     restart: unless-stopped
     environment:
       NESTING_TOKEN: ${NESTING_TOKEN:-changeme-set-in-production}
