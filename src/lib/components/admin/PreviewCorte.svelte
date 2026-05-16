@@ -6,9 +6,22 @@
 		pieces: LayoutPiece[];
 		efficiency: number;
 		unplaced: UnplacedPiece[];
+		wasteAreaMm2?: number;
+		wastePercent?: number;
+		voidRegions?: Array<{ x: number; y: number; w: number; h: number; area_mm2: number }>;
+		allMandatoryPlaced?: boolean;
 	};
 
-	let { sheet, pieces, efficiency, unplaced }: Props = $props();
+	let {
+		sheet,
+		pieces,
+		efficiency,
+		unplaced,
+		wasteAreaMm2 = 0,
+		wastePercent = 0,
+		voidRegions = [],
+		allMandatoryPlaced = true
+	}: Props = $props();
 
 	let containerEl: HTMLDivElement | undefined = $state();
 	let tooltip = $state<{
@@ -60,6 +73,10 @@
 	const strokeW = $derived(Math.max(1, Math.max(sheet.width, sheet.height) * 0.0015));
 	const fontSize = $derived(Math.max(10, Math.max(sheet.width, sheet.height) * 0.018));
 	const unplacedMandatory = $derived(unplaced.filter((u) => u.kind === 'mandatory'));
+
+	function fmtM2(mm2: number) {
+		return (mm2 / 1_000_000).toFixed(4);
+	}
 </script>
 
 <div class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
@@ -69,6 +86,9 @@
 			<p class="text-sm text-gray-600">
 				Lámina {sheet.width}×{sheet.height} mm — aprovechamiento
 				<span class="font-mono font-semibold text-blue-700">{efficiency.toFixed(1)}%</span>
+				<span class="text-gray-500"> · desperdicio</span>
+				<span class="font-mono font-semibold text-amber-700">{wastePercent.toFixed(1)}%</span>
+				<span class="text-gray-500"> ({fmtM2(wasteAreaMm2)} m²)</span>
 			</p>
 		</div>
 		<div class="flex flex-wrap items-center gap-4 text-sm">
@@ -80,6 +100,10 @@
 				<span class="inline-block h-3 w-5 rounded border-2" style:border-color={strokeStock} style:background={fillStock}></span>
 				Stock / relleno
 			</span>
+			<span class="flex items-center gap-2">
+				<span class="inline-block h-3 w-5 rounded border-2 border-dashed border-emerald-600 bg-emerald-100/40"></span>
+				Desperdicio (hueco)
+			</span>
 		</div>
 	</div>
 
@@ -89,6 +113,25 @@
 			style:width="{Math.min(100, efficiency)}%"
 		></div>
 	</div>
+
+	{#if !allMandatoryPlaced}
+		<div class="mb-3 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+			No caben todas las piezas obligatorias en la lámina. El relleno de stock se omite hasta que quepan todas.
+		</div>
+	{/if}
+
+	{#if voidRegions.length > 0}
+		<div class="mb-3 text-xs text-gray-600">
+			<p class="font-semibold text-gray-800">Huecos sin material (mayor a menor área)</p>
+			<ul class="mt-1 max-h-24 list-inside list-disc overflow-y-auto">
+				{#each voidRegions.slice(0, 12) as v, i}
+					<li>
+						Hueco {i + 1}: {v.w}×{v.h} mm en ({v.x}, {v.y}) — {fmtM2(v.area_mm2)} m²
+					</li>
+				{/each}
+			</ul>
+		</div>
+	{/if}
 
 	<div
 		role="region"
@@ -107,6 +150,20 @@
 			onmousemove={moveTip}
 		>
 			<rect x="0" y="0" width={sheet.width} height={sheet.height} fill="#f3f4f6" stroke="#9ca3af" stroke-width="2" />
+
+			{#each voidRegions as v, i (i)}
+				<rect
+					x={v.x}
+					y={v.y}
+					width={v.w}
+					height={v.h}
+					fill="rgba(34,197,94,0.12)"
+					stroke="rgba(22,163,74,0.5)"
+					stroke-width={strokeW}
+					stroke-dasharray="8 6"
+					pointer-events="none"
+				/>
+			{/each}
 
 			{#each pieces as p (p.rid)}
 				<g>
