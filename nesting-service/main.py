@@ -20,7 +20,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from rectpack import SORT_NONE, PackingBin, PackingMode, newPacker
-from rectpack.maxrects import MaxRectsBaf, MaxRectsBl, MaxRectsBlsf, MaxRectsBssf
+from rectpack.maxrects import MaxRectsBaf, MaxRectsBl, MaxRectsBlsf, MaxRectsBssf  # noqa: F401 — Bl used in void_strategies
 
 app = FastAPI(title="Guerra Láser Nesting", version="1.0.0")
 
@@ -95,6 +95,132 @@ def _piece_fits_void(pw: float, ph: float, vw: float, vh: float) -> bool:
     return (pw <= vw and ph <= vh) or (ph <= vw and pw <= vh)
 
 
+def _free_rects_from_placed(
+    placed_m: list[dict[str, Any]],
+    placed_stock: list[dict[str, Any]],
+    sheet_w: float,
+    sheet_h: float,
+) -> list[tuple[float, float, float, float]]:
+    free_list: list[tuple[float, float, float, float]] = [(0.0, 0.0, sheet_w, sheet_h)]
+    for p in placed_m + placed_stock:
+        free_list = _subtract_obstacle(free_list, (p["x"], p["y"], p["w"], p["h"]))
+    return free_list
+
+
+def _waste_score(free_list: list[tuple[float, float, float, float]]) -> float:
+    """Higher is better: favor one large rectangular waste area over many small slivers."""
+    if not free_list:
+        return 0.0
+    areas = [w * h for _x, _y, w, h in free_list]
+    max_a = max(areas)
+    count = len(areas)
+    return max_a * 1000.0 - count * 50.0
+
+
+def _pick_stock_dims(
+    w: float, h: float, vw: float, vh: float, prefer_horizontal: bool
+) -> tuple[float, float] | None:
+    opts: list[tuple[float, float]] = []
+    if w <= vw and h <= vh:
+        opts.append((w, h))
+    if h <= vw and w <= vh:
+        opts.append((h, w))
+    if not opts:
+        return None
+    if prefer_horizontal:
+        return max(opts, key=lambda t: (t[0], t[1]))  # wider first, then taller
+    return max(opts, key=lambda t: t[0] * t[1])
+
+
+def _pack_single_void(
+    fx: float,
+    fy: float,
+    fw: float,
+    fh: float,
+    fitting: list[dict[str, Any]],
+    *,
+    algo: type,
+    allow_rotation: bool,
+    prefer_horizontal: bool,
+    sort_by_area_desc: bool,
+    to_i,
+    from_i,
+) -> list[dict[str, Any]]:
+    wi, hi = to_i(fw), to_i(fh)
+    if wi < 1 or hi < 1:
+        return []
+
+    items = list(fitting)
+    if sort_by_area_desc:
+        items.sort(key=lambda s: s["w"] * s["h"], reverse=True)
+    elif prefer_horizontal:
+        items.sort(key=lambda s: max(s["w"], s["h"]), reverse=True)
+
+    packer = newPacker(PackingMode.Offline, PackingBin.BBF, algo, sort_algo=SORT_NONE, rotation=allow_rotation)
+    packer.add_bin(wi, hi)
+    pool_rids: dict[int, dict[str, Any]] = {}
+    for s in items:
+        pool_rids[s["rid"]] = s
+        if allow_rotation and not prefer_horizontal:
+            packer.add_rect(to_i(s["w"]), to_i(s["h"]), rid=s["rid"])
+        else:
+            dims = _pick_stock_dims(s["w"], s["h"], fw, fh, prefer_horizontal)
+            if dims is None:
+                continue
+            packer.add_rect(to_i(dims[0]), to_i(dims[1]), rid=s["rid"])
+
+    packer.pack()
+    out: list[dict[str, Any]] = []
+    for rect in packer.rect_list():
+        _b, x, y, w, h, rid_i = rect
+        rid_i = int(rid_i)
+        if rid_i not in pool_rids:
+            continue
+        meta = pool_rids[rid_i]
+        out.append(
+            {
+                "x": fx + from_i(x),
+                "y": fy + from_i(y),
+                "w": from_i(w),
+                "h": from_i(h),
+                "rid": f"S-{rid_i}",
+                "kind": "stock",
+                "label": meta["label"],
+                "variant_id": meta["variant_id"],
+                "_rid_i": rid_i,
+            }
+        )
+    return out
+
+
+def _validate_stock_placements(
+    candidates: list[dict[str, Any]],
+    fx: float,
+    fy: float,
+    fw: float,
+    fh: float,
+    placed_m: list[dict[str, Any]],
+    placed_stock: list[dict[str, Any]],
+    sheet_w: float,
+    sheet_h: float,
+) -> list[dict[str, Any]]:
+    valid: list[dict[str, Any]] = []
+    for p in candidates:
+        px, py, pw, ph = p["x"], p["y"], p["w"], p["h"]
+        if px < -0.5 or py < -0.5 or px + pw > sheet_w + 0.5 or py + ph > sheet_h + 0.5:
+            continue
+        if px + pw > fx + fw + 0.5 or py + ph > fy + fh + 0.5:
+            continue
+        if any(_rects_overlap(px, py, pw, ph, m["x"], m["y"], m["w"], m["h"]) for m in placed_m):
+            continue
+        if any(_rects_overlap(px, py, pw, ph, s["x"], s["y"], s["w"], s["h"]) for s in placed_stock):
+            continue
+        if any(_rects_overlap(px, py, pw, ph, v["x"], v["y"], v["w"], v["h"]) for v in valid):
+            continue
+        valid.append(p)
+    return valid
+
+
 def _pack_stock_in_voids(
     placed_m: list[dict[str, Any]],
     stock_options: list[PieceIn],
@@ -104,10 +230,8 @@ def _pack_stock_in_voids(
     from_i,
     stock_rid_base: int,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """Pack stock one void at a time; reject placements that overlap mandatory or leave the void."""
-    free_list: list[tuple[float, float, float, float]] = [(0.0, 0.0, sheet_w, sheet_h)]
-    for p in placed_m:
-        free_list = _subtract_obstacle(free_list, (p["x"], p["y"], p["w"], p["h"]))
+    """Pack stock per void; pick layout that keeps the largest waste rectangle (less fragmentation)."""
+    free_list = _free_rects_from_placed(placed_m, [], sheet_w, sheet_h)
 
     voids = sorted(
         [(fx, fy, fw, fh) for fx, fy, fw, fh in free_list if fw >= 1 and fh >= 1],
@@ -134,64 +258,53 @@ def _pack_stock_in_voids(
     placed_stock: list[dict[str, Any]] = []
     used_rids: set[int] = set()
 
+    void_strategies: list[tuple[type, bool, bool, bool]] = [
+        (MaxRectsBl, False, True, True),   # horizontal rows, Bottom-Left → large top waste
+        (MaxRectsBlsf, False, True, True),
+        (MaxRectsBl, False, True, False),
+        (MaxRectsBlsf, True, False, True),  # legacy rotate-any
+        (MaxRectsBssf, False, True, True),
+    ]
+
     for fx, fy, fw, fh in voids:
         if not stock_pool:
             break
-        wi, hi = to_i(fw), to_i(fh)
-        if wi < 1 or hi < 1:
-            continue
 
         fitting = [s for s in stock_pool if s["rid"] not in used_rids and _piece_fits_void(s["w"], s["h"], fw, fh)]
         if not fitting:
             continue
 
-        packer = newPacker(PackingMode.Offline, PackingBin.BBF, MaxRectsBlsf, sort_algo=SORT_NONE, rotation=True)
-        packer.add_bin(wi, hi)
-        pool_rids: dict[int, dict[str, Any]] = {}
-        for s in fitting:
-            pool_rids[s["rid"]] = s
-            packer.add_rect(to_i(s["w"]), to_i(s["h"]), rid=s["rid"])
+        best_valid: list[dict[str, Any]] = []
+        best_score = -1.0
 
-        packer.pack()
-        for rect in packer.rect_list():
-            _b, x, y, w, h, rid_i = rect
-            rid_i = int(rid_i)
-            if rid_i in used_rids or rid_i not in pool_rids:
+        for algo, allow_rot, prefer_horiz, sort_area in void_strategies:
+            raw = _pack_single_void(
+                fx,
+                fy,
+                fw,
+                fh,
+                fitting,
+                algo=algo,
+                allow_rotation=allow_rot,
+                prefer_horizontal=prefer_horiz,
+                sort_by_area_desc=sort_area,
+                to_i=to_i,
+                from_i=from_i,
+            )
+            valid = _validate_stock_placements(raw, fx, fy, fw, fh, placed_m, placed_stock, sheet_w, sheet_h)
+            if not valid:
                 continue
-            meta = pool_rids[rid_i]
-            px = fx + from_i(x)
-            py = fy + from_i(y)
-            pw = from_i(w)
-            ph = from_i(h)
+            trial_free = _free_rects_from_placed(placed_m, placed_stock + valid, sheet_w, sheet_h)
+            score = _waste_score(trial_free) + len(valid) * 5.0
+            if score > best_score:
+                best_score = score
+                best_valid = valid
 
-            if px < -0.5 or py < -0.5 or px + pw > sheet_w + 0.5 or py + ph > sheet_h + 0.5:
-                continue
-            if px + pw > fx + fw + 0.5 or py + ph > fy + fh + 0.5:
-                continue
-            overlaps_m = any(
-                _rects_overlap(px, py, pw, ph, m["x"], m["y"], m["w"], m["h"]) for m in placed_m
-            )
-            if overlaps_m:
-                continue
-            overlaps_s = any(
-                _rects_overlap(px, py, pw, ph, s["x"], s["y"], s["w"], s["h"]) for s in placed_stock
-            )
-            if overlaps_s:
-                continue
-
-            used_rids.add(rid_i)
-            placed_stock.append(
-                {
-                    "x": px,
-                    "y": py,
-                    "w": pw,
-                    "h": ph,
-                    "rid": f"S-{rid_i}",
-                    "kind": "stock",
-                    "label": meta["label"],
-                    "variant_id": meta["variant_id"],
-                }
-            )
+        for p in best_valid:
+            rid_i = p.pop("_rid_i", None)
+            if rid_i is not None:
+                used_rids.add(int(rid_i))
+            placed_stock.append(p)
 
     unplaced_stock: list[dict[str, Any]] = []
     for s in stock_pool:
