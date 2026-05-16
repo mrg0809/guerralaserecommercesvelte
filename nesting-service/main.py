@@ -83,6 +83,132 @@ def _subtract_obstacle(
     return [(x, y, w, h) for x, y, w, h in out if w > eps and h > eps]
 
 
+def _rects_overlap(
+    ax: float, ay: float, aw: float, ah: float,
+    bx: float, by: float, bw: float, bh: float,
+    eps: float = 0.5,
+) -> bool:
+    return ax + aw > bx + eps and ax < bx + bw - eps and ay + ah > by + eps and ay < by + bh - eps
+
+
+def _piece_fits_void(pw: float, ph: float, vw: float, vh: float) -> bool:
+    return (pw <= vw and ph <= vh) or (ph <= vw and pw <= vh)
+
+
+def _pack_stock_in_voids(
+    placed_m: list[dict[str, Any]],
+    stock_options: list[PieceIn],
+    sheet_w: float,
+    sheet_h: float,
+    to_i,
+    from_i,
+    stock_rid_base: int,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Pack stock one void at a time; reject placements that overlap mandatory or leave the void."""
+    free_list: list[tuple[float, float, float, float]] = [(0.0, 0.0, sheet_w, sheet_h)]
+    for p in placed_m:
+        free_list = _subtract_obstacle(free_list, (p["x"], p["y"], p["w"], p["h"]))
+
+    voids = sorted(
+        [(fx, fy, fw, fh) for fx, fy, fw, fh in free_list if fw >= 1 and fh >= 1],
+        key=lambda r: r[2] * r[3],
+        reverse=True,
+    )
+
+    stock_pool: list[dict[str, Any]] = []
+    rid_s = stock_rid_base
+    for s in stock_options:
+        cap = min(s.quantity, 500)
+        for _ in range(cap):
+            stock_pool.append(
+                {
+                    "rid": rid_s,
+                    "w": s.width,
+                    "h": s.height,
+                    "label": s.label or f"Stock {s.width}×{s.height} mm",
+                    "variant_id": s.variant_id,
+                }
+            )
+            rid_s += 1
+
+    placed_stock: list[dict[str, Any]] = []
+    used_rids: set[int] = set()
+
+    for fx, fy, fw, fh in voids:
+        if not stock_pool:
+            break
+        wi, hi = to_i(fw), to_i(fh)
+        if wi < 1 or hi < 1:
+            continue
+
+        fitting = [s for s in stock_pool if s["rid"] not in used_rids and _piece_fits_void(s["w"], s["h"], fw, fh)]
+        if not fitting:
+            continue
+
+        packer = newPacker(PackingMode.Offline, PackingBin.BBF, MaxRectsBlsf, sort_algo=SORT_NONE, rotation=True)
+        packer.add_bin(wi, hi)
+        pool_rids: dict[int, dict[str, Any]] = {}
+        for s in fitting:
+            pool_rids[s["rid"]] = s
+            packer.add_rect(to_i(s["w"]), to_i(s["h"]), rid=s["rid"])
+
+        packer.pack()
+        for rect in packer.rect_list():
+            _b, x, y, w, h, rid_i = rect
+            rid_i = int(rid_i)
+            if rid_i in used_rids or rid_i not in pool_rids:
+                continue
+            meta = pool_rids[rid_i]
+            px = fx + from_i(x)
+            py = fy + from_i(y)
+            pw = from_i(w)
+            ph = from_i(h)
+
+            if px < -0.5 or py < -0.5 or px + pw > sheet_w + 0.5 or py + ph > sheet_h + 0.5:
+                continue
+            if px + pw > fx + fw + 0.5 or py + ph > fy + fh + 0.5:
+                continue
+            overlaps_m = any(
+                _rects_overlap(px, py, pw, ph, m["x"], m["y"], m["w"], m["h"]) for m in placed_m
+            )
+            if overlaps_m:
+                continue
+            overlaps_s = any(
+                _rects_overlap(px, py, pw, ph, s["x"], s["y"], s["w"], s["h"]) for s in placed_stock
+            )
+            if overlaps_s:
+                continue
+
+            used_rids.add(rid_i)
+            placed_stock.append(
+                {
+                    "x": px,
+                    "y": py,
+                    "w": pw,
+                    "h": ph,
+                    "rid": f"S-{rid_i}",
+                    "kind": "stock",
+                    "label": meta["label"],
+                    "variant_id": meta["variant_id"],
+                }
+            )
+
+    unplaced_stock: list[dict[str, Any]] = []
+    for s in stock_pool:
+        if s["rid"] not in used_rids:
+            unplaced_stock.append(
+                {
+                    "rid": f"S-{s['rid']}",
+                    "kind": "stock",
+                    "label": s["label"],
+                    "width": s["w"],
+                    "height": s["h"],
+                }
+            )
+
+    return placed_stock, unplaced_stock
+
+
 def _build_dxf(sheet_w: float, sheet_h: float, rects: list[tuple[float, float, float, float]]) -> str:
     doc = ezdxf.new("R2000")
     msp = doc.modelspace()
@@ -218,75 +344,10 @@ def _run_pack(data: NestingRequest) -> dict[str, Any]:
     stock_rid_base = 10_000
 
     if all_mandatory_placed and data.stock_options:
-        free_list: list[tuple[float, float, float, float]] = [(0.0, 0.0, sheet_w, sheet_h)]
-        for p in placed_m:
-            free_list = _subtract_obstacle(free_list, (p["x"], p["y"], p["w"], p["h"]))
-
-        bins_meta: list[tuple[float, float, float, float]] = []
-        for fx, fy, fw, fh in free_list:
-            if fw < 1 or fh < 1:
-                continue
-            wi, hi = to_i(fw), to_i(fh)
-            if wi < 1 or hi < 1:
-                continue
-            bins_meta.append((fx, fy, fw, fh))
-
-        if bins_meta:
-            packer2 = newPacker(PackingMode.Offline, PackingBin.BBF, MaxRectsBlsf, sort_algo=SORT_NONE, rotation=True)
-            for fx, fy, fw, fh in bins_meta:
-                packer2.add_bin(to_i(fw), to_i(fh))
-
-            rect_meta_s: dict[int, dict[str, Any]] = {}
-            rid_s = stock_rid_base
-            for s in data.stock_options:
-                cap = min(s.quantity, 500)
-                for _ in range(cap):
-                    rect_meta_s[rid_s] = {
-                        "kind": "stock",
-                        "label": s.label or f"Stock {s.width}×{s.height} mm",
-                        "variant_id": s.variant_id,
-                        "w": s.width,
-                        "h": s.height,
-                    }
-                    packer2.add_rect(to_i(s.width), to_i(s.height), rid=rid_s)
-                    rid_s += 1
-
-            packer2.pack()
-            placed_s_rids: set[int] = set()
-            for rect in packer2.rect_list():
-                b, x, y, w, h, rid_i = rect
-                b = int(b)
-                rid_i = int(rid_i)
-                if b < 0 or b >= len(bins_meta):
-                    continue
-                off_x, off_y, _, _ = bins_meta[b]
-                placed_s_rids.add(rid_i)
-                meta = rect_meta_s.get(rid_i, {})
-                placed.append(
-                    {
-                        "x": off_x + from_i(x),
-                        "y": off_y + from_i(y),
-                        "w": from_i(w),
-                        "h": from_i(h),
-                        "rid": f"S-{rid_i}",
-                        "kind": "stock",
-                        "label": meta.get("label", str(rid_i)),
-                        "variant_id": meta.get("variant_id"),
-                    }
-                )
-
-            for rid_i in rect_meta_s:
-                if rid_i not in placed_s_rids:
-                    m = rect_meta_s[rid_i]
-                    unplaced.append(
-                        {
-                            "rid": f"S-{rid_i}",
-                            "kind": "stock",
-                            "label": m["label"],
-                            "width": m["w"],
-                            "height": m["h"],
-                        }
-                    )
+        placed_s, _unplaced_s = _pack_stock_in_voids(
+            placed_m, data.stock_options, sheet_w, sheet_h, to_i, from_i, stock_rid_base
+        )
+        placed.extend(placed_s)
 
     placed_area = sum(p["w"] * p["h"] for p in placed)
     efficiency = (placed_area / sheet_area * 100.0) if sheet_area > 0 else 0.0
