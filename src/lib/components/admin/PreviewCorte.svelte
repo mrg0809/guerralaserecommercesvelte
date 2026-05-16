@@ -35,23 +35,39 @@
 		return ((w * h) / 1_000_000).toFixed(4);
 	}
 
-	function showTip(ev: MouseEvent, p: LayoutPiece) {
+	type VoidRegion = { x: number; y: number; w: number; h: number; area_mm2: number };
+
+	function showTipAt(ev: MouseEvent, title: string, lines: string[]) {
 		if (!containerEl) return;
 		const cr = containerEl.getBoundingClientRect();
-		const title = p.label || `${p.w}×${p.h} mm`;
-		const lines = [
-			`${p.w}×${p.h} mm`,
-			`Área: ${areaM2(p.w, p.h)} m²`,
-			p.kind === 'mandatory' ? 'Tipo: obligatoria' : 'Tipo: stock',
-			p.variant_id ? `Variante: ${p.variant_id}` : '',
-			`ID: ${p.rid}`
-		].filter(Boolean);
 		tooltip = {
 			px: ev.clientX - cr.left + 8,
 			py: ev.clientY - cr.top + 8,
 			title,
 			lines
 		};
+	}
+
+	function showTip(ev: MouseEvent, p: LayoutPiece) {
+		const title = p.label || `${p.w}×${p.h} mm`;
+		const lines = [
+			`${Math.round(p.w)}×${Math.round(p.h)} mm`,
+			`Área: ${areaM2(p.w, p.h)} m²`,
+			p.kind === 'mandatory' ? 'Tipo: obligatoria' : 'Tipo: stock',
+			p.variant_id ? `Variante: ${p.variant_id}` : '',
+			`ID: ${p.rid}`
+		].filter(Boolean);
+		showTipAt(ev, title, lines);
+	}
+
+	function showVoidTip(ev: MouseEvent, v: VoidRegion) {
+		const lines = [
+			`${Math.round(v.w)}×${Math.round(v.h)} mm`,
+			`Posición: (${Math.round(v.x)}, ${Math.round(v.y)}) mm`,
+			`Área: ${areaM2(v.area_mm2)} m²`,
+			'Hueco sin material (desperdicio)'
+		];
+		showTipAt(ev, `Desperdicio ${Math.round(v.w)}×${Math.round(v.h)}`, lines);
 	}
 
 	function moveTip(ev: MouseEvent) {
@@ -120,18 +136,7 @@
 		</div>
 	{/if}
 
-	{#if voidRegions.length > 0}
-		<div class="mb-3 text-xs text-gray-600">
-			<p class="font-semibold text-gray-800">Huecos sin material (mayor a menor área)</p>
-			<ul class="mt-1 max-h-24 list-inside list-disc overflow-y-auto">
-				{#each voidRegions.slice(0, 12) as v, i}
-					<li>
-						Hueco {i + 1}: {v.w}×{v.h} mm en ({v.x}, {v.y}) — {fmtM2(v.area_mm2)} m²
-					</li>
-				{/each}
-			</ul>
-		</div>
-	{/if}
+	<p class="mb-2 text-xs text-gray-500">Pasa el mouse sobre un hueco verde para ver sus medidas de desperdicio.</p>
 
 	<div
 		role="region"
@@ -152,6 +157,7 @@
 			<rect x="0" y="0" width={sheet.width} height={sheet.height} fill="#f3f4f6" stroke="#9ca3af" stroke-width="2" />
 
 			{#each voidRegions as v, i (i)}
+				<!-- svelte-ignore a11y_no_static_element_interactions -->
 				<rect
 					x={v.x}
 					y={v.y}
@@ -161,7 +167,7 @@
 					stroke="rgba(22,163,74,0.5)"
 					stroke-width={strokeW}
 					stroke-dasharray="8 6"
-					pointer-events="none"
+					onmouseenter={(e) => showVoidTip(e, v)}
 				/>
 			{/each}
 
