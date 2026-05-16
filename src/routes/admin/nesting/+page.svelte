@@ -26,6 +26,8 @@
 	let lastUnplaced = $state<UnplacedPiece[]>([]);
 	let lastEfficiency = $state(0);
 	let lastSheet = $state({ width: 1220, height: 2440 });
+	let lastDxfB64 = $state<string | null>(null);
+	let lastPltB64 = $state<string | null>(null);
 	let lastWasteAreaMm2 = $state(0);
 	let lastWastePercent = $state(0);
 	let lastVoidRegions = $state<Array<{ x: number; y: number; w: number; h: number; area_mm2: number }>>([]);
