@@ -7,4 +7,4 @@ services:
     environment:
       NESTING_TOKEN: ${NESTING_TOKEN:-changeme-set-in-production}
       # Comma-separated origins for browser calls (optional direct CORS to FastAPI)
-      NESTING_CORS_ORIGINS: ${NESTING_CORS_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
+      NESTING_CORS_ORIGINS: ${NESTING_CORS_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173,https://guerralaser.com,https://www.guerralaser.com,https://guerralaser.com.mx}

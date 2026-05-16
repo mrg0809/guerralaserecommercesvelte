@@ -26,8 +26,10 @@
 	let lastUnplaced = $state<UnplacedPiece[]>([]);
 	let lastEfficiency = $state(0);
 	let lastSheet = $state({ width: 1220, height: 2440 });
-	let lastDxfB64 = $state<string | null>(null);
-	let lastPltB64 = $state<string | null>(null);
+	let lastWasteAreaMm2 = $state(0);
+	let lastWastePercent = $state(0);
+	let lastVoidRegions = $state<Array<{ x: number; y: number; w: number; h: number; area_mm2: number }>>([]);
+	let lastAllMandatoryPlaced = $state(true);
 
 	$effect(() => {
 		const opts = data.stockOptions;
@@ -68,6 +70,10 @@
 		loading = true;
 		lastDxfB64 = null;
 		lastPltB64 = null;
+		lastWasteAreaMm2 = 0;
+		lastWastePercent = 0;
+		lastVoidRegions = [];
+		lastAllMandatoryPlaced = true;
 		try {
 			const {
 				data: { session }
@@ -122,6 +128,10 @@
 			lastSheet = json.sheet ?? { width: sheetW, height: sheetH };
 			lastDxfB64 = json.dxf_base64 ?? null;
 			lastPltB64 = json.plt_base64 ?? null;
+			lastWasteAreaMm2 = json.waste_area_mm2 ?? 0;
+			lastWastePercent = json.waste_percent ?? 0;
+			lastVoidRegions = json.void_regions ?? [];
+			lastAllMandatoryPlaced = json.all_mandatory_placed ?? true;
 		} catch (e) {
 			errorMsg = e instanceof Error ? e.message : 'Error de red';
 		} finally {
@@ -169,8 +179,8 @@
 <div class="container mx-auto max-w-6xl px-4 py-6">
 	<h1 class="mb-2 text-2xl font-bold text-gray-900">Nesting Láser</h1>
 	<p class="mb-6 text-gray-600">
-		Acomodo de piezas con prioridad a las obligatorias; relleno con stock por tamaño estándar. Genera DXF con líneas pegadas (kerf 0)
-		para optimizar en LightBurn.
+		Primero se colocan todas las piezas obligatorias (varias heurísticas para encajar layouts como 4 verticales + 1 horizontal). Solo
+		después se rellenan los huecos con stock estándar. Genera DXF y PLT con líneas pegadas (kerf 0).
 	</p>
 
 	{#if data.loadError}
@@ -215,10 +225,10 @@
 							{#each mandatoryRows as row, i (row.id)}
 								<tr class="border-b border-gray-100">
 									<td class="py-2 pr-2">
-										<input type="number" bind:value={row.width} min="1" class="w-20 rounded border px-2 py-1" />
+										<input type="number" step="100" bind:value={row.width} min="1" class="w-20 rounded border px-2 py-1" />
 									</td>
 									<td class="py-2 pr-2">
-										<input type="number" bind:value={row.height} min="1" class="w-20 rounded border px-2 py-1" />
+										<input type="number" step="100" bind:value={row.height} min="1" class="w-20 rounded border px-2 py-1" />
 									</td>
 									<td class="py-2 pr-2">
 										<input type="number" bind:value={row.quantity} min="1" class="w-16 rounded border px-2 py-1" />
@@ -320,7 +330,16 @@
 
 		<div>
 			{#if lastLayout.length > 0}
-				<PreviewCorte sheet={lastSheet} pieces={lastLayout} efficiency={lastEfficiency} unplaced={lastUnplaced} />
+				<PreviewCorte
+					sheet={lastSheet}
+					pieces={lastLayout}
+					efficiency={lastEfficiency}
+					unplaced={lastUnplaced}
+					wasteAreaMm2={lastWasteAreaMm2}
+					wastePercent={lastWastePercent}
+					voidRegions={lastVoidRegions}
+					allMandatoryPlaced={lastAllMandatoryPlaced}
+				/>
 			{:else}
 				<div class="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-8 text-center text-gray-500">
 					Calcula un acomodo para ver el diagrama y habilitar la descarga DXF.

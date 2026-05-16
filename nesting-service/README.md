@@ -29,7 +29,7 @@ Puerto: **8081**.
 ## Endpoints
 
 - `GET /health` — sin token (comprobación de vida).
-- `POST /nest` — body JSON `NestingRequest`; header `X-Nesting-Token: <NESTING_TOKEN>`. Respuesta: `layout`, `unplaced`, `efficiency`, `dxf_base64`, `plt_base64`, `sheet`.
+- `POST /nest` — body JSON `NestingRequest`; header `X-Nesting-Token: <NESTING_TOKEN>`. Respuesta: `layout`, `unplaced`, `efficiency`, `waste_area_mm2`, `waste_percent`, `void_regions`, `all_mandatory_placed`, `dxf_base64`, `plt_base64`, `sheet`. Las obligatorias se empaquetan primero (varias heurísticas MaxRects); el stock solo entra en huecos libres si caben todas las obligatorias.
 - `POST /generate-dxf` — mismo body; devuelve el archivo `.dxf` directamente.
 - `POST /generate-plt` — mismo body; devuelve el archivo `.plt` (HPGL) para RDWorks.
 
