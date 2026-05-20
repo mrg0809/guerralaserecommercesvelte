@@ -31,7 +31,7 @@ Puerto host **8002** → contenedor **8081** (uvicorn directo sin compose: **808
 - `GET /health` — sin token (comprobación de vida).
 - `POST /nest` — body JSON `NestingRequest`; header `X-Nesting-Token`. Respuesta: `layout`, `unplaced`, `efficiency`, `dxf_base64`, `plt_base64`, etc.
 - `POST /generate-dxf` / `POST /generate-plt` — mismo body JSON; archivo directo.
-- `POST /trace` — `multipart/form-data`; header `X-Nesting-Token`. Convierte imagen a DXF/PLT para grabado (termos, tarjetas).
+- `POST /trace` — `multipart/form-data`; header `X-Nesting-Token`. Convierte imagen a DXF/PLT para grabado (termos, tarjetas). Con `preview_only=true` devuelve solo vistas previa (máscara + trazos) sin generar archivos.
 
 Campos de `/trace`:
 
@@ -46,8 +46,9 @@ Campos de `/trace`:
 | `simplify_epsilon_mm` | no | 0.3 |
 | `output` | no | both |
 | `use_external_only` | no | true |
+| `preview_only` | no | false |
 
-Respuesta: `contour_count`, `bbox_mm`, `dxf_base64`, `plt_base64`, `warnings`.
+Respuesta: `contour_count`, `contours_raw`, `contours_kept`, `bbox_mm`, `preview_mask_base64`, `preview_paths_base64` (negro = grabado), `dxf_base64`, `plt_base64`, `warnings`.
 
 ## Prueba con curl
 
