@@ -533,10 +533,13 @@ async def trace_image(
     threshold: int = Form(127),
     invert: str = Form("false"),
     min_area_mm2: float = Form(0.5),
-    simplify_epsilon_mm: float = Form(0.3),
+    simplify_epsilon_mm: float = Form(0.05),
     output: str = Form("both"),
     use_external_only: str = Form("true"),
     preview_only: str = Form("false"),
+    use_adaptive_threshold: str = Form("false"),
+    adaptive_block_size: int = Form(21),
+    adaptive_c: int = Form(5),
 ) -> dict[str, Any]:
     if file.content_type and file.content_type not in ALLOWED_CONTENT_TYPES:
         raise HTTPException(
@@ -560,6 +563,9 @@ async def trace_image(
         min_area_mm2=min_area_mm2,
         simplify_epsilon_mm=simplify_epsilon_mm,
         use_external_only=parse_bool(use_external_only, True),
+        use_adaptive_threshold=parse_bool(use_adaptive_threshold, False),
+        adaptive_block_size=adaptive_block_size,
+        adaptive_c=adaptive_c,
     )
 
     if parse_bool(preview_only, False):

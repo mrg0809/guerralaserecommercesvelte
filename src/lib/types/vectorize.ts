@@ -6,6 +6,7 @@ export type VectorizeBBox = {
 export type VectorizeApiResult = {
 	success: boolean;
 	preview_only?: boolean;
+	threshold_mode?: 'adaptive' | 'fixed' | string;
 	contour_count?: number;
 	contours_raw?: number;
 	contours_kept?: number;
