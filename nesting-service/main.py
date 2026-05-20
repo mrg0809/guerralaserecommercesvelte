@@ -1,5 +1,5 @@
 """
-Nesting service: rectpack + ezdxf DXF export + HPGL PLT (RDWorks).
+Nesting + trace service: rectpack nesting, image→DXF/PLT trace, ezdxf + HPGL (RDWorks).
 Auth: header X-Nesting-Token must match env NESTING_TOKEN.
 
 Packing strategy:
@@ -16,13 +16,14 @@ import os
 from typing import Any
 
 import ezdxf
-from fastapi import Depends, FastAPI, Header, HTTPException, Response
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from trace import ALLOWED_CONTENT_TYPES, MAX_UPLOAD_BYTES, parse_bool, run_trace
 from pydantic import BaseModel, Field
 from rectpack import SORT_NONE, PackingBin, PackingMode, newPacker
 from rectpack.maxrects import MaxRectsBaf, MaxRectsBl, MaxRectsBlsf, MaxRectsBssf  # noqa: F401 — Bl used in void_strategies
 
-app = FastAPI(title="Guerra Láser Nesting", version="1.0.0")
+app = FastAPI(title="Guerra Láser Nesting + Trace", version="1.1.0")
 
 _cors = os.getenv("NESTING_CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")
 app.add_middleware(
@@ -520,6 +521,46 @@ async def generate_plt(data: NestingRequest, _: None = Depends(_verify_token)) -
         content=raw,
         media_type="application/plt",
         headers={"Content-Disposition": "attachment; filename=corte_guerra_laser.plt"},
+    )
+
+
+@app.post("/trace")
+async def trace_image(
+    _: None = Depends(_verify_token),
+    file: UploadFile = File(...),
+    target_width_mm: float = Form(...),
+    target_height_mm: float = Form(...),
+    threshold: int = Form(127),
+    invert: str = Form("false"),
+    min_area_mm2: float = Form(0.5),
+    simplify_epsilon_mm: float = Form(0.3),
+    output: str = Form("both"),
+    use_external_only: str = Form("true"),
+) -> dict[str, Any]:
+    if file.content_type and file.content_type not in ALLOWED_CONTENT_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Tipo de archivo no permitido: {file.content_type}",
+        )
+    data = await file.read()
+    if len(data) > MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Imagen demasiado grande (máx {MAX_UPLOAD_BYTES // (1024 * 1024)} MB)",
+        )
+    if len(data) == 0:
+        raise HTTPException(status_code=400, detail="Archivo vacío")
+
+    return run_trace(
+        data,
+        target_width_mm=target_width_mm,
+        target_height_mm=target_height_mm,
+        threshold=threshold,
+        invert=parse_bool(invert, False),
+        min_area_mm2=min_area_mm2,
+        simplify_epsilon_mm=simplify_epsilon_mm,
+        output=output,
+        use_external_only=parse_bool(use_external_only, True),
     )
 
 

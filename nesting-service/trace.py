@@ -1,34 +1,18 @@
 """
-Vectorize service: raster image → DXF + HPGL PLT for laser engraving (RDWorks/Ruida).
-Auth: header X-Vectorize-Token must match env VECTORIZE_TOKEN.
+Raster image → DXF + HPGL PLT for laser engraving (termos, tarjetas, RDWorks/Ruida).
+Used by POST /trace in main.py.
 """
 
 from __future__ import annotations
 
 import base64
 import io
-import os
 from typing import Any
 
 import cv2
 import ezdxf
 import numpy as np
-from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
-from fastapi.middleware.cors import CORSMiddleware
-
-app = FastAPI(title="Guerra Láser Vectorize", version="1.0.0")
-
-_cors = os.getenv(
-    "VECTORIZE_CORS_ORIGINS",
-    "http://localhost:5173,http://127.0.0.1:5173",
-)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[o.strip() for o in _cors.split(",") if o.strip()] or ["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+from fastapi import HTTPException
 
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 MAX_PIXELS = 2000
@@ -44,15 +28,7 @@ ALLOWED_CONTENT_TYPES = {
 }
 
 
-def _verify_token(x_vectorize_token: str | None = Header(default=None)) -> None:
-    expected = os.getenv("VECTORIZE_TOKEN", "").strip()
-    if not expected:
-        raise HTTPException(status_code=500, detail="VECTORIZE_TOKEN no configurado en el servidor")
-    if not x_vectorize_token or x_vectorize_token.strip() != expected:
-        raise HTTPException(status_code=401, detail="Token inválido")
-
-
-def _parse_bool(value: str | None, default: bool = False) -> bool:
+def parse_bool(value: str | None, default: bool = False) -> bool:
     if value is None or value == "":
         return default
     return value.strip().lower() in ("1", "true", "yes", "on")
@@ -192,7 +168,9 @@ def _bbox_mm(polylines: list[list[tuple[float, float]]]) -> dict[str, float]:
     }
 
 
-def _build_dxf(polylines: list[list[tuple[float, float]]], target_w_mm: float, target_h_mm: float) -> str:
+def _build_trace_dxf(
+    polylines: list[list[tuple[float, float]]], target_w_mm: float, target_h_mm: float
+) -> str:
     doc = ezdxf.new("R2000")
     msp = doc.modelspace()
     msp.add_lwpolyline(
@@ -207,7 +185,7 @@ def _build_dxf(polylines: list[list[tuple[float, float]]], target_w_mm: float, t
     return buf.getvalue()
 
 
-def _build_plt(polylines: list[list[tuple[float, float]]]) -> str:
+def _build_trace_plt(polylines: list[list[tuple[float, float]]]) -> str:
     def u(mm: float) -> int:
         return int(round(mm * UNITS_PER_MM))
 
@@ -225,7 +203,7 @@ def _build_plt(polylines: list[list[tuple[float, float]]]) -> str:
     return "".join(parts)
 
 
-def _run_trace(
+def run_trace(
     image_bytes: bytes,
     *,
     target_width_mm: float,
@@ -264,52 +242,10 @@ def _run_trace(
 
     out = output.strip().lower()
     if out in ("both", "dxf", ""):
-        dxf_str = _build_dxf(polylines, target_width_mm, target_height_mm)
+        dxf_str = _build_trace_dxf(polylines, target_width_mm, target_height_mm)
         result["dxf_base64"] = base64.b64encode(dxf_str.encode("utf-8")).decode("ascii")
     if out in ("both", "plt", ""):
-        plt_str = _build_plt(polylines)
+        plt_str = _build_trace_plt(polylines)
         result["plt_base64"] = base64.b64encode(plt_str.encode("utf-8")).decode("ascii")
 
     return result
-
-
-@app.post("/trace")
-async def trace(
-    _: None = Depends(_verify_token),
-    file: UploadFile = File(...),
-    target_width_mm: float = Form(...),
-    target_height_mm: float = Form(...),
-    threshold: int = Form(127),
-    invert: str = Form("false"),
-    min_area_mm2: float = Form(0.5),
-    simplify_epsilon_mm: float = Form(0.3),
-    output: str = Form("both"),
-    use_external_only: str = Form("true"),
-) -> dict[str, Any]:
-    if file.content_type and file.content_type not in ALLOWED_CONTENT_TYPES:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Tipo de archivo no permitido: {file.content_type}",
-        )
-    data = await file.read()
-    if len(data) > MAX_UPLOAD_BYTES:
-        raise HTTPException(status_code=400, detail=f"Imagen demasiado grande (máx {MAX_UPLOAD_BYTES // (1024*1024)} MB)")
-    if len(data) == 0:
-        raise HTTPException(status_code=400, detail="Archivo vacío")
-
-    return _run_trace(
-        data,
-        target_width_mm=target_width_mm,
-        target_height_mm=target_height_mm,
-        threshold=threshold,
-        invert=_parse_bool(invert, False),
-        min_area_mm2=min_area_mm2,
-        simplify_epsilon_mm=simplify_epsilon_mm,
-        output=output,
-        use_external_only=_parse_bool(use_external_only, True),
-    )
-
-
-@app.get("/health")
-async def health() -> dict[str, str]:
-    return {"status": "ok"}

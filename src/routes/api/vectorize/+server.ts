@@ -43,13 +43,13 @@ export const POST: RequestHandler = async ({ request }) => {
 			return json({ success: false, error: 'Sin permisos para vectorización' }, { status: 403 });
 		}
 
-		const baseUrl = (env.VECTORIZE_API_URL || '').replace(/\/$/, '');
-		const apiToken = (env.VECTORIZE_API_TOKEN || '').trim();
+		const baseUrl = (env.NESTING_API_URL || '').replace(/\/$/, '');
+		const apiToken = (env.NESTING_API_TOKEN || '').trim();
 		if (!baseUrl || !apiToken) {
 			return json(
 				{
 					success: false,
-					error: 'Servicio de vectorización no configurado (VECTORIZE_API_URL / VECTORIZE_API_TOKEN)'
+					error: 'Servicio de láser no configurado (NESTING_API_URL / NESTING_API_TOKEN)'
 				},
 				{ status: 503 }
 			);
@@ -87,7 +87,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		const res = await fetch(`${baseUrl}/trace`, {
 			method: 'POST',
 			headers: {
-				'X-Vectorize-Token': apiToken
+				'X-Nesting-Token': apiToken
 			},
 			body: outbound
 		});

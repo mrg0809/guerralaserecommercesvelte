@@ -1,6 +1,6 @@
-# Nesting service (FastAPI)
+# Nesting + trace service (FastAPI)
 
-Servicio de acomodo rectangular (`rectpack`) y exportación DXF (`ezdxf`) para Guerra Láser.
+Servicio de acomodo rectangular (`rectpack`), vectorización de imágenes a DXF/PLT (`opencv` + `ezdxf`) para Guerra Láser.
 
 ## Requisitos
 
@@ -15,7 +15,7 @@ NESTING_TOKEN=un-secreto-largo-aleatorio
 NESTING_CORS_ORIGINS=http://localhost:5173,https://tu-dominio-vercel.app
 ```
 
-El mismo valor de `NESTING_TOKEN` debe configurarse en el proyecto SvelteKit como `NESTING_API_TOKEN` (variable privada).
+El mismo valor de `NESTING_TOKEN` debe configurarse en el proyecto SvelteKit como `NESTING_API_TOKEN` (variable privada). Ese mismo URL/token sirve para nesting (`/api/nesting`) y vectorización (`/api/vectorize`).
 
 ## Arranque
 
@@ -24,28 +24,59 @@ cd nesting-service
 docker compose up -d --build
 ```
 
-Puerto: **8081**.
+Puerto host **8002** → contenedor **8081** (uvicorn directo sin compose: **8081**).
 
 ## Endpoints
 
 - `GET /health` — sin token (comprobación de vida).
-- `POST /nest` — body JSON `NestingRequest`; header `X-Nesting-Token: <NESTING_TOKEN>`. Respuesta: `layout`, `unplaced`, `efficiency`, `waste_area_mm2`, `waste_percent`, `void_regions`, `all_mandatory_placed`, `dxf_base64`, `plt_base64`, `sheet`. Las obligatorias se empaquetan primero (varias heurísticas MaxRects); el stock solo entra en huecos libres si caben todas las obligatorias.
-- `POST /generate-dxf` — mismo body; devuelve el archivo `.dxf` directamente.
-- `POST /generate-plt` — mismo body; devuelve el archivo `.plt` (HPGL) para RDWorks.
+- `POST /nest` — body JSON `NestingRequest`; header `X-Nesting-Token`. Respuesta: `layout`, `unplaced`, `efficiency`, `dxf_base64`, `plt_base64`, etc.
+- `POST /generate-dxf` / `POST /generate-plt` — mismo body JSON; archivo directo.
+- `POST /trace` — `multipart/form-data`; header `X-Nesting-Token`. Convierte imagen a DXF/PLT para grabado (termos, tarjetas).
+
+Campos de `/trace`:
+
+| Campo | Requerido | Default |
+|-------|-----------|---------|
+| `file` | sí | — |
+| `target_width_mm` | sí | — |
+| `target_height_mm` | sí | — |
+| `threshold` | no | 127 |
+| `invert` | no | false |
+| `min_area_mm2` | no | 0.5 |
+| `simplify_epsilon_mm` | no | 0.3 |
+| `output` | no | both |
+| `use_external_only` | no | true |
+
+Respuesta: `contour_count`, `bbox_mm`, `dxf_base64`, `plt_base64`, `warnings`.
 
 ## Prueba con curl
 
+Nesting:
+
 ```bash
 export TOKEN=tu-token
-curl -sS -X POST http://localhost:8081/nest \
+curl -sS -X POST http://localhost:8002/nest \
   -H "Content-Type: application/json" \
   -H "X-Nesting-Token: $TOKEN" \
-  -d '{"sheet_width":1220,"sheet_height":2440,"mandatory":[{"width":400,"height":400,"quantity":1}],"stock_options":[{"width":200,"height":200,"quantity":20}]}' | head -c 200
+  -d '{"sheet_width":1220,"sheet_height":2440,"mandatory":[{"width":400,"height":400,"quantity":1}]}' | head -c 200
 ```
+
+Trace (imagen → DXF/PLT):
+
+```bash
+curl -sS -X POST http://localhost:8002/trace \
+  -H "X-Nesting-Token: $TOKEN" \
+  -F "file=@logo.png" \
+  -F "target_width_mm=90" \
+  -F "target_height_mm=50" \
+  -F "threshold=130" | head -c 300
+```
+
+Tests locales: `pip install -r requirements.txt && python test_trace.py`
 
 ## Proxy reverso
 
-En producción suele exponerse detrás de Nginx/Caddy junto a Seafile o Chatwoot; el front SvelteKit habla con el servicio vía URL interna o HTTPS usando el proxy de SvelteKit (`/api/nesting`) para no exponer el token en el navegador.
+El front SvelteKit usa `/api/nesting` y `/api/vectorize` (no expone el token en el navegador).
 
 ## LightBurn
 

@@ -20,7 +20,6 @@ Thumbs.db
 
 # Python nesting service
 nesting-service/.venv
-vectorize-service/.venv
 
 # Vite
 vite.config.js.timestamp-*

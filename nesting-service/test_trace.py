@@ -1,4 +1,4 @@
-"""Pruebas locales del pipeline (ejecutar: python test_trace.py desde vectorize-service)."""
+"""Pruebas locales del pipeline trace (ejecutar: python test_trace.py desde nesting-service)."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import sys
 import cv2
 import numpy as np
 
-from main import _build_dxf, _build_plt, _run_trace
+from trace import _build_trace_dxf, _build_trace_plt, run_trace
 
 
 def _png_bytes(gray: np.ndarray) -> bytes:
@@ -20,7 +20,7 @@ def _png_bytes(gray: np.ndarray) -> bytes:
 def test_circle_external() -> None:
     img = np.zeros((200, 200), dtype=np.uint8)
     cv2.circle(img, (100, 100), 60, 255, -1)
-    r = _run_trace(
+    r = run_trace(
         _png_bytes(img),
         target_width_mm=90,
         target_height_mm=50,
@@ -41,7 +41,7 @@ def test_circle_external() -> None:
 def test_invert_dark_logo() -> None:
     img = np.full((100, 100), 255, dtype=np.uint8)
     cv2.rectangle(img, (30, 30), (70, 70), 0, -1)
-    r = _run_trace(
+    r = run_trace(
         _png_bytes(img),
         target_width_mm=50,
         target_height_mm=50,
@@ -57,13 +57,13 @@ def test_invert_dark_logo() -> None:
 
 def test_plt_polyline_coords() -> None:
     polylines = [[(0.0, 0.0), (10.0, 0.0), (10.0, -10.0), (0.0, -10.0), (0.0, 0.0)]]
-    plt = _build_plt(polylines)
+    plt = _build_trace_plt(polylines)
     assert "PU0,0;" in plt
     assert "PD400,0,400,-400,0,-400,0,0;" in plt
 
 
 def test_dxf_work_area_rect() -> None:
-    dxf = _build_dxf([], 90, 50)
+    dxf = _build_trace_dxf([], 90, 50)
     assert "90" in dxf and "LWPOLYLINE" in dxf
 
 
