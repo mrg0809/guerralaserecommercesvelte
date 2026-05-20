@@ -18,7 +18,7 @@ from typing import Any
 import ezdxf
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from trace import ALLOWED_CONTENT_TYPES, MAX_UPLOAD_BYTES, parse_bool, run_trace
+from trace import ALLOWED_CONTENT_TYPES, MAX_UPLOAD_BYTES, parse_bool, run_preview, run_trace
 from pydantic import BaseModel, Field
 from rectpack import SORT_NONE, PackingBin, PackingMode, newPacker
 from rectpack.maxrects import MaxRectsBaf, MaxRectsBl, MaxRectsBlsf, MaxRectsBssf  # noqa: F401 — Bl used in void_strategies
@@ -536,6 +536,7 @@ async def trace_image(
     simplify_epsilon_mm: float = Form(0.3),
     output: str = Form("both"),
     use_external_only: str = Form("true"),
+    preview_only: str = Form("false"),
 ) -> dict[str, Any]:
     if file.content_type and file.content_type not in ALLOWED_CONTENT_TYPES:
         raise HTTPException(
@@ -551,17 +552,20 @@ async def trace_image(
     if len(data) == 0:
         raise HTTPException(status_code=400, detail="Archivo vacío")
 
-    return run_trace(
-        data,
+    common = dict(
         target_width_mm=target_width_mm,
         target_height_mm=target_height_mm,
         threshold=threshold,
         invert=parse_bool(invert, False),
         min_area_mm2=min_area_mm2,
         simplify_epsilon_mm=simplify_epsilon_mm,
-        output=output,
         use_external_only=parse_bool(use_external_only, True),
     )
+
+    if parse_bool(preview_only, False):
+        return run_preview(data, **common)
+
+    return run_trace(data, output=output, include_preview=True, **common)
 
 
 @app.get("/health")

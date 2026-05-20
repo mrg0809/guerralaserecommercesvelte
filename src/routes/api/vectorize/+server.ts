@@ -76,7 +76,8 @@ export const POST: RequestHandler = async ({ request }) => {
 			'min_area_mm2',
 			'simplify_epsilon_mm',
 			'output',
-			'use_external_only'
+			'use_external_only',
+			'preview_only'
 		]) {
 			const v = incoming.get(key);
 			if (v != null && String(v) !== '') {

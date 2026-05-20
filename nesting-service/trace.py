@@ -63,6 +63,88 @@ def _resize_max(gray: np.ndarray, max_pixels: int) -> np.ndarray:
     return cv2.resize(gray, (new_w, new_h), interpolation=cv2.INTER_AREA)
 
 
+def _binarize(gray: np.ndarray, threshold: int, invert: bool) -> np.ndarray:
+    blurred = cv2.GaussianBlur(gray, (3, 3), 0)
+    thresh_type = cv2.THRESH_BINARY_INV if invert else cv2.THRESH_BINARY
+    _, binary = cv2.threshold(blurred, threshold, 255, thresh_type)
+    return binary
+
+
+def _filter_contours(
+    binary: np.ndarray,
+    *,
+    min_area_mm2: float,
+    simplify_epsilon_mm: float,
+    target_w_mm: float,
+    target_h_mm: float,
+    use_external_only: bool,
+) -> tuple[list[np.ndarray], list[str], int]:
+    """Returns (filtered contours, warnings, raw_contour_count)."""
+    warnings: list[str] = []
+    mode = cv2.RETR_EXTERNAL if use_external_only else cv2.RETR_LIST
+    found = cv2.findContours(binary, mode, cv2.CHAIN_APPROX_SIMPLE)
+    contours = found[0] if len(found) == 2 else found[1]
+    raw_count = len(contours)
+
+    h, w = binary.shape[:2]
+    px_per_mm_x = w / max(target_w_mm, 1e-6)
+    px_per_mm_y = h / max(target_h_mm, 1e-6)
+    px_per_mm = (px_per_mm_x + px_per_mm_y) / 2.0
+    min_area_px = max(1.0, min_area_mm2 * (px_per_mm**2))
+
+    filtered: list[np.ndarray] = []
+    for c in contours:
+        area = cv2.contourArea(c)
+        if area < min_area_px:
+            continue
+        peri = cv2.arcLength(c, True)
+        eps_px = max(0.5, simplify_epsilon_mm * px_per_mm)
+        if simplify_epsilon_mm > 0 and peri > 0:
+            approx = cv2.approxPolyDP(c, eps_px, True)
+            if len(approx) >= 3:
+                filtered.append(approx)
+        elif len(c) >= 3:
+            filtered.append(c)
+
+    if raw_count > 500:
+        warnings.append(f"Muchos contornos detectados ({raw_count}); sube umbral o área mínima")
+    if len(filtered) > 200:
+        warnings.append(f"Tras filtrar quedan {len(filtered)} trazos; sube área mínima o simplificación")
+    if len(filtered) == 0:
+        warnings.append("Ningún trazo válido; prueba otro umbral, invierte o baja el área mínima")
+
+    return filtered, warnings, raw_count
+
+
+def _encode_png_b64(gray_or_bgr: np.ndarray) -> str:
+    ok, buf = cv2.imencode(".png", gray_or_bgr)
+    if not ok:
+        raise HTTPException(status_code=500, detail="No se pudo generar la vista previa")
+    return base64.b64encode(bytes(buf)).decode("ascii")
+
+
+def _build_previews(
+    binary: np.ndarray,
+    contours: list[np.ndarray],
+) -> dict[str, str]:
+    """
+    mask: negro = zona detectada para trazar (antes de filtrar por área).
+    paths: negro = líneas que irán al DXF/PLT (tras filtro y simplificación).
+    """
+    h, w = binary.shape[:2]
+    mask_vis = np.full((h, w), 255, dtype=np.uint8)
+    mask_vis[binary == 255] = 0
+
+    paths_vis = np.full((h, w), 255, dtype=np.uint8)
+    if contours:
+        cv2.drawContours(paths_vis, contours, -1, 0, 1, lineType=cv2.LINE_AA)
+
+    return {
+        "preview_mask_base64": _encode_png_b64(mask_vis),
+        "preview_paths_base64": _encode_png_b64(paths_vis),
+    }
+
+
 def _contours_to_mm_polylines(
     contours: list[np.ndarray],
     target_w_mm: float,
@@ -101,56 +183,6 @@ def _contours_to_mm_polylines(
                 pts.append(pts[0])
             polylines.append(pts)
     return polylines
-
-
-def _trace_image(
-    gray: np.ndarray,
-    *,
-    threshold: int,
-    invert: bool,
-    min_area_mm2: float,
-    simplify_epsilon_mm: float,
-    target_w_mm: float,
-    target_h_mm: float,
-    use_external_only: bool,
-) -> tuple[list[list[tuple[float, float]]], list[str]]:
-    warnings: list[str] = []
-    blurred = cv2.GaussianBlur(gray, (3, 3), 0)
-    thresh_type = cv2.THRESH_BINARY_INV if invert else cv2.THRESH_BINARY
-    _, binary = cv2.threshold(blurred, threshold, 255, thresh_type)
-
-    mode = cv2.RETR_EXTERNAL if use_external_only else cv2.RETR_LIST
-    found = cv2.findContours(binary, mode, cv2.CHAIN_APPROX_SIMPLE)
-    contours = found[0] if len(found) == 2 else found[1]
-
-    h, w = gray.shape[:2]
-    px_per_mm_x = w / max(target_w_mm, 1e-6)
-    px_per_mm_y = h / max(target_h_mm, 1e-6)
-    px_per_mm = (px_per_mm_x + px_per_mm_y) / 2.0
-    min_area_px = max(1.0, min_area_mm2 * (px_per_mm**2))
-
-    filtered: list[np.ndarray] = []
-    for c in contours:
-        area = cv2.contourArea(c)
-        if area < min_area_px:
-            continue
-        peri = cv2.arcLength(c, True)
-        eps_px = max(0.5, simplify_epsilon_mm * px_per_mm)
-        if simplify_epsilon_mm > 0 and peri > 0:
-            approx = cv2.approxPolyDP(c, eps_px, True)
-            if len(approx) >= 3:
-                filtered.append(approx)
-        elif len(c) >= 3:
-            filtered.append(c)
-
-    if len(filtered) > 500:
-        warnings.append("Muchos contornos (>500); sube threshold o min_area_mm2")
-
-    polylines = _contours_to_mm_polylines(filtered, target_w_mm, target_h_mm)
-    if not polylines:
-        warnings.append("No se generaron contornos; prueba otro umbral o invierte el grabado")
-
-    return polylines, warnings
 
 
 def _bbox_mm(polylines: list[list[tuple[float, float]]]) -> dict[str, float]:
@@ -203,6 +235,72 @@ def _build_trace_plt(polylines: list[list[tuple[float, float]]]) -> str:
     return "".join(parts)
 
 
+def _process_image(
+    image_bytes: bytes,
+    *,
+    target_width_mm: float,
+    target_height_mm: float,
+    threshold: int,
+    invert: bool,
+    min_area_mm2: float,
+    simplify_epsilon_mm: float,
+    use_external_only: bool,
+) -> tuple[np.ndarray, np.ndarray, list[np.ndarray], list[str], int]:
+    if target_width_mm <= 0 or target_height_mm <= 0:
+        raise HTTPException(status_code=400, detail="target_width_mm y target_height_mm deben ser > 0")
+    if not 0 <= threshold <= 255:
+        raise HTTPException(status_code=400, detail="threshold debe estar entre 0 y 255")
+
+    gray = _decode_image(image_bytes)
+    gray = _resize_max(gray, MAX_PIXELS)
+    binary = _binarize(gray, threshold, invert)
+    filtered, warnings, raw_count = _filter_contours(
+        binary,
+        min_area_mm2=min_area_mm2,
+        simplify_epsilon_mm=simplify_epsilon_mm,
+        target_w_mm=target_width_mm,
+        target_h_mm=target_height_mm,
+        use_external_only=use_external_only,
+    )
+    return gray, binary, filtered, warnings, raw_count
+
+
+def run_preview(
+    image_bytes: bytes,
+    *,
+    target_width_mm: float,
+    target_height_mm: float,
+    threshold: int,
+    invert: bool,
+    min_area_mm2: float,
+    simplify_epsilon_mm: float,
+    use_external_only: bool,
+) -> dict[str, Any]:
+    _gray, binary, filtered, warnings, raw_count = _process_image(
+        image_bytes,
+        target_width_mm=target_width_mm,
+        target_height_mm=target_height_mm,
+        threshold=threshold,
+        invert=invert,
+        min_area_mm2=min_area_mm2,
+        simplify_epsilon_mm=simplify_epsilon_mm,
+        use_external_only=use_external_only,
+    )
+    polylines = _contours_to_mm_polylines(filtered, target_width_mm, target_height_mm)
+    previews = _build_previews(binary, filtered)
+
+    return {
+        "preview_only": True,
+        "contour_count": len(polylines),
+        "contours_raw": raw_count,
+        "contours_kept": len(filtered),
+        "bbox_mm": _bbox_mm(polylines),
+        "target_mm": {"width": target_width_mm, "height": target_height_mm},
+        "warnings": warnings,
+        **previews,
+    }
+
+
 def run_trace(
     image_bytes: bytes,
     *,
@@ -214,31 +312,31 @@ def run_trace(
     simplify_epsilon_mm: float,
     output: str,
     use_external_only: bool,
+    include_preview: bool = True,
 ) -> dict[str, Any]:
-    if target_width_mm <= 0 or target_height_mm <= 0:
-        raise HTTPException(status_code=400, detail="target_width_mm y target_height_mm deben ser > 0")
-    if not 0 <= threshold <= 255:
-        raise HTTPException(status_code=400, detail="threshold debe estar entre 0 y 255")
-
-    gray = _decode_image(image_bytes)
-    gray = _resize_max(gray, MAX_PIXELS)
-    polylines, warnings = _trace_image(
-        gray,
+    _gray, binary, filtered, warnings, raw_count = _process_image(
+        image_bytes,
+        target_width_mm=target_width_mm,
+        target_height_mm=target_height_mm,
         threshold=threshold,
         invert=invert,
         min_area_mm2=min_area_mm2,
         simplify_epsilon_mm=simplify_epsilon_mm,
-        target_w_mm=target_width_mm,
-        target_h_mm=target_height_mm,
         use_external_only=use_external_only,
     )
+    polylines = _contours_to_mm_polylines(filtered, target_width_mm, target_height_mm)
 
     result: dict[str, Any] = {
         "contour_count": len(polylines),
+        "contours_raw": raw_count,
+        "contours_kept": len(filtered),
         "bbox_mm": _bbox_mm(polylines),
         "target_mm": {"width": target_width_mm, "height": target_height_mm},
         "warnings": warnings,
     }
+
+    if include_preview:
+        result.update(_build_previews(binary, filtered))
 
     out = output.strip().lower()
     if out in ("both", "dxf", ""):
