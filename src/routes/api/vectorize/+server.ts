@@ -77,7 +77,10 @@ export const POST: RequestHandler = async ({ request }) => {
 			'simplify_epsilon_mm',
 			'output',
 			'use_external_only',
-			'preview_only'
+			'preview_only',
+			'use_adaptive_threshold',
+			'adaptive_block_size',
+			'adaptive_c'
 		]) {
 			const v = incoming.get(key);
 			if (v != null && String(v) !== '') {

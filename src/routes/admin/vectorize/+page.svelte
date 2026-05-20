@@ -17,8 +17,10 @@
 	let threshold = $state(127);
 	let invert = $state(false);
 	let minAreaMm2 = $state(0.5);
-	let simplifyMm = $state(0.3);
+	let simplifyMm = $state(0.05);
 	let useExternalOnly = $state(true);
+	let useAdaptiveThreshold = $state(false);
+	let lastThresholdMode = $state<string | null>(null);
 
 	let selectedFile = $state<File | null>(null);
 	let previewUrl = $state<string | null>(null);
@@ -56,6 +58,7 @@
 		minAreaMm2;
 		simplifyMm;
 		useExternalOnly;
+		useAdaptiveThreshold;
 		targetW;
 		targetH;
 		if (selectedFile) {
@@ -82,10 +85,15 @@
 	}
 
 	function applyLogoDetalladoPreset() {
+		useAdaptiveThreshold = true;
 		minAreaMm2 = 8;
-		simplifyMm = 1.2;
-		threshold = 160;
+		simplifyMm = 0.05;
+		threshold = 127;
 		useExternalOnly = true;
+	}
+
+	function onThresholdInput() {
+		useAdaptiveThreshold = false;
 	}
 
 	function onFileSelect(e: Event) {
@@ -133,6 +141,7 @@
 		form.append('min_area_mm2', String(minAreaMm2));
 		form.append('simplify_epsilon_mm', String(simplifyMm));
 		form.append('use_external_only', useExternalOnly ? 'true' : 'false');
+		form.append('use_adaptive_threshold', useAdaptiveThreshold ? 'true' : 'false');
 		form.append('preview_only', previewOnly ? 'true' : 'false');
 		if (!previewOnly) {
 			form.append('output', 'both');
@@ -171,6 +180,7 @@
 			lastContoursKept = json.contours_kept ?? 0;
 			lastBbox = json.bbox_mm ?? null;
 			lastWarnings = json.warnings ?? [];
+			lastThresholdMode = json.threshold_mode ?? null;
 			previewStale = false;
 			lastDxfB64 = null;
 			lastPltB64 = null;
@@ -206,6 +216,7 @@
 			lastContoursKept = json.contours_kept ?? lastContoursKept;
 			lastBbox = json.bbox_mm ?? lastBbox;
 			lastWarnings = json.warnings ?? lastWarnings;
+			lastThresholdMode = json.threshold_mode ?? lastThresholdMode;
 		} catch (e) {
 			errorMsg = e instanceof Error ? e.message : 'Error de red';
 		} finally {
@@ -323,9 +334,26 @@
 			</div>
 			<div class="space-y-4">
 				<label class="block text-sm">
-					<span class="text-gray-600">Umbral de luminosidad ({threshold})</span>
-					<input type="range" bind:value={threshold} min="0" max="255" class="mt-2 w-full" />
+					<span class="text-gray-600">
+						{#if useAdaptiveThreshold}
+							Umbral automático por zonas (adaptativo)
+						{:else}
+							Umbral de luminosidad ({threshold})
+						{/if}
+					</span>
+					<input
+						type="range"
+						bind:value={threshold}
+						min="0"
+						max="255"
+						disabled={useAdaptiveThreshold}
+						class="mt-2 w-full disabled:opacity-40"
+						oninput={onThresholdInput}
+					/>
 				</label>
+				<p class="text-xs text-gray-500">
+					Logo plano B/N: mueve el umbral. Logo con relieve 3D: usa el preset «Logo con relieve» (umbral adaptativo).
+				</p>
 				<label class="flex items-center gap-2 text-sm">
 					<input type="checkbox" bind:checked={invert} />
 					<span>Invertir qué zonas se graban</span>
@@ -414,6 +442,7 @@
 
 				{#if !previewLoading && lastContoursRaw > 0}
 					<p class="mt-3 text-sm text-gray-600">
+						Modo: {lastThresholdMode === 'adaptive' ? 'umbral adaptativo' : 'umbral fijo'} —
 						Detectados: {lastContoursRaw} — tras filtro: {lastContoursKept} — en archivo: {lastContourCount}
 						trazo(s)
 						{#if lastBbox}

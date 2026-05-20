@@ -40,15 +40,20 @@ Campos de `/trace`:
 | `file` | sí | — |
 | `target_width_mm` | sí | — |
 | `target_height_mm` | sí | — |
-| `threshold` | no | 127 |
+| `threshold` | no | 127 (ignorado si adaptativo) |
 | `invert` | no | false |
 | `min_area_mm2` | no | 0.5 |
-| `simplify_epsilon_mm` | no | 0.3 |
+| `simplify_epsilon_mm` | no | 0.05 (máx. 0.1 mm en servidor) |
 | `output` | no | both |
 | `use_external_only` | no | true |
 | `preview_only` | no | false |
+| `use_adaptive_threshold` | no | false (logos 3D / sombras) |
+| `adaptive_block_size` | no | 21 (impar) |
+| `adaptive_c` | no | 5 |
 
-Respuesta: `contour_count`, `contours_raw`, `contours_kept`, `bbox_mm`, `preview_mask_base64`, `preview_paths_base64` (negro = grabado), `dxf_base64`, `plt_base64`, `warnings`.
+Sin desenfoque Gaussian previo (mejor detalle en texto y logos digitales).
+
+Respuesta: `threshold_mode` (`fixed` | `adaptive`), `contour_count`, `contours_raw`, `contours_kept`, `bbox_mm`, `preview_mask_base64`, `preview_paths_base64` (negro = grabado), `dxf_base64`, `plt_base64`, `warnings`.
 
 ## Prueba con curl
 
@@ -71,6 +76,20 @@ curl -sS -X POST http://localhost:8002/trace \
   -F "target_width_mm=90" \
   -F "target_height_mm=50" \
   -F "threshold=130" | head -c 300
+```
+
+Logo con relieve (umbral adaptativo):
+
+```bash
+curl -sS -X POST http://localhost:8002/trace \
+  -H "X-Nesting-Token: $TOKEN" \
+  -F "file=@logo.png" \
+  -F "target_width_mm=90" \
+  -F "target_height_mm=50" \
+  -F "use_adaptive_threshold=true" \
+  -F "min_area_mm2=8" \
+  -F "simplify_epsilon_mm=0.05" \
+  -F "preview_only=true" | head -c 300
 ```
 
 Tests locales: `pip install -r requirements.txt && python test_trace.py`

@@ -63,10 +63,34 @@ def _resize_max(gray: np.ndarray, max_pixels: int) -> np.ndarray:
     return cv2.resize(gray, (new_w, new_h), interpolation=cv2.INTER_AREA)
 
 
-def _binarize(gray: np.ndarray, threshold: int, invert: bool) -> np.ndarray:
-    blurred = cv2.GaussianBlur(gray, (3, 3), 0)
+def _clamp_simplify_mm(value: float) -> float:
+    """Máximo 0.1 mm para no colapsar letras pequeñas en approxPolyDP."""
+    return min(max(0.0, value), 0.1)
+
+
+def _binarize(
+    gray: np.ndarray,
+    threshold: int,
+    invert: bool,
+    *,
+    use_adaptive_threshold: bool = False,
+    adaptive_block_size: int = 21,
+    adaptive_c: int = 5,
+) -> np.ndarray:
     thresh_type = cv2.THRESH_BINARY_INV if invert else cv2.THRESH_BINARY
-    _, binary = cv2.threshold(blurred, threshold, 255, thresh_type)
+    if use_adaptive_threshold:
+        bs = adaptive_block_size | 1
+        if bs < 3:
+            bs = 3
+        return cv2.adaptiveThreshold(
+            gray,
+            255,
+            cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+            thresh_type,
+            bs,
+            adaptive_c,
+        )
+    _, binary = cv2.threshold(gray, threshold, 255, thresh_type)
     return binary
 
 
@@ -245,15 +269,28 @@ def _process_image(
     min_area_mm2: float,
     simplify_epsilon_mm: float,
     use_external_only: bool,
-) -> tuple[np.ndarray, np.ndarray, list[np.ndarray], list[str], int]:
+    use_adaptive_threshold: bool = False,
+    adaptive_block_size: int = 21,
+    adaptive_c: int = 5,
+) -> tuple[np.ndarray, np.ndarray, list[np.ndarray], list[str], int, str]:
     if target_width_mm <= 0 or target_height_mm <= 0:
         raise HTTPException(status_code=400, detail="target_width_mm y target_height_mm deben ser > 0")
-    if not 0 <= threshold <= 255:
+    if not use_adaptive_threshold and not 0 <= threshold <= 255:
         raise HTTPException(status_code=400, detail="threshold debe estar entre 0 y 255")
+
+    simplify_epsilon_mm = _clamp_simplify_mm(simplify_epsilon_mm)
+    threshold_mode = "adaptive" if use_adaptive_threshold else "fixed"
 
     gray = _decode_image(image_bytes)
     gray = _resize_max(gray, MAX_PIXELS)
-    binary = _binarize(gray, threshold, invert)
+    binary = _binarize(
+        gray,
+        threshold,
+        invert,
+        use_adaptive_threshold=use_adaptive_threshold,
+        adaptive_block_size=adaptive_block_size,
+        adaptive_c=adaptive_c,
+    )
     filtered, warnings, raw_count = _filter_contours(
         binary,
         min_area_mm2=min_area_mm2,
@@ -262,7 +299,7 @@ def _process_image(
         target_h_mm=target_height_mm,
         use_external_only=use_external_only,
     )
-    return gray, binary, filtered, warnings, raw_count
+    return gray, binary, filtered, warnings, raw_count, threshold_mode
 
 
 def run_preview(
@@ -275,8 +312,11 @@ def run_preview(
     min_area_mm2: float,
     simplify_epsilon_mm: float,
     use_external_only: bool,
+    use_adaptive_threshold: bool = False,
+    adaptive_block_size: int = 21,
+    adaptive_c: int = 5,
 ) -> dict[str, Any]:
-    _gray, binary, filtered, warnings, raw_count = _process_image(
+    _gray, binary, filtered, warnings, raw_count, threshold_mode = _process_image(
         image_bytes,
         target_width_mm=target_width_mm,
         target_height_mm=target_height_mm,
@@ -285,12 +325,16 @@ def run_preview(
         min_area_mm2=min_area_mm2,
         simplify_epsilon_mm=simplify_epsilon_mm,
         use_external_only=use_external_only,
+        use_adaptive_threshold=use_adaptive_threshold,
+        adaptive_block_size=adaptive_block_size,
+        adaptive_c=adaptive_c,
     )
     polylines = _contours_to_mm_polylines(filtered, target_width_mm, target_height_mm)
     previews = _build_previews(binary, filtered)
 
     return {
         "preview_only": True,
+        "threshold_mode": threshold_mode,
         "contour_count": len(polylines),
         "contours_raw": raw_count,
         "contours_kept": len(filtered),
@@ -313,8 +357,11 @@ def run_trace(
     output: str,
     use_external_only: bool,
     include_preview: bool = True,
+    use_adaptive_threshold: bool = False,
+    adaptive_block_size: int = 21,
+    adaptive_c: int = 5,
 ) -> dict[str, Any]:
-    _gray, binary, filtered, warnings, raw_count = _process_image(
+    _gray, binary, filtered, warnings, raw_count, threshold_mode = _process_image(
         image_bytes,
         target_width_mm=target_width_mm,
         target_height_mm=target_height_mm,
@@ -323,10 +370,14 @@ def run_trace(
         min_area_mm2=min_area_mm2,
         simplify_epsilon_mm=simplify_epsilon_mm,
         use_external_only=use_external_only,
+        use_adaptive_threshold=use_adaptive_threshold,
+        adaptive_block_size=adaptive_block_size,
+        adaptive_c=adaptive_c,
     )
     polylines = _contours_to_mm_polylines(filtered, target_width_mm, target_height_mm)
 
     result: dict[str, Any] = {
+        "threshold_mode": threshold_mode,
         "contour_count": len(polylines),
         "contours_raw": raw_count,
         "contours_kept": len(filtered),
