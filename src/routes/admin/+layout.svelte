@@ -170,6 +170,13 @@
 					label: 'Nesting Láser',
 					icon: '🧩',
 					permission: 'view_admin_panel'
+				},
+				{
+					kind: 'link',
+					href: '/admin/vectorize',
+					label: 'Imagen → DXF/PLT',
+					icon: '🖼️',
+					permission: 'view_admin_panel'
 				}
 			]
 		},
