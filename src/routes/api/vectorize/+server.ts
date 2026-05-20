@@ -1,0 +1,131 @@
+import { json, type RequestHandler } from '@sveltejs/kit';
+import { createClient } from '@supabase/supabase-js';
+import { PUBLIC_SUPABASE_ANON_KEY, PUBLIC_SUPABASE_URL } from '$env/static/public';
+import { SUPABASE_SERVICE_ROLE_KEY } from '$env/static/private';
+import { env } from '$env/dynamic/private';
+
+export const POST: RequestHandler = async ({ request }) => {
+	try {
+		const authHeader = request.headers.get('authorization');
+		if (!authHeader) {
+			return json({ success: false, error: 'No autorizado' }, { status: 401 });
+		}
+
+		const token = authHeader.replace(/^Bearer\s+/i, '');
+		const supabaseClient = createClient(PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY);
+		const {
+			data: { user },
+			error: authError
+		} = await supabaseClient.auth.getUser(token);
+
+		if (authError || !user) {
+			return json({ success: false, error: 'No autorizado' }, { status: 401 });
+		}
+
+		const supabaseAdmin = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+			auth: { autoRefreshToken: false, persistSession: false }
+		});
+
+		const { data: userRoles } = await supabaseAdmin
+			.from('user_roles')
+			.select('roles(name)')
+			.eq('user_id', user.id)
+			.eq('is_active', true);
+
+		const roles =
+			userRoles?.map((ur: { roles?: { name?: string } | { name?: string }[] }) => {
+				const r = ur.roles;
+				if (Array.isArray(r)) return r[0]?.name;
+				return r?.name;
+			}).filter(Boolean) || [];
+
+		if (!roles.includes('admin') && !roles.includes('superadmin')) {
+			return json({ success: false, error: 'Sin permisos para vectorización' }, { status: 403 });
+		}
+
+		const baseUrl = (env.VECTORIZE_API_URL || '').replace(/\/$/, '');
+		const apiToken = (env.VECTORIZE_API_TOKEN || '').trim();
+		if (!baseUrl || !apiToken) {
+			return json(
+				{
+					success: false,
+					error: 'Servicio de vectorización no configurado (VECTORIZE_API_URL / VECTORIZE_API_TOKEN)'
+				},
+				{ status: 503 }
+			);
+		}
+
+		const contentType = request.headers.get('content-type') || '';
+		if (!contentType.includes('multipart/form-data')) {
+			return json({ success: false, error: 'Se requiere multipart/form-data con la imagen' }, { status: 400 });
+		}
+
+		const incoming = await request.formData();
+		const file = incoming.get('file');
+		if (!file || !(file instanceof File)) {
+			return json({ success: false, error: 'Falta el archivo de imagen (campo file)' }, { status: 400 });
+		}
+
+		const outbound = new FormData();
+		outbound.append('file', file, file.name);
+		for (const key of [
+			'target_width_mm',
+			'target_height_mm',
+			'threshold',
+			'invert',
+			'min_area_mm2',
+			'simplify_epsilon_mm',
+			'output',
+			'use_external_only'
+		]) {
+			const v = incoming.get(key);
+			if (v != null && String(v) !== '') {
+				outbound.append(key, String(v));
+			}
+		}
+
+		const res = await fetch(`${baseUrl}/trace`, {
+			method: 'POST',
+			headers: {
+				'X-Vectorize-Token': apiToken
+			},
+			body: outbound
+		});
+
+		const text = await res.text();
+		let payload: unknown;
+		try {
+			payload = JSON.parse(text) as unknown;
+		} catch {
+			return json(
+				{
+					success: false,
+					error: 'Respuesta inválida del servicio de vectorización',
+					raw: text.slice(0, 200)
+				},
+				{ status: 502 }
+			);
+		}
+
+		if (!res.ok) {
+			const p = payload as { detail?: string | unknown[] };
+			let errMsg = `Error del servicio (${res.status})`;
+			if (typeof p.detail === 'string') errMsg = p.detail;
+			else if (Array.isArray(p.detail)) errMsg = p.detail.map((d) => JSON.stringify(d)).join('; ');
+			return json(
+				{
+					success: false,
+					error: errMsg,
+					payload
+				},
+				{ status: res.status >= 400 && res.status < 600 ? res.status : 502 }
+			);
+		}
+
+		return json({ success: true, ...(payload as Record<string, unknown>) });
+	} catch (e: unknown) {
+		const message = e instanceof Error ? e.message : 'Error interno';
+		console.error('[API VECTORIZE]', e);
+		return json({ success: false, error: message }, { status: 500 });
+	}
+};

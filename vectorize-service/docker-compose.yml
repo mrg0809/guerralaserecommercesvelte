@@ -1,0 +1,9 @@
+services:
+  vectorize:
+    build: .
+    ports:
+      - "8003:8082"
+    restart: unless-stopped
+    environment:
+      VECTORIZE_TOKEN: ${VECTORIZE_TOKEN:-changeme-set-in-production}
+      VECTORIZE_CORS_ORIGINS: ${VECTORIZE_CORS_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173,https://guerralaser.com,https://www.guerralaser.com,https://guerralaser.com.mx}
