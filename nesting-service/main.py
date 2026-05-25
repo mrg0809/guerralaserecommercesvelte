@@ -323,15 +323,59 @@ def _pack_stock_in_voids(
     return placed_stock, unplaced_stock
 
 
+_EDGE_TOL_MM = 0.05
+
+
+def _quantize_mm(v: float, tol: float = _EDGE_TOL_MM) -> float:
+    return round(v / tol) * tol
+
+
+def _edge_key(x1: float, y1: float, x2: float, y2: float) -> tuple[tuple[float, float], tuple[float, float]]:
+    """Clave canónica de arista (sin dirección) para deduplicar líneas compartidas."""
+    p1 = (_quantize_mm(x1), _quantize_mm(y1))
+    p2 = (_quantize_mm(x2), _quantize_mm(y2))
+    return (p1, p2) if p1 <= p2 else (p2, p1)
+
+
+def _rect_edges(x: float, y: float, w: float, h: float) -> list[tuple[float, float, float, float]]:
+    x2, y2 = x + w, y + h
+    return [
+        (x, y, x2, y),
+        (x2, y, x2, y2),
+        (x2, y2, x, y2),
+        (x, y2, x, y),
+    ]
+
+
+def _unique_cut_edges(
+    rects: list[tuple[float, float, float, float]],
+    *,
+    sheet: tuple[float, float, float, float] | None = None,
+) -> list[tuple[float, float, float, float]]:
+    """
+    Aristas únicas de todos los rectángulos (y opcionalmente la lámina).
+    Si dos piezas comparten un lado, solo se devuelve una línea.
+    """
+    seen: set[tuple[tuple[float, float], tuple[float, float]]] = set()
+    unique: list[tuple[float, float, float, float]] = []
+    sources = list(rects)
+    if sheet is not None:
+        sources.append(sheet)
+    for x, y, w, h in sources:
+        for edge in _rect_edges(x, y, w, h):
+            key = _edge_key(*edge)
+            if key in seen:
+                continue
+            seen.add(key)
+            unique.append(edge)
+    return unique
+
+
 def _build_dxf(sheet_w: float, sheet_h: float, rects: list[tuple[float, float, float, float]]) -> str:
     doc = ezdxf.new("R2000")
     msp = doc.modelspace()
-    msp.add_lwpolyline(
-        [(0, 0), (sheet_w, 0), (sheet_w, sheet_h), (0, sheet_h)],
-        close=True,
-    )
-    for x, y, w, h in rects:
-        msp.add_lwpolyline([(x, y), (x + w, y), (x + w, y + h), (x, y + h)], close=True)
+    for x1, y1, x2, y2 in _unique_cut_edges(rects, sheet=(0.0, 0.0, sheet_w, sheet_h)):
+        msp.add_line((x1, y1), (x2, y2))
     buf = io.StringIO()
     doc.write(buf)
     return buf.getvalue()
@@ -344,11 +388,9 @@ def _build_plt(rects: list[tuple[float, float, float, float]]) -> str:
         return int(round(mm * units_per_mm))
 
     parts: list[str] = ["IN;", "SP1;"]
-    for x, y, w, h in rects:
-        x1, y1 = u(x), u(y)
-        x2, y2 = u(x + w), u(y + h)
-        parts.append(f"PU{x1},{y1};")
-        parts.append(f"PD{x2},{y1},{x2},{y2},{x1},{y2},{x1},{y1};")
+    for x1, y1, x2, y2 in _unique_cut_edges(rects):
+        parts.append(f"PU{u(x1)},{u(y1)};")
+        parts.append(f"PD{u(x2)},{u(y2)};")
         parts.append("PU;")
     parts.append("SP0;")
     return "".join(parts)
