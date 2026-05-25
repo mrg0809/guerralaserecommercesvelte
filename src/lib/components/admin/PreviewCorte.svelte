@@ -228,7 +228,6 @@
 	{/if}
 
 	<p class="mt-3 text-xs text-gray-500">
-		En <strong>LightBurn</strong>, al importar el DXF activa <strong>Delete Duplicates</strong> en optimización para evitar doble corte en líneas
-		comunes.
+		El DXF y el PLT exportan <strong>una sola línea</strong> por cada arista de corte (sin duplicar bordes compartidos entre piezas).
 	</p>
 </div>

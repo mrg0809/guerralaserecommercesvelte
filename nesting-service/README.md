@@ -100,4 +100,4 @@ El front SvelteKit usa `/api/nesting` y `/api/vectorize` (no expone el token en 
 
 ## LightBurn
 
-Con líneas compartidas entre piezas, en LightBurn activa **Delete Duplicates** en la optimización de importación/corte.
+El DXF/PLT de nesting exportan aristas únicas (`LINE` en DXF): si dos piezas comparten un lado, el láser solo recorre esa línea una vez.
