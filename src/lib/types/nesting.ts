@@ -37,5 +37,6 @@ export type NestApiResult = {
 	waste_percent?: number;
 	void_regions?: VoidRegion[];
 	all_mandatory_placed?: boolean;
+	include_sheet_outline?: boolean;
 	error?: string;
 };

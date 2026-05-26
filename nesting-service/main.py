@@ -3,8 +3,8 @@ Nesting + trace service: rectpack nesting, image→DXF/PLT trace, ezdxf + HPGL (
 Auth: header X-Nesting-Token must match env NESTING_TOKEN.
 
 Packing strategy:
-1) Place ALL mandatory pieces first (offline pack, try several MaxRects heuristics; prefer MaxRectsBlsf).
-2) Only if every mandatory fits, pack stock into remaining free rectangles (multi-bin).
+1) Place ALL mandatory pieces first; score layouts so voids fit large stock (e.g. 1165×920 horizontal, not rotated strip).
+2) Only if every mandatory fits, pack stock largest-first into voids (maximize stock area, not piece count).
 3) If any mandatory is missing, skip stock so filler cannot steal space from obligatorias.
 """
 
@@ -48,6 +48,10 @@ class NestingRequest(BaseModel):
     sheet_height: float = Field(gt=0)
     mandatory: list[PieceIn] = Field(default_factory=list)
     stock_options: list[PieceIn] = Field(default_factory=list)
+    include_sheet_outline: bool = Field(
+        default=False,
+        description="Si true, añade el rectángulo exterior de la lámina al DXF/PLT (borde del material).",
+    )
 
 
 def _verify_token(x_nesting_token: str | None = Header(default=None)) -> None:
@@ -116,6 +120,69 @@ def _waste_score(free_list: list[tuple[float, float, float, float]]) -> float:
     max_a = max(areas)
     count = len(areas)
     return max_a * 1000.0 - count * 50.0
+
+
+def _unique_stock_sizes(stock_options: list[PieceIn]) -> list[tuple[float, float]]:
+    seen: set[tuple[float, float]] = set()
+    sizes: list[tuple[float, float]] = []
+    for s in stock_options:
+        for w, h in ((s.width, s.height), (s.height, s.width)):
+            key = (round(w, 1), round(h, 1))
+            if key in seen:
+                continue
+            seen.add(key)
+            sizes.append((w, h))
+    sizes.sort(key=lambda t: t[0] * t[1], reverse=True)
+    return sizes
+
+
+def _max_stock_area_fitting_voids(
+    free_list: list[tuple[float, float, float, float]], stock_sizes: list[tuple[float, float]]
+) -> float:
+    """Área de la pieza de stock más grande que cabría en algún hueco."""
+    best = 0.0
+    for _fx, _fy, fw, fh in free_list:
+        for sw, sh in stock_sizes:
+            if _piece_fits_void(sw, sh, fw, fh):
+                best = max(best, sw * sh)
+    return best
+
+
+def _mandatory_layout_score(
+    placed_m: list[dict[str, Any]],
+    rect_meta: dict[int, dict[str, Any]],
+    sheet_w: float,
+    sheet_h: float,
+    stock_options: list[PieceIn],
+) -> float:
+    """
+    Mejor layout = huecos donde caben piezas de stock grandes + desperdicio compacto
+    + respetar orientación pedida (ancho×alto) cuando sea posible.
+    """
+    free = _free_rects_from_placed(placed_m, [], sheet_w, sheet_h)
+    stock_sizes = _unique_stock_sizes(stock_options) if stock_options else []
+    max_stock = _max_stock_area_fitting_voids(free, stock_sizes)
+    orient_bonus = 0.0
+    for p in placed_m:
+        rid = int(str(p["rid"]).split("-")[-1])
+        meta = rect_meta.get(rid, {})
+        mw, mh = meta.get("w"), meta.get("h")
+        if mw and mh and abs(p["w"] - mw) < 1 and abs(p["h"] - mh) < 1:
+            orient_bonus += 1.0
+    return max_stock * 1_000_000.0 + _waste_score(free) + orient_bonus * 500.0
+
+
+def _stock_placement_score(
+    valid: list[dict[str, Any]],
+    placed_m: list[dict[str, Any]],
+    placed_stock: list[dict[str, Any]],
+    sheet_w: float,
+    sheet_h: float,
+) -> float:
+    """Prioriza cubrir más área con menos piezas pequeñas."""
+    stock_area = sum(p["w"] * p["h"] for p in valid)
+    trial_free = _free_rects_from_placed(placed_m, placed_stock + valid, sheet_w, sheet_h)
+    return stock_area * 10_000.0 + _waste_score(trial_free) - len(valid) * 2.0
 
 
 def _pick_stock_dims(
@@ -194,6 +261,67 @@ def _pack_single_void(
     return out
 
 
+def _pack_void_greedy_largest(
+    fx: float,
+    fy: float,
+    fw: float,
+    fh: float,
+    fitting: list[dict[str, Any]],
+    *,
+    prefer_horizontal: bool,
+    placed_m: list[dict[str, Any]],
+    placed_stock: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Coloca piezas de stock de mayor a menor área, una por iteración."""
+    items = sorted(fitting, key=lambda s: s["w"] * s["h"], reverse=True)
+    used: set[int] = set()
+    out: list[dict[str, Any]] = []
+    free_void: list[tuple[float, float, float, float]] = [(fx, fy, fw, fh)]
+
+    while True:
+        best: dict[str, Any] | None = None
+        best_area = 0.0
+        for s in items:
+            rid_i = int(s["rid"])
+            if rid_i in used:
+                continue
+            for vx, vy, vw, vh in free_void:
+                dims = _pick_stock_dims(s["w"], s["h"], vw, vh, prefer_horizontal)
+                if dims is None:
+                    continue
+                dw, dh = dims
+                px, py = vx, vy
+                if px + dw > fx + fw + 0.5 or py + dh > fy + fh + 0.5:
+                    continue
+                if any(_rects_overlap(px, py, dw, dh, m["x"], m["y"], m["w"], m["h"]) for m in placed_m):
+                    continue
+                if any(_rects_overlap(px, py, dw, dh, o["x"], o["y"], o["w"], o["h"]) for o in placed_stock):
+                    continue
+                if any(_rects_overlap(px, py, dw, dh, o["x"], o["y"], o["w"], o["h"]) for o in out):
+                    continue
+                area = dw * dh
+                if area > best_area:
+                    best_area = area
+                    best = {
+                        "x": px,
+                        "y": py,
+                        "w": dw,
+                        "h": dh,
+                        "rid": f"S-{rid_i}",
+                        "kind": "stock",
+                        "label": s["label"],
+                        "variant_id": s["variant_id"],
+                        "_rid_i": rid_i,
+                    }
+        if best is None:
+            break
+        out.append(best)
+        used.add(int(best["_rid_i"]))
+        free_void = _subtract_obstacle(free_void, (best["x"], best["y"], best["w"], best["h"]))
+
+    return out
+
+
 def _validate_stock_placements(
     candidates: list[dict[str, Any]],
     fx: float,
@@ -242,19 +370,26 @@ def _pack_stock_in_voids(
 
     stock_pool: list[dict[str, Any]] = []
     rid_s = stock_rid_base
+    # Instancias ordenadas por área descendente (grandes primero)
+    stock_entries: list[tuple[float, PieceIn]] = []
     for s in stock_options:
         cap = min(s.quantity, 500)
+        area = s.width * s.height
         for _ in range(cap):
-            stock_pool.append(
-                {
-                    "rid": rid_s,
-                    "w": s.width,
-                    "h": s.height,
-                    "label": s.label or f"Stock {s.width}×{s.height} mm",
-                    "variant_id": s.variant_id,
-                }
-            )
-            rid_s += 1
+            stock_entries.append((area, s))
+    stock_entries.sort(key=lambda t: t[0], reverse=True)
+    for area, s in stock_entries:
+        _ = area
+        stock_pool.append(
+            {
+                "rid": rid_s,
+                "w": s.width,
+                "h": s.height,
+                "label": s.label or f"Stock {s.width}×{s.height} mm",
+                "variant_id": s.variant_id,
+            }
+        )
+        rid_s += 1
 
     placed_stock: list[dict[str, Any]] = []
     used_rids: set[int] = set()
@@ -278,6 +413,18 @@ def _pack_stock_in_voids(
         best_valid: list[dict[str, Any]] = []
         best_score = -1.0
 
+        greedy_raw = _pack_void_greedy_largest(
+            fx, fy, fw, fh, fitting, prefer_horizontal=True, placed_m=placed_m, placed_stock=placed_stock
+        )
+        greedy_valid = _validate_stock_placements(
+            greedy_raw, fx, fy, fw, fh, placed_m, placed_stock, sheet_w, sheet_h
+        )
+        if greedy_valid:
+            g_score = _stock_placement_score(greedy_valid, placed_m, placed_stock, sheet_w, sheet_h)
+            if g_score > best_score:
+                best_score = g_score
+                best_valid = greedy_valid
+
         for algo, allow_rot, prefer_horiz, sort_area in void_strategies:
             raw = _pack_single_void(
                 fx,
@@ -295,8 +442,7 @@ def _pack_stock_in_voids(
             valid = _validate_stock_placements(raw, fx, fy, fw, fh, placed_m, placed_stock, sheet_w, sheet_h)
             if not valid:
                 continue
-            trial_free = _free_rects_from_placed(placed_m, placed_stock + valid, sheet_w, sheet_h)
-            score = _waste_score(trial_free) + len(valid) * 5.0
+            score = _stock_placement_score(valid, placed_m, placed_stock, sheet_w, sheet_h)
             if score > best_score:
                 best_score = score
                 best_valid = valid
@@ -371,24 +517,38 @@ def _unique_cut_edges(
     return unique
 
 
-def _build_dxf(sheet_w: float, sheet_h: float, rects: list[tuple[float, float, float, float]]) -> str:
+def _build_dxf(
+    sheet_w: float,
+    sheet_h: float,
+    rects: list[tuple[float, float, float, float]],
+    *,
+    include_sheet_outline: bool = False,
+) -> str:
     doc = ezdxf.new("R2000")
     msp = doc.modelspace()
-    for x1, y1, x2, y2 in _unique_cut_edges(rects, sheet=(0.0, 0.0, sheet_w, sheet_h)):
+    sheet = (0.0, 0.0, sheet_w, sheet_h) if include_sheet_outline else None
+    for x1, y1, x2, y2 in _unique_cut_edges(rects, sheet=sheet):
         msp.add_line((x1, y1), (x2, y2))
     buf = io.StringIO()
     doc.write(buf)
     return buf.getvalue()
 
 
-def _build_plt(rects: list[tuple[float, float, float, float]]) -> str:
+def _build_plt(
+    rects: list[tuple[float, float, float, float]],
+    *,
+    sheet_w: float = 0.0,
+    sheet_h: float = 0.0,
+    include_sheet_outline: bool = False,
+) -> str:
     units_per_mm = 40
 
     def u(mm: float) -> int:
         return int(round(mm * units_per_mm))
 
+    sheet = (0.0, 0.0, sheet_w, sheet_h) if include_sheet_outline else None
     parts: list[str] = ["IN;", "SP1;"]
-    for x1, y1, x2, y2 in _unique_cut_edges(rects):
+    for x1, y1, x2, y2 in _unique_cut_edges(rects, sheet=sheet):
         parts.append(f"PU{u(x1)},{u(y1)};")
         parts.append(f"PD{u(x2)},{u(y2)};")
         parts.append("PU;")
@@ -400,45 +560,89 @@ def _build_plt(rects: list[tuple[float, float, float, float]]) -> str:
 _MANDATORY_PACK_ALGOS = (MaxRectsBlsf, MaxRectsBaf, MaxRectsBssf, MaxRectsBl)
 
 
+def _rect_list_to_placed_m(
+    lst: list[tuple[int, int, int, int, int, int]],
+    rect_meta: dict[int, dict[str, Any]],
+    from_i,
+) -> list[dict[str, Any]]:
+    placed: list[dict[str, Any]] = []
+    for rect in lst:
+        _b, x, y, w, h, rid_i = rect
+        rid_i = int(rid_i)
+        meta = rect_meta.get(rid_i, {})
+        placed.append(
+            {
+                "x": from_i(x),
+                "y": from_i(y),
+                "w": from_i(w),
+                "h": from_i(h),
+                "rid": f"M-{rid_i}",
+                "kind": "mandatory",
+                "label": meta.get("label", str(rid_i)),
+                "variant_id": meta.get("variant_id"),
+            }
+        )
+    return placed
+
+
 def _pack_mandatory_best(
     sheet_w: float,
     sheet_h: float,
     mandatory: list[PieceIn],
+    stock_options: list[PieceIn],
     scale: int,
     to_i,
+    from_i,
 ) -> tuple[list[tuple[int, int, int, int, int, int]], dict[int, dict[str, Any]], int]:
     """
     Returns (rect_list as from packer, rect_meta, total_mandatory_instances).
-    rect_list entries: (bin_id, x, y, w, h, rid)
+    Elige el layout que deja huecos aptos para stock grande (p. ej. 2×1165×920 en horizontal).
     """
     sw_i, sh_i = to_i(sheet_w), to_i(sheet_h)
     total_inst = sum(p.quantity for p in mandatory)
 
     best_list: list[tuple[int, int, int, int, int, int]] | None = None
     best_meta: dict[int, dict[str, Any]] | None = None
+    best_score = -1.0
+    best_count = -1
+
     for Algo in _MANDATORY_PACK_ALGOS:
-        packer = newPacker(PackingMode.Offline, PackingBin.BBF, Algo, sort_algo=SORT_NONE, rotation=True)
-        packer.add_bin(sw_i, sh_i)
-        rect_meta: dict[int, dict[str, Any]] = {}
-        rid = 0
-        for p in mandatory:
-            for _ in range(p.quantity):
-                rect_meta[rid] = {
-                    "kind": "mandatory",
-                    "label": p.label or f"{p.width}×{p.height} mm",
-                    "variant_id": p.variant_id,
-                    "w": p.width,
-                    "h": p.height,
-                }
-                packer.add_rect(to_i(p.width), to_i(p.height), rid=rid)
-                rid += 1
-        packer.pack()
-        lst = list(packer.rect_list())
-        if best_list is None or len(lst) > len(best_list):
-            best_list = lst
-            best_meta = rect_meta
-        if len(lst) >= total_inst:
-            break
+        for allow_rotation in (True, False):
+            packer = newPacker(
+                PackingMode.Offline, PackingBin.BBF, Algo, sort_algo=SORT_NONE, rotation=allow_rotation
+            )
+            packer.add_bin(sw_i, sh_i)
+            rect_meta: dict[int, dict[str, Any]] = {}
+            rid = 0
+            for p in mandatory:
+                for _ in range(p.quantity):
+                    rect_meta[rid] = {
+                        "kind": "mandatory",
+                        "label": p.label or f"{p.width}×{p.height} mm",
+                        "variant_id": p.variant_id,
+                        "w": p.width,
+                        "h": p.height,
+                    }
+                    packer.add_rect(to_i(p.width), to_i(p.height), rid=rid)
+                    rid += 1
+            packer.pack()
+            lst = list(packer.rect_list())
+            count = len(lst)
+            if count < best_count and best_count >= total_inst:
+                continue
+            if count < total_inst:
+                if count > best_count:
+                    best_list = lst
+                    best_meta = rect_meta
+                    best_count = count
+                continue
+            placed_m = _rect_list_to_placed_m(lst, rect_meta, from_i)
+            score = _mandatory_layout_score(placed_m, rect_meta, sheet_w, sheet_h, stock_options)
+            if count > best_count or score > best_score:
+                best_list = lst
+                best_meta = rect_meta
+                best_score = score
+                best_count = count
 
     assert best_list is not None and best_meta is not None
     return best_list, best_meta, total_inst
@@ -456,7 +660,9 @@ def _run_pack(data: NestingRequest) -> dict[str, Any]:
     sheet_w, sheet_h = data.sheet_width, data.sheet_height
     sheet_area = sheet_w * sheet_h
 
-    mand_list, rect_meta_m, total_mand = _pack_mandatory_best(sheet_w, sheet_h, data.mandatory, scale, to_i)
+    mand_list, rect_meta_m, total_mand = _pack_mandatory_best(
+        sheet_w, sheet_h, data.mandatory, data.stock_options, scale, to_i, from_i
+    )
 
     placed_m: list[dict[str, Any]] = []
     placed_m_rids: set[int] = set()
@@ -520,9 +726,10 @@ def _run_pack(data: NestingRequest) -> dict[str, Any]:
     ]
 
     dxf_rects = [(p["x"], p["y"], p["w"], p["h"]) for p in placed]
-    dxf_str = _build_dxf(sheet_w, sheet_h, dxf_rects)
+    outline = data.include_sheet_outline
+    dxf_str = _build_dxf(sheet_w, sheet_h, dxf_rects, include_sheet_outline=outline)
     dxf_b64 = base64.b64encode(dxf_str.encode("utf-8")).decode("ascii")
-    plt_str = _build_plt(dxf_rects)
+    plt_str = _build_plt(dxf_rects, sheet_w=sheet_w, sheet_h=sheet_h, include_sheet_outline=outline)
     plt_b64 = base64.b64encode(plt_str.encode("utf-8")).decode("ascii")
 
     return {
@@ -533,6 +740,7 @@ def _run_pack(data: NestingRequest) -> dict[str, Any]:
         "waste_percent": round(waste_percent, 2),
         "void_regions": void_regions,
         "all_mandatory_placed": all_mandatory_placed,
+        "include_sheet_outline": outline,
         "dxf_base64": dxf_b64,
         "plt_base64": plt_b64,
         "sheet": {"width": sheet_w, "height": sheet_h},

@@ -5,7 +5,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY main.py trace.py .
+COPY main.py trace.py test_nesting.py .
 
 EXPOSE 8081
 
