@@ -228,6 +228,7 @@
 	{/if}
 
 	<p class="mt-3 text-xs text-gray-500">
-		El DXF y el PLT exportan <strong>una sola línea</strong> por cada arista de corte (sin duplicar bordes compartidos entre piezas).
+		El DXF y el PLT exportan <strong>una sola línea</strong> por arista de corte entre piezas. El borde exterior de la lámina solo se incluye si
+		activas la opción en el formulario.
 	</p>
 </div>

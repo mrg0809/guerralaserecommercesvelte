@@ -10,6 +10,8 @@
 
 	let sheetW = $state(1220);
 	let sheetH = $state(2440);
+	/** Borde exterior del material en DXF/PLT (suele no hacer falta cortar ahí). */
+	let includeSheetOutline = $state(false);
 
 	type MandRow = { id: string; width: number; height: number; quantity: number; label: string };
 	function newMandRow(w = 400, h = 400, q = 1): MandRow {
@@ -114,7 +116,8 @@
 					sheet_width: sheetW,
 					sheet_height: sheetH,
 					mandatory,
-					stock_options
+					stock_options,
+					include_sheet_outline: includeSheetOutline
 				})
 			});
 
@@ -205,6 +208,19 @@
 						<input type="number" bind:value={sheetH} min="1" class="mt-1 block w-32 rounded border px-2 py-1" />
 					</label>
 				</div>
+				<label class="mt-4 flex cursor-pointer items-start gap-2 text-sm text-gray-700">
+					<input
+						type="checkbox"
+						class="mt-0.5 rounded border-gray-300"
+						bind:checked={includeSheetOutline}
+					/>
+					<span>
+						<strong>Incluir contorno de lámina</strong> en DXF y PLT
+						<span class="block text-xs font-normal text-gray-500">
+							Líneas en el borde del material (0,0 hasta ancho×alto). Desactivado por defecto: normalmente no se corta ahí.
+						</span>
+					</span>
+				</label>
 			</section>
 
 			<section class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">

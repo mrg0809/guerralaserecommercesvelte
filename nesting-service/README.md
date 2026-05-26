@@ -100,4 +100,4 @@ El front SvelteKit usa `/api/nesting` y `/api/vectorize` (no expone el token en 
 
 ## LightBurn
 
-El DXF/PLT de nesting exportan aristas únicas (`LINE` en DXF): si dos piezas comparten un lado, el láser solo recorre esa línea una vez.
+El DXF/PLT exportan aristas únicas (`LINE` en DXF): bordes compartidos entre piezas van una sola vez. El contorno exterior de la lámina es opcional (`include_sheet_outline` en el body, checkbox en admin); por defecto no se exporta.
