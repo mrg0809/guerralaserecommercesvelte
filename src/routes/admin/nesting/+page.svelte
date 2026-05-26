@@ -215,9 +215,10 @@
 						bind:checked={includeSheetOutline}
 					/>
 					<span>
-						<strong>Incluir contorno de lámina</strong> en DXF y PLT
+						<strong>Incluir contorno completo de lámina</strong> en DXF y PLT
 						<span class="block text-xs font-normal text-gray-500">
-							Líneas en el borde del material (0,0 hasta ancho×alto). Desactivado por defecto: normalmente no se corta ahí.
+							Por defecto no se exportan líneas donde una pieza coincide con el borde del material (izquierda, arriba,
+							abajo o derecha de la lámina). Activa esto solo si quieres el rectángulo exterior completo.
 						</span>
 					</span>
 				</label>

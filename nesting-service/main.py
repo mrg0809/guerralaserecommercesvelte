@@ -495,19 +495,14 @@ def _rect_edges(x: float, y: float, w: float, h: float) -> list[tuple[float, flo
 
 def _unique_cut_edges(
     rects: list[tuple[float, float, float, float]],
-    *,
-    sheet: tuple[float, float, float, float] | None = None,
 ) -> list[tuple[float, float, float, float]]:
     """
-    Aristas únicas de todos los rectángulos (y opcionalmente la lámina).
+    Aristas únicas de todos los rectángulos.
     Si dos piezas comparten un lado, solo se devuelve una línea.
     """
     seen: set[tuple[tuple[float, float], tuple[float, float]]] = set()
     unique: list[tuple[float, float, float, float]] = []
-    sources = list(rects)
-    if sheet is not None:
-        sources.append(sheet)
-    for x, y, w, h in sources:
+    for x, y, w, h in rects:
         for edge in _rect_edges(x, y, w, h):
             key = _edge_key(*edge)
             if key in seen:
@@ -515,6 +510,57 @@ def _unique_cut_edges(
             seen.add(key)
             unique.append(edge)
     return unique
+
+
+def _edge_on_sheet_boundary(
+    x1: float,
+    y1: float,
+    x2: float,
+    y2: float,
+    sheet_w: float,
+    sheet_h: float,
+    tol: float = 0.5,
+) -> bool:
+    """True si el segmento coincide con un borde de la lámina (no hace falta cortar ahí)."""
+    if abs(x1 - x2) <= tol:
+        if abs(x1) <= tol or abs(x1 - sheet_w) <= tol:
+            return True
+    if abs(y1 - y2) <= tol:
+        if abs(y1) <= tol or abs(y1 - sheet_h) <= tol:
+            return True
+    return False
+
+
+def _omit_sheet_boundary_edges(
+    edges: list[tuple[float, float, float, float]],
+    sheet_w: float,
+    sheet_h: float,
+) -> list[tuple[float, float, float, float]]:
+    return [e for e in edges if not _edge_on_sheet_boundary(*e, sheet_w, sheet_h)]
+
+
+def _edges_for_export(
+    rects: list[tuple[float, float, float, float]],
+    sheet_w: float,
+    sheet_h: float,
+    *,
+    include_sheet_outline: bool = False,
+) -> list[tuple[float, float, float, float]]:
+    """
+    Aristas de corte para DXF/PLT: sin líneas en el borde del material salvo que
+    se pida explícitamente el contorno completo de la lámina.
+    """
+    edges = _omit_sheet_boundary_edges(_unique_cut_edges(rects), sheet_w, sheet_h)
+    if not include_sheet_outline:
+        return edges
+    seen = {_edge_key(*e) for e in edges}
+    out = list(edges)
+    for edge in _rect_edges(0.0, 0.0, sheet_w, sheet_h):
+        key = _edge_key(*edge)
+        if key not in seen:
+            seen.add(key)
+            out.append(edge)
+    return out
 
 
 def _build_dxf(
@@ -526,8 +572,7 @@ def _build_dxf(
 ) -> str:
     doc = ezdxf.new("R2000")
     msp = doc.modelspace()
-    sheet = (0.0, 0.0, sheet_w, sheet_h) if include_sheet_outline else None
-    for x1, y1, x2, y2 in _unique_cut_edges(rects, sheet=sheet):
+    for x1, y1, x2, y2 in _edges_for_export(rects, sheet_w, sheet_h, include_sheet_outline=include_sheet_outline):
         msp.add_line((x1, y1), (x2, y2))
     buf = io.StringIO()
     doc.write(buf)
@@ -546,9 +591,10 @@ def _build_plt(
     def u(mm: float) -> int:
         return int(round(mm * units_per_mm))
 
-    sheet = (0.0, 0.0, sheet_w, sheet_h) if include_sheet_outline else None
     parts: list[str] = ["IN;", "SP1;"]
-    for x1, y1, x2, y2 in _unique_cut_edges(rects, sheet=sheet):
+    for x1, y1, x2, y2 in _edges_for_export(
+        rects, sheet_w, sheet_h, include_sheet_outline=include_sheet_outline
+    ):
         parts.append(f"PU{u(x1)},{u(y1)};")
         parts.append(f"PD{u(x2)},{u(y2)};")
         parts.append("PU;")
