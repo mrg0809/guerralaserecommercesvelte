@@ -228,7 +228,7 @@
 	{/if}
 
 	<p class="mt-3 text-xs text-gray-500">
-		El DXF y el PLT exportan <strong>una sola línea</strong> por arista de corte entre piezas. El borde exterior de la lámina solo se incluye si
-		activas la opción en el formulario.
+		En DXF/PLT no se dibujan líneas en el borde del material (donde la pieza coincide con el borde de la lámina). Solo cortes internos y los
+		lados libres de las piezas. El contorno completo de la lámina es opcional en el formulario.
 	</p>
 </div>
