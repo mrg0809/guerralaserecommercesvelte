@@ -1,6 +1,6 @@
 # Nesting + trace service (FastAPI)
 
-Servicio de acomodo rectangular (`rectpack`), vectorización de imágenes a DXF/PLT (`opencv` + `ezdxf`) para Guerra Láser.
+Servicio de acomodo rectangular (`rectpack`), vectorización de imágenes a DXF/PLT (`opencv` + `ezdxf`) y constructor visual SVG→DXF (`Inkscape`) para Guerra Láser.
 
 ## Requisitos
 
@@ -15,7 +15,7 @@ NESTING_TOKEN=un-secreto-largo-aleatorio
 NESTING_CORS_ORIGINS=http://localhost:5173,https://tu-dominio-vercel.app
 ```
 
-El mismo valor de `NESTING_TOKEN` debe configurarse en el proyecto SvelteKit como `NESTING_API_TOKEN` (variable privada). Ese mismo URL/token sirve para nesting (`/api/nesting`) y vectorización (`/api/vectorize`).
+El mismo valor de `NESTING_TOKEN` debe configurarse en el proyecto SvelteKit como `NESTING_API_TOKEN` (variable privada). Ese mismo URL/token sirve para nesting (`/api/nesting`), vectorización (`/api/vectorize`) y constructor de diseños (`/api/design-builder/export-dxf`).
 
 ## Arranque
 
@@ -32,6 +32,16 @@ Puerto host **8002** → contenedor **8081** (uvicorn directo sin compose: **808
 - `POST /nest` — body JSON `NestingRequest`; header `X-Nesting-Token`. Respuesta: `layout`, `unplaced`, `efficiency`, `dxf_base64`, `plt_base64`, etc.
 - `POST /generate-dxf` / `POST /generate-plt` — mismo body JSON; archivo directo.
 - `POST /trace` — `multipart/form-data`; header `X-Nesting-Token`. Convierte imagen a DXF/PLT para grabado (termos, tarjetas). Con `preview_only=true` devuelve solo vistas previa (máscara + trazos) sin generar archivos.
+- `POST /api/v1/vector/export-dxf` — body JSON `{ svg, width_mm, height_mm, filename? }`; header `X-Nesting-Token`. Convierte SVG del constructor visual a DXF (Inkscape + capa ENGRAVE negra).
+
+Campos de `/api/v1/vector/export-dxf`:
+
+| Campo | Requerido | Default |
+|-------|-----------|---------|
+| `svg` | sí | — |
+| `width_mm` | sí | — |
+| `height_mm` | sí | — |
+| `filename` | no | diseno_guerra_laser.dxf |
 
 Campos de `/trace`:
 
@@ -98,6 +108,14 @@ Tests locales: `pip install -r requirements.txt && python test_trace.py`
 
 El front SvelteKit usa `/api/nesting` y `/api/vectorize` (no expone el token en el navegador).
 
-## LightBurn
+## DXF/PLT y RDWorks
 
-El DXF/PLT exportan aristas únicas (`LINE` en DXF) y **omit** líneas que coinciden con el borde del material (pieza apoyada en x=0, y=0, etc.). Solo quedan cortes internos y lados libres de las piezas. El contorno completo de la lámina es opcional (`include_sheet_outline`).
+- Aristas únicas (`LINE` en DXF): bordes compartidos entre piezas van una sola vez.
+- No se exportan líneas donde una pieza coincide con el borde del material, salvo que actives `include_sheet_outline`.
+- **Sobrecorte** (`cut_overhang_mm`, default 5): los cortes horizontales internos se alargan de `-overhang` a `ancho + overhang`; el resto de líneas se extienden solo hacia vacío. Así el láser abre la hoja aunque la pieza no llegue al borde derecho del desperdicio.
+
+### Origen en RDWorks (recomendado)
+
+1. Define el **origen de usuario** en la esquina interna de la escuadra física (coincide con `(0,0)` del DXF).
+2. **No muevas** el origen manualmente en el panel de la máquina entre trabajos.
+3. Coloca la plancha al tope de la escuadra y usa el sobrecorte configurado (ajusta 3–5 mm si hace falta).

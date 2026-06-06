@@ -177,6 +177,13 @@
 					label: 'Imagen → DXF/PLT',
 					icon: '🖼️',
 					permission: 'view_admin_panel'
+				},
+				{
+					kind: 'link',
+					href: '/admin/design-builder',
+					label: 'Constructor de diseños',
+					icon: '✏️',
+					permission: 'view_admin_panel'
 				}
 			]
 		},

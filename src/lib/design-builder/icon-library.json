@@ -1,0 +1,28 @@
+{
+  "categories": [
+    {
+      "id": "lineas",
+      "label": "Líneas decorativas",
+      "icons": [
+        { "id": "onda-1", "name": "Onda", "path": "/design-icons/lineas/onda-1.svg" },
+        { "id": "linea-curva-1", "name": "Línea curva", "path": "/design-icons/lineas/linea-curva-1.svg" }
+      ]
+    },
+    {
+      "id": "formas",
+      "label": "Formas",
+      "icons": [
+        { "id": "corazon-1", "name": "Corazón", "path": "/design-icons/formas/corazon-1.svg" },
+        { "id": "nube-1", "name": "Nube", "path": "/design-icons/formas/nube-1.svg" }
+      ]
+    },
+    {
+      "id": "bebidas",
+      "label": "Bebidas",
+      "icons": [
+        { "id": "cerveza-1", "name": "Tarro cerveza", "path": "/design-icons/bebidas/cerveza-1.svg" },
+        { "id": "vaso-1", "name": "Vaso", "path": "/design-icons/bebidas/vaso-1.svg" }
+      ]
+    }
+  ]
+}

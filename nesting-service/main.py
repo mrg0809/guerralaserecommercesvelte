@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import base64
 import io
+import math
 import os
 from typing import Any
 
@@ -19,11 +20,14 @@ import ezdxf
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from trace import ALLOWED_CONTENT_TYPES, MAX_UPLOAD_BYTES, parse_bool, run_preview, run_trace
+from vector.router import router as vector_router
 from pydantic import BaseModel, Field
 from rectpack import SORT_NONE, PackingBin, PackingMode, newPacker
 from rectpack.maxrects import MaxRectsBaf, MaxRectsBl, MaxRectsBlsf, MaxRectsBssf  # noqa: F401 — Bl used in void_strategies
 
-app = FastAPI(title="Guerra Láser Nesting + Trace", version="1.1.0")
+app = FastAPI(title="Guerra Láser Nesting + Trace", version="1.2.0")
+
+app.include_router(vector_router)
 
 _cors = os.getenv("NESTING_CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")
 app.add_middleware(
@@ -51,6 +55,12 @@ class NestingRequest(BaseModel):
     include_sheet_outline: bool = Field(
         default=False,
         description="Si true, añade el rectángulo exterior de la lámina al DXF/PLT (borde del material).",
+    )
+    cut_overhang_mm: float = Field(
+        default=5.0,
+        ge=0,
+        le=20,
+        description="Sobrecorte (mm) de líneas de corte hacia vacío / fuera de la lámina (RDWorks). 0 = sin sobrecorte.",
     )
 
 
@@ -539,18 +549,92 @@ def _omit_sheet_boundary_edges(
     return [e for e in edges if not _edge_on_sheet_boundary(*e, sheet_w, sheet_h)]
 
 
+def _point_inside_any_rect(
+    x: float,
+    y: float,
+    rects: list[tuple[float, float, float, float]],
+    tol: float = 0.5,
+) -> bool:
+    for rx, ry, rw, rh in rects:
+        if rx - tol <= x <= rx + rw + tol and ry - tol <= y <= ry + rh + tol:
+            return True
+    return False
+
+
+def _is_horizontal_edge(x1: float, y1: float, x2: float, y2: float, tol: float = 0.5) -> bool:
+    return abs(y1 - y2) <= tol
+
+
+def _extend_edge_endpoints(
+    edge: tuple[float, float, float, float],
+    rects: list[tuple[float, float, float, float]],
+    overhang: float,
+    tol: float = 0.5,
+) -> tuple[float, float, float, float]:
+    """Alarga cada extremo a lo largo de la línea si el punto cae en vacío (sin material)."""
+    x1, y1, x2, y2 = edge
+    dx, dy = x2 - x1, y2 - y1
+    length = math.hypot(dx, dy)
+    if length <= tol or overhang <= 0:
+        return edge
+    ux, uy = dx / length, dy / length
+    nx1, ny1 = x1 - ux * overhang, y1 - uy * overhang
+    if not _point_inside_any_rect(nx1, ny1, rects, tol):
+        x1, y1 = nx1, ny1
+    nx2, ny2 = x2 + ux * overhang, y2 + uy * overhang
+    if not _point_inside_any_rect(nx2, ny2, rects, tol):
+        x2, y2 = nx2, ny2
+    return (x1, y1, x2, y2)
+
+
+def _extend_horizontal_through_sheet(
+    edge: tuple[float, float, float, float],
+    sheet_w: float,
+    overhang: float,
+    tol: float = 0.5,
+) -> tuple[float, float, float, float]:
+    """Cortes horizontales internos: atraviesan toda la lámina + sobrecorte lateral."""
+    x1, y1, x2, y2 = edge
+    if not _is_horizontal_edge(x1, y1, x2, y2, tol):
+        return edge
+    y = (y1 + y2) / 2.0
+    return (-overhang, y, sheet_w + overhang, y)
+
+
+def _apply_cut_overhang(
+    edges: list[tuple[float, float, float, float]],
+    rects: list[tuple[float, float, float, float]],
+    sheet_w: float,
+    sheet_h: float,
+    overhang: float,
+) -> list[tuple[float, float, float, float]]:
+    if overhang <= 0:
+        return edges
+    _ = sheet_h
+    return [
+        _extend_horizontal_through_sheet(
+            _extend_edge_endpoints(edge, rects, overhang),
+            sheet_w,
+            overhang,
+        )
+        for edge in edges
+    ]
+
+
 def _edges_for_export(
     rects: list[tuple[float, float, float, float]],
     sheet_w: float,
     sheet_h: float,
     *,
     include_sheet_outline: bool = False,
+    cut_overhang_mm: float = 0.0,
 ) -> list[tuple[float, float, float, float]]:
     """
     Aristas de corte para DXF/PLT: sin líneas en el borde del material salvo que
     se pida explícitamente el contorno completo de la lámina.
     """
     edges = _omit_sheet_boundary_edges(_unique_cut_edges(rects), sheet_w, sheet_h)
+    edges = _apply_cut_overhang(edges, rects, sheet_w, sheet_h, cut_overhang_mm)
     if not include_sheet_outline:
         return edges
     seen = {_edge_key(*e) for e in edges}
@@ -569,10 +653,17 @@ def _build_dxf(
     rects: list[tuple[float, float, float, float]],
     *,
     include_sheet_outline: bool = False,
+    cut_overhang_mm: float = 0.0,
 ) -> str:
     doc = ezdxf.new("R2000")
     msp = doc.modelspace()
-    for x1, y1, x2, y2 in _edges_for_export(rects, sheet_w, sheet_h, include_sheet_outline=include_sheet_outline):
+    for x1, y1, x2, y2 in _edges_for_export(
+        rects,
+        sheet_w,
+        sheet_h,
+        include_sheet_outline=include_sheet_outline,
+        cut_overhang_mm=cut_overhang_mm,
+    ):
         msp.add_line((x1, y1), (x2, y2))
     buf = io.StringIO()
     doc.write(buf)
@@ -585,6 +676,7 @@ def _build_plt(
     sheet_w: float = 0.0,
     sheet_h: float = 0.0,
     include_sheet_outline: bool = False,
+    cut_overhang_mm: float = 0.0,
 ) -> str:
     units_per_mm = 40
 
@@ -593,7 +685,11 @@ def _build_plt(
 
     parts: list[str] = ["IN;", "SP1;"]
     for x1, y1, x2, y2 in _edges_for_export(
-        rects, sheet_w, sheet_h, include_sheet_outline=include_sheet_outline
+        rects,
+        sheet_w,
+        sheet_h,
+        include_sheet_outline=include_sheet_outline,
+        cut_overhang_mm=cut_overhang_mm,
     ):
         parts.append(f"PU{u(x1)},{u(y1)};")
         parts.append(f"PD{u(x2)},{u(y2)};")
@@ -773,9 +869,14 @@ def _run_pack(data: NestingRequest) -> dict[str, Any]:
 
     dxf_rects = [(p["x"], p["y"], p["w"], p["h"]) for p in placed]
     outline = data.include_sheet_outline
-    dxf_str = _build_dxf(sheet_w, sheet_h, dxf_rects, include_sheet_outline=outline)
+    overhang = data.cut_overhang_mm
+    dxf_str = _build_dxf(
+        sheet_w, sheet_h, dxf_rects, include_sheet_outline=outline, cut_overhang_mm=overhang
+    )
     dxf_b64 = base64.b64encode(dxf_str.encode("utf-8")).decode("ascii")
-    plt_str = _build_plt(dxf_rects, sheet_w=sheet_w, sheet_h=sheet_h, include_sheet_outline=outline)
+    plt_str = _build_plt(
+        dxf_rects, sheet_w=sheet_w, sheet_h=sheet_h, include_sheet_outline=outline, cut_overhang_mm=overhang
+    )
     plt_b64 = base64.b64encode(plt_str.encode("utf-8")).decode("ascii")
 
     return {
@@ -787,6 +888,7 @@ def _run_pack(data: NestingRequest) -> dict[str, Any]:
         "void_regions": void_regions,
         "all_mandatory_placed": all_mandatory_placed,
         "include_sheet_outline": outline,
+        "cut_overhang_mm": overhang,
         "dxf_base64": dxf_b64,
         "plt_base64": plt_b64,
         "sheet": {"width": sheet_w, "height": sheet_h},

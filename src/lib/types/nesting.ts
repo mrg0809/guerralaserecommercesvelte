@@ -38,5 +38,6 @@ export type NestApiResult = {
 	void_regions?: VoidRegion[];
 	all_mandatory_placed?: boolean;
 	include_sheet_outline?: boolean;
+	cut_overhang_mm?: number;
 	error?: string;
 };

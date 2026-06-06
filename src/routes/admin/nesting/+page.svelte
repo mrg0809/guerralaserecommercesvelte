@@ -12,6 +12,8 @@
 	let sheetH = $state(2440);
 	/** Borde exterior del material en DXF/PLT (suele no hacer falta cortar ahí). */
 	let includeSheetOutline = $state(false);
+	/** Sobrecorte de líneas de corte hacia vacío / fuera de lámina (RDWorks). */
+	let cutOverhangMm = $state(5);
 
 	type MandRow = { id: string; width: number; height: number; quantity: number; label: string };
 	function newMandRow(w = 400, h = 400, q = 1): MandRow {
@@ -117,7 +119,8 @@
 					sheet_height: sheetH,
 					mandatory,
 					stock_options,
-					include_sheet_outline: includeSheetOutline
+					include_sheet_outline: includeSheetOutline,
+					cut_overhang_mm: Math.min(20, Math.max(0, cutOverhangMm))
 				})
 			});
 
@@ -206,6 +209,20 @@
 					<label class="block text-sm">
 						<span class="text-gray-600">Alto (mm)</span>
 						<input type="number" bind:value={sheetH} min="1" class="mt-1 block w-32 rounded border px-2 py-1" />
+					</label>
+					<label class="block text-sm">
+						<span class="text-gray-600">Sobrecorte de corte (mm)</span>
+						<input
+							type="number"
+							bind:value={cutOverhangMm}
+							min="0"
+							max="20"
+							step="1"
+							class="mt-1 block w-32 rounded border px-2 py-1"
+						/>
+						<span class="mt-1 block text-xs font-normal text-gray-500">
+							Alarga cortes hacia el desperdicio y fuera de la lámina. Origen fijo en escuadra (RDWorks). 0 = sin sobrecorte.
+						</span>
 					</label>
 				</div>
 				<label class="mt-4 flex cursor-pointer items-start gap-2 text-sm text-gray-700">
