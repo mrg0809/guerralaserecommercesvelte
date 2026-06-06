@@ -348,7 +348,8 @@
 				<DesignCanvas {widthMm} {heightMm} onReady={onCanvasReady} />
 			{/key}
 			<p class="mt-3 text-xs text-gray-500">
-				Arrastra, escala y rota los elementos. El fondo blanco no se exporta al DXF.
+				Arrastra, escala y rota los elementos. Cada nuevo elemento se coloca en una cuadrícula para evitar
+				solapamientos. El QR se exporta como trazos vectoriales (esquina superior derecha).
 			</p>
 		</section>
 	</div>
