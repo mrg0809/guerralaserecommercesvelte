@@ -1,8 +1,7 @@
 import {
 	Canvas,
 	FabricText,
-	Group,
-	Rect,
+	Path,
 	loadSVGFromURL,
 	util,
 	type Canvas as FabricCanvas,
@@ -145,15 +144,15 @@ export function addTextToCanvas(
 	return obj;
 }
 
-function buildFilledQrGroup(content: string, sizePx: number): Group {
+/** Path SVG en unidades de módulo (enteros) — un solo trazo relleno, sin huecos subpíxel. */
+function buildQrPathData(content: string): { path: string; moduleTotal: number } {
 	const qr = QRCode.create(content, { errorCorrectionLevel: 'M' });
 	const { modules } = qr;
 	const count = modules.size;
-	const marginModules = 1;
-	const totalModules = count + marginModules * 2;
-	const modulePx = sizePx / totalModules;
+	const margin = 1;
+	const moduleTotal = count + margin * 2;
+	const parts: string[] = [];
 
-	const rects: Rect[] = [];
 	for (let row = 0; row < count; row++) {
 		let col = 0;
 		while (col < count) {
@@ -162,43 +161,51 @@ function buildFilledQrGroup(content: string, sizePx: number): Group {
 			const startCol = col;
 			while (col < count && modules.get(row, col)) col++;
 			const runLen = col - startCol;
-			rects.push(
-				new Rect({
-					left: (startCol + marginModules) * modulePx,
-					top: (row + marginModules) * modulePx,
-					width: runLen * modulePx,
-					height: modulePx,
-					fill: '#000000',
-					stroke: null,
-					strokeWidth: 0
-				})
-			);
+			const x = startCol + margin;
+			const y = row + margin;
+			parts.push(`M ${x} ${y} h ${runLen} v 1 h ${-runLen} z`);
 		}
 	}
 
-	const group = new Group(rects, { subTargetCheck: false });
-	(group as FabricObject & { isLaserQr?: boolean }).isLaserQr = true;
-	return group;
+	return { path: parts.join(' '), moduleTotal };
+}
+
+function buildFilledQrPath(content: string, sizePx: number): Path {
+	const { path, moduleTotal } = buildQrPathData(content);
+	const scale = sizePx / moduleTotal;
+
+	const qrPath = new Path(path, {
+		fill: '#000000',
+		stroke: null,
+		strokeWidth: 0,
+		objectCaching: false,
+		originX: 'left',
+		originY: 'top',
+		scaleX: scale,
+		scaleY: scale
+	});
+
+	(qrPath as FabricObject & { isLaserQr?: boolean }).isLaserQr = true;
+	return qrPath;
 }
 
 export function addQrToCanvas(canvas: FabricCanvas, content: string, sizePx = 80): void {
 	removeExistingQr(canvas);
 
-	const group = buildFilledQrGroup(content, sizePx);
-	group.set({ left: 0, top: 0, originX: 'left', originY: 'top' });
-	group.setCoords();
-
-	const bounds = group.getBoundingRect();
+	const qrPath = buildFilledQrPath(content, sizePx);
+	qrPath.setCoords();
+	const bounds = qrPath.getBoundingRect();
 	const pos = computePlacement(canvas, bounds.width, bounds.height, 'topRight', 0);
-	canvas.add(group);
-	group.set({
+
+	canvas.add(qrPath);
+	qrPath.set({
 		left: pos.left,
 		top: pos.top,
 		originX: 'center',
 		originY: 'center'
 	});
-	group.setCoords();
-	canvas.setActiveObject(group);
+	qrPath.setCoords();
+	canvas.setActiveObject(qrPath);
 	canvas.requestRenderAll();
 }
 
