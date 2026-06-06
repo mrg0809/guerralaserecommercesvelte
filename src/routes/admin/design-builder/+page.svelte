@@ -4,9 +4,10 @@
 	import type { Canvas as FabricCanvas } from 'fabric';
 	import { supabase } from '$lib/supabaseClient';
 	import DesignCanvas from '$lib/components/admin/design-builder/DesignCanvas.svelte';
-	import iconLibrary from '$lib/design-builder/icon-library.json';
+	import fallbackIconLibrary from '$lib/design-builder/icon-library.json';
 	import productsConfig from '$lib/design-builder/products.json';
 	import { LASER_FONTS, loadAllLaserFonts, loadLaserFont } from '$lib/design-builder/fonts';
+	import { fetchIconLibrary } from '$lib/services/designIconsService';
 	import {
 		addIconFromLibrary,
 		addQrToCanvas,
@@ -30,13 +31,16 @@
 	let fontSize = $state(24);
 	let qrContent = $state('https://guerralaser.com');
 	let qrSize = $state(80);
-	let selectedCategory = $state(iconLibrary.categories[0]?.id ?? 'lineas');
+	let selectedCategory = $state('lineas');
+	let iconSearch = $state('');
+
+	let categories = $state<IconCategory[]>([]);
+	let loadingIcons = $state(true);
+	let iconsSource = $state<'supabase' | 'fallback'>('fallback');
 
 	let fabricCanvas: FabricCanvas | null = $state(null);
 	let exportLoading = $state(false);
 	let errorMsg = $state<string | null>(null);
-
-	const categories = iconLibrary.categories as IconCategory[];
 
 	$effect(() => {
 		const preset = presets.find((p) => p.id === presetId);
@@ -55,7 +59,30 @@
 			return;
 		}
 		await loadAllLaserFonts();
+		await loadIconLibrary();
 	});
+
+	async function loadIconLibrary() {
+		loadingIcons = true;
+		try {
+			const library = await fetchIconLibrary(true);
+			if (library.categories.length > 0 && library.categories.some((c) => c.icons.length > 0)) {
+				categories = library.categories;
+				iconsSource = 'supabase';
+				if (!categories.some((c) => c.id === selectedCategory)) {
+					selectedCategory = categories[0]?.id ?? 'lineas';
+				}
+			} else {
+				categories = fallbackIconLibrary.categories as IconCategory[];
+				iconsSource = 'fallback';
+			}
+		} catch {
+			categories = fallbackIconLibrary.categories as IconCategory[];
+			iconsSource = 'fallback';
+		} finally {
+			loadingIcons = false;
+		}
+	}
 
 	function onCanvasReady(canvas: FabricCanvas) {
 		fabricCanvas = canvas;
@@ -128,6 +155,13 @@
 	}
 
 	const activeCategory = $derived(categories.find((c) => c.id === selectedCategory) ?? categories[0]);
+
+	const filteredIcons = $derived.by(() => {
+		const icons = activeCategory?.icons ?? [];
+		const q = iconSearch.trim().toLowerCase();
+		if (!q) return icons;
+		return icons.filter((icon) => icon.name.toLowerCase().includes(q));
+	});
 </script>
 
 <svelte:head>
@@ -310,6 +344,22 @@
 					</div>
 				{:else if activeTab === 'iconos'}
 					<div class="space-y-3">
+						<div class="flex items-center justify-between gap-2">
+							<span class="text-xs text-gray-500">
+								{iconsSource === 'supabase' ? 'Catálogo en línea' : 'Catálogo local (fallback)'}
+							</span>
+							<a href="/admin/design-icons" class="text-xs text-blue-600 underline">Gestionar biblioteca</a>
+						</div>
+						<div>
+							<label for="icon-search" class="mb-1 block text-xs font-medium text-gray-600">Buscar</label>
+							<input
+								id="icon-search"
+								type="search"
+								bind:value={iconSearch}
+								placeholder="Nombre del icono…"
+								class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+							/>
+						</div>
 						<div>
 							<label for="category" class="mb-1 block text-xs font-medium text-gray-600">Categoría</label>
 							<select
@@ -322,19 +372,28 @@
 								{/each}
 							</select>
 						</div>
-						<div class="grid grid-cols-2 gap-2">
-							{#each activeCategory?.icons ?? [] as icon}
-								<button
-									type="button"
-									onclick={() => handleAddIcon(icon.path)}
-									class="flex flex-col items-center gap-1 rounded-md border border-gray-200 p-2 text-xs hover:border-gray-400 hover:bg-gray-50"
-									title={icon.name}
-								>
-									<img src={icon.path} alt={icon.name} class="h-10 w-10 object-contain" />
-									<span class="truncate text-center">{icon.name}</span>
-								</button>
-							{/each}
-						</div>
+						{#if loadingIcons}
+							<p class="text-xs text-gray-500">Cargando iconos…</p>
+						{:else if filteredIcons.length === 0}
+							<p class="text-xs text-gray-500">
+								No hay iconos en esta categoría.
+								<a href="/admin/design-icons" class="text-blue-600 underline">Sube SVGs aquí</a>.
+							</p>
+						{:else}
+							<div class="grid grid-cols-2 gap-2 max-h-64 overflow-y-auto">
+								{#each filteredIcons as icon}
+									<button
+										type="button"
+										onclick={() => handleAddIcon(icon.path)}
+										class="flex flex-col items-center gap-1 rounded-md border border-gray-200 p-2 text-xs hover:border-gray-400 hover:bg-gray-50"
+										title={icon.name}
+									>
+										<img src={icon.path} alt={icon.name} class="h-10 w-10 object-contain" />
+										<span class="truncate text-center">{icon.name}</span>
+									</button>
+								{/each}
+							</div>
+						{/if}
 					</div>
 				{/if}
 			</div>

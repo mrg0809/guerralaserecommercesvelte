@@ -6,6 +6,7 @@ import { PUBLIC_SUPABASE_URL } from '$env/static/public';
 
 // URL base del bucket de imágenes de productos
 export const PRODUCT_IMAGES_BUCKET = 'product-images';
+export const DESIGN_ICONS_BUCKET = 'design-icons';
 
 // Configuración básica de ImageKit
 // ID proporcionado: oljeu5ae7y
@@ -24,6 +25,18 @@ export function getProductImageUrl(path: string): string {
 	const cleanPath = path.startsWith('/') ? path.slice(1) : path;
 
 	return `${PUBLIC_SUPABASE_URL}/storage/v1/object/public/${PRODUCT_IMAGES_BUCKET}/${cleanPath}`;
+}
+
+/**
+ * URL pública de un icono SVG en el bucket design-icons
+ */
+export function getDesignIconUrl(path: string): string {
+	if (!path) return '';
+	const cleanPath = path.startsWith('/') ? path.slice(1) : path;
+	if (cleanPath.startsWith('http://') || cleanPath.startsWith('https://')) {
+		return cleanPath;
+	}
+	return `${PUBLIC_SUPABASE_URL}/storage/v1/object/public/${DESIGN_ICONS_BUCKET}/${cleanPath}`;
 }
 
 /**

@@ -184,6 +184,13 @@
 					label: 'Constructor de diseños',
 					icon: '✏️',
 					permission: 'view_admin_panel'
+				},
+				{
+					kind: 'link',
+					href: '/admin/design-icons',
+					label: 'Biblioteca de iconos',
+					icon: '🎨',
+					permission: 'view_admin_panel'
 				}
 			]
 		},

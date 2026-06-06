@@ -11,11 +11,13 @@ export interface IconEntry {
 	id: string;
 	name: string;
 	path: string;
+	storagePath?: string;
 }
 
 export interface IconCategory {
 	id: string;
 	label: string;
+	categoryUuid?: string;
 	icons: IconEntry[];
 }
 
