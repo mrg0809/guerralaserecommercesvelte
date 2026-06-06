@@ -71,7 +71,7 @@
 	async function handleAddQr() {
 		if (!fabricCanvas || !qrContent.trim()) return;
 		errorMsg = null;
-		await addQrToCanvas(fabricCanvas, qrContent.trim(), qrSize);
+		addQrToCanvas(fabricCanvas, qrContent.trim(), qrSize);
 	}
 
 	async function handleAddIcon(path: string) {

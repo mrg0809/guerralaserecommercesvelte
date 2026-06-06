@@ -1,7 +1,8 @@
 import {
 	Canvas,
 	FabricText,
-	loadSVGFromString,
+	Group,
+	Rect,
 	loadSVGFromURL,
 	util,
 	type Canvas as FabricCanvas,
@@ -144,48 +145,53 @@ export function addTextToCanvas(
 	return obj;
 }
 
-export async function addQrToCanvas(canvas: FabricCanvas, content: string, sizePx = 80): Promise<void> {
+function buildFilledQrGroup(content: string, sizePx: number): Group {
+	const qr = QRCode.create(content, { errorCorrectionLevel: 'M' });
+	const { modules } = qr;
+	const count = modules.size;
+	const marginModules = 1;
+	const totalModules = count + marginModules * 2;
+	const modulePx = sizePx / totalModules;
+
+	const rects: Rect[] = [];
+	for (let row = 0; row < count; row++) {
+		for (let col = 0; col < count; col++) {
+			if (modules.get(row, col)) {
+				rects.push(
+					new Rect({
+						left: (col + marginModules) * modulePx,
+						top: (row + marginModules) * modulePx,
+						width: modulePx,
+						height: modulePx,
+						fill: '#000000',
+						stroke: null,
+						strokeWidth: 0
+					})
+				);
+			}
+		}
+	}
+
+	const group = new Group(rects, { subTargetCheck: false });
+	(group as FabricObject & { isLaserQr?: boolean }).isLaserQr = true;
+	return group;
+}
+
+export function addQrToCanvas(canvas: FabricCanvas, content: string, sizePx = 80): void {
 	removeExistingQr(canvas);
 
-	const svgString = await QRCode.toString(content, {
-		type: 'svg',
-		margin: 1,
-		width: sizePx,
-		color: {
-			dark: '#000000ff',
-			light: '#00000000'
-		}
-	});
-
-	const { objects, options } = await loadSVGFromString(svgString);
-	if (!objects.length) return;
-
-	// Quitar fondos blancos que no deben grabarse
-	const vectorObjects = objects.filter((obj) => {
-		const fill = (obj.fill as string | undefined)?.toLowerCase?.() ?? '';
-		return fill !== '#ffffff' && fill !== '#fff' && fill !== 'white' && fill !== 'rgb(255,255,255)';
-	});
-
-	if (!vectorObjects.length) return;
-
-	const group = util.groupSVGElements(vectorObjects, options);
-	(group as FabricObject & { isLaserQr?: boolean }).isLaserQr = true;
-
-	const bounds = group.getBoundingRect();
-	const scale = sizePx / Math.max(bounds.width, bounds.height, 1);
-	group.set({ scaleX: scale, scaleY: scale, strokeUniform: true });
+	const group = buildFilledQrGroup(content, sizePx);
+	group.set({ left: 0, top: 0, originX: 'left', originY: 'top' });
 	group.setCoords();
 
-	const scaledBounds = group.getBoundingRect();
-	const pos = computePlacement(canvas, scaledBounds.width, scaledBounds.height, 'topRight', 0);
+	const bounds = group.getBoundingRect();
+	const pos = computePlacement(canvas, bounds.width, bounds.height, 'topRight', 0);
 	canvas.add(group);
 	group.set({
 		left: pos.left,
 		top: pos.top,
 		originX: 'center',
-		originY: 'center',
-		scaleX: scale,
-		scaleY: scale
+		originY: 'center'
 	});
 	group.setCoords();
 	canvas.setActiveObject(group);
