@@ -32,6 +32,22 @@ class TestPostprocess(unittest.TestCase):
             self.assertEqual(entity.dxf.layer, LAYER_NAME)
             self.assertEqual(entity.dxf.color, 0)
 
+    def test_rect_outline_becomes_hatch(self) -> None:
+        doc = ezdxf.new("R2010")
+        msp = doc.modelspace()
+        msp.add_lwpolyline(
+            [(1, 1), (3, 1), (3, 3), (1, 3)],
+            close=True,
+            dxfattribs={"layer": "0", "color": 7},
+        )
+        buf = io.StringIO()
+        doc.write(buf)
+        result = normalize_dxf(buf.getvalue().encode('utf-8'))
+        out = ezdxf.read(io.StringIO(result.decode('utf-8')))
+        types = [e.dxftype() for e in out.modelspace()]
+        self.assertIn("HATCH", types)
+        self.assertNotIn("LWPOLYLINE", types)
+
 
 @unittest.skipUnless(shutil.which("inkscape"), "Inkscape not installed")
 class TestInkscapePipeline(unittest.TestCase):

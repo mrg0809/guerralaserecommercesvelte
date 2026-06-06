@@ -155,20 +155,24 @@ function buildFilledQrGroup(content: string, sizePx: number): Group {
 
 	const rects: Rect[] = [];
 	for (let row = 0; row < count; row++) {
-		for (let col = 0; col < count; col++) {
-			if (modules.get(row, col)) {
-				rects.push(
-					new Rect({
-						left: (col + marginModules) * modulePx,
-						top: (row + marginModules) * modulePx,
-						width: modulePx,
-						height: modulePx,
-						fill: '#000000',
-						stroke: null,
-						strokeWidth: 0
-					})
-				);
-			}
+		let col = 0;
+		while (col < count) {
+			while (col < count && !modules.get(row, col)) col++;
+			if (col >= count) break;
+			const startCol = col;
+			while (col < count && modules.get(row, col)) col++;
+			const runLen = col - startCol;
+			rects.push(
+				new Rect({
+					left: (startCol + marginModules) * modulePx,
+					top: (row + marginModules) * modulePx,
+					width: runLen * modulePx,
+					height: modulePx,
+					fill: '#000000',
+					stroke: null,
+					strokeWidth: 0
+				})
+			);
 		}
 	}
 
