@@ -1,6 +1,6 @@
 import { supabase } from '$lib/supabaseClient';
 import { DESIGN_ICONS_BUCKET, getDesignIconUrl } from '$lib/storage';
-import { slugify } from '$lib/design-builder/svgValidation';
+import { slugify, filenameToIconName } from '$lib/design-builder/svgValidation';
 import type { IconCategory, IconEntry, IconLibrary } from '$lib/types/design-builder';
 
 export interface DesignIconCategoryRow {
@@ -182,6 +182,51 @@ export async function uploadIcon(input: {
 	}
 
 	return data as DesignIconRow;
+}
+
+export interface BatchUploadResult {
+	uploaded: number;
+	failed: { filename: string; error: string }[];
+}
+
+export async function uploadIconsBatch(input: {
+	files: File[];
+	categoryId: string;
+	categorySlug: string;
+	startOrder?: number;
+}): Promise<BatchUploadResult> {
+	const result: BatchUploadResult = { uploaded: 0, failed: [] };
+	const usedSlugs = new Set<string>();
+	let order = input.startOrder ?? 0;
+
+	for (const file of input.files) {
+		const name = filenameToIconName(file.name);
+		let slug = slugify(file.name.replace(/\.svg$/i, ''));
+		while (usedSlugs.has(slug)) {
+			slug = `${slug}-${usedSlugs.size}`;
+		}
+		usedSlugs.add(slug);
+
+		try {
+			await uploadIcon({
+				file,
+				categoryId: input.categoryId,
+				categorySlug: input.categorySlug,
+				name,
+				slug,
+				display_order: order
+			});
+			result.uploaded++;
+			order++;
+		} catch (e) {
+			result.failed.push({
+				filename: file.name,
+				error: e instanceof Error ? e.message : 'Error desconocido'
+			});
+		}
+	}
+
+	return result;
 }
 
 export async function updateIcon(

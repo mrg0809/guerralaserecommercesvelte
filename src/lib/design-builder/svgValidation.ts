@@ -14,6 +14,12 @@ export function slugify(value: string): string {
 		.slice(0, 80) || 'icono';
 }
 
+/** Nombre legible a partir del nombre de archivo (sin extensión .svg). */
+export function filenameToIconName(filename: string): string {
+	const base = filename.replace(/\.svg$/i, '').trim();
+	return base.replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim() || 'Icono';
+}
+
 export async function validateSvgFile(file: File): Promise<SvgValidationResult> {
 	const warnings: string[] = [];
 	const maxBytes = 500 * 1024;

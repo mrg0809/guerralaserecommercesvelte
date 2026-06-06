@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { supabase } from '$lib/supabaseClient';
-	import { validateSvgFile, slugify } from '$lib/design-builder/svgValidation';
+	import { validateSvgFile, slugify, filenameToIconName } from '$lib/design-builder/svgValidation';
 	import {
 		createCategory,
 		deleteCategory,
@@ -12,10 +12,19 @@
 		iconPublicUrl,
 		updateCategory,
 		updateIcon,
-		uploadIcon,
+		uploadIconsBatch,
 		type DesignIconCategoryRow,
 		type DesignIconRow
 	} from '$lib/services/designIconsService';
+
+	interface PendingUpload {
+		file: File;
+		name: string;
+		ok: boolean;
+		error?: string;
+		warnings: string[];
+		previewUrl: string;
+	}
 
 	let loading = $state(true);
 	let saving = $state(false);
@@ -30,11 +39,7 @@
 	let editingCategory = $state<DesignIconCategoryRow | null>(null);
 	let categoryForm = $state({ label: '', slug: '', display_order: 0, is_active: true });
 
-	let uploadName = $state('');
-	let uploadOrder = $state(0);
-	let selectedFile = $state<File | null>(null);
-	let svgPreview = $state('');
-	let svgWarnings = $state<string[]>([]);
+	let pendingUploads = $state<PendingUpload[]>([]);
 
 	const categoryMap = $derived(Object.fromEntries(categories.map((c) => [c.id, c])));
 
@@ -138,62 +143,88 @@
 		}
 	}
 
-	async function handleFileSelect(e: Event) {
-		const input = e.currentTarget as HTMLInputElement;
-		const file = input.files?.[0];
-		selectedFile = file ?? null;
-		svgPreview = '';
-		svgWarnings = [];
-		if (!file) return;
+	const validPendingCount = $derived(pendingUploads.filter((p) => p.ok).length);
 
-		const result = await validateSvgFile(file);
-		if (!result.ok) {
-			errorMsg = result.error ?? 'SVG inválido';
-			selectedFile = null;
-			input.value = '';
-			return;
+	function clearPendingPreviews() {
+		for (const p of pendingUploads) {
+			URL.revokeObjectURL(p.previewUrl);
 		}
-		svgWarnings = result.warnings;
-		svgPreview = URL.createObjectURL(file);
-		if (!uploadName.trim()) {
-			uploadName = file.name.replace(/\.svg$/i, '').replace(/[-_]/g, ' ');
-		}
-		errorMsg = null;
 	}
 
-	async function handleUploadIcon() {
-		if (!selectedFile || !selectedCategoryId) {
-			errorMsg = 'Selecciona categoría y archivo SVG';
+	async function handleFilesSelect(e: Event) {
+		const input = e.currentTarget as HTMLInputElement;
+		const files = input.files ? Array.from(input.files) : [];
+		clearPendingPreviews();
+		pendingUploads = [];
+		errorMsg = null;
+		successMsg = null;
+
+		if (!files.length) return;
+
+		const pending: PendingUpload[] = [];
+		for (const file of files) {
+			const result = await validateSvgFile(file);
+			pending.push({
+				file,
+				name: filenameToIconName(file.name),
+				ok: result.ok,
+				error: result.error,
+				warnings: result.warnings,
+				previewUrl: URL.createObjectURL(file)
+			});
+		}
+		pendingUploads = pending;
+	}
+
+	function removePending(index: number) {
+		const item = pendingUploads[index];
+		if (item) URL.revokeObjectURL(item.previewUrl);
+		pendingUploads = pendingUploads.filter((_, i) => i !== index);
+	}
+
+	async function handleUploadBatch() {
+		if (!selectedCategoryId) {
+			errorMsg = 'Selecciona una categoría';
 			return;
 		}
-		if (!uploadName.trim()) {
-			errorMsg = 'Indica un nombre para el icono';
+		const valid = pendingUploads.filter((p) => p.ok);
+		if (!valid.length) {
+			errorMsg = 'No hay archivos SVG válidos para subir';
 			return;
 		}
 
 		const cat = categoryMap[selectedCategoryId];
 		if (!cat) return;
 
+		const maxOrder = icons
+			.filter((i) => i.category_id === cat.id)
+			.reduce((max, i) => Math.max(max, i.display_order), -1);
+
 		saving = true;
 		errorMsg = null;
+		successMsg = null;
 		try {
-			await uploadIcon({
-				file: selectedFile,
+			const result = await uploadIconsBatch({
+				files: valid.map((p) => p.file),
 				categoryId: cat.id,
 				categorySlug: cat.slug,
-				name: uploadName.trim(),
-				display_order: uploadOrder
+				startOrder: maxOrder + 1
 			});
-			successMsg = 'Icono subido correctamente';
-			selectedFile = null;
-			svgPreview = '';
-			uploadName = '';
-			uploadOrder = 0;
+
+			clearPendingPreviews();
+			pendingUploads = [];
 			const fileInput = document.getElementById('svg-upload') as HTMLInputElement;
 			if (fileInput) fileInput.value = '';
+
+			if (result.uploaded > 0) {
+				successMsg = `${result.uploaded} icono(s) subido(s) correctamente`;
+			}
+			if (result.failed.length > 0) {
+				errorMsg = result.failed.map((f) => `${f.filename}: ${f.error}`).join(' · ');
+			}
 			await reload();
 		} catch (e) {
-			errorMsg = e instanceof Error ? e.message : 'Error al subir icono';
+			errorMsg = e instanceof Error ? e.message : 'Error al subir iconos';
 		} finally {
 			saving = false;
 		}
@@ -311,70 +342,90 @@
 
 			<section class="space-y-6">
 				<div class="rounded-lg border bg-white p-4">
-					<h2 class="mb-3 text-sm font-semibold text-gray-800">Subir icono SVG</h2>
-					<div class="grid gap-4 sm:grid-cols-2">
-						<div class="space-y-3">
-							<div>
-								<label for="upload-category" class="mb-1 block text-xs font-medium text-gray-600"
-									>Categoría</label
-								>
-								<select
-									id="upload-category"
-									bind:value={selectedCategoryId}
-									class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-								>
-									{#each categories as cat}
-										<option value={cat.id}>{cat.label}</option>
-									{/each}
-								</select>
-							</div>
-							<div>
-								<label for="upload-name" class="mb-1 block text-xs font-medium text-gray-600">Nombre</label>
-								<input
-									id="upload-name"
-									type="text"
-									bind:value={uploadName}
-									class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-								/>
-							</div>
-							<div>
-								<label for="upload-order" class="mb-1 block text-xs font-medium text-gray-600">Orden</label>
-								<input
-									id="upload-order"
-									type="number"
-									bind:value={uploadOrder}
-									class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-								/>
-							</div>
-							<div>
-								<label for="svg-upload" class="mb-1 block text-xs font-medium text-gray-600">Archivo SVG</label>
-								<input
-									id="svg-upload"
-									type="file"
-									accept=".svg,image/svg+xml"
-									onchange={handleFileSelect}
-									class="w-full text-sm"
-								/>
-							</div>
-							{#each svgWarnings as w}
-								<p class="text-xs text-amber-700">{w}</p>
-							{/each}
-							<button
-								type="button"
-								onclick={handleUploadIcon}
-								disabled={saving || !selectedFile}
-								class="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+					<h2 class="mb-1 text-sm font-semibold text-gray-800">Subir iconos SVG</h2>
+					<p class="mb-3 text-xs text-gray-500">
+						Selecciona uno o varios archivos .svg. El nombre del icono se toma del nombre del archivo.
+					</p>
+					<div class="space-y-4">
+						<div>
+							<label for="upload-category" class="mb-1 block text-xs font-medium text-gray-600"
+								>Categoría destino</label
 							>
-								{saving ? 'Guardando…' : 'Subir icono'}
-							</button>
+							<select
+								id="upload-category"
+								bind:value={selectedCategoryId}
+								class="w-full max-w-sm rounded-md border border-gray-300 px-3 py-2 text-sm"
+							>
+								{#each categories as cat}
+									<option value={cat.id}>{cat.label}</option>
+								{/each}
+							</select>
 						</div>
-						<div class="flex min-h-[120px] items-center justify-center rounded border border-dashed bg-gray-50 p-4">
-							{#if svgPreview}
-								<img src={svgPreview} alt="Preview" class="max-h-32 max-w-full object-contain" />
-							{:else}
-								<span class="text-xs text-gray-400">Vista previa del SVG</span>
-							{/if}
+						<div>
+							<label for="svg-upload" class="mb-1 block text-xs font-medium text-gray-600"
+								>Archivos SVG (múltiple)</label
+							>
+							<input
+								id="svg-upload"
+								type="file"
+								accept=".svg,image/svg+xml"
+								multiple
+								onchange={handleFilesSelect}
+								class="w-full max-w-md text-sm"
+							/>
 						</div>
+
+						{#if pendingUploads.length > 0}
+							<div class="rounded-md border border-gray-200">
+								<div class="border-b bg-gray-50 px-3 py-2 text-xs font-medium text-gray-700">
+									{validPendingCount} de {pendingUploads.length} listo(s) para subir
+								</div>
+								<ul class="max-h-64 divide-y overflow-y-auto">
+									{#each pendingUploads as item, i}
+										<li class="flex items-center gap-3 px-3 py-2">
+											<img
+												src={item.previewUrl}
+												alt={item.name}
+												class="h-10 w-10 shrink-0 object-contain"
+											/>
+											<div class="min-w-0 flex-1">
+												<p class="truncate text-sm font-medium text-gray-900">{item.name}</p>
+												<p class="truncate text-xs text-gray-500">{item.file.name}</p>
+												{#if !item.ok}
+													<p class="text-xs text-red-600">{item.error}</p>
+												{/if}
+												{#each item.warnings as w}
+													<p class="text-xs text-amber-700">{w}</p>
+												{/each}
+											</div>
+											<button
+												type="button"
+												onclick={() => removePending(i)}
+												class="shrink-0 rounded px-2 py-1 text-xs text-gray-500 hover:bg-gray-100"
+												title="Quitar"
+											>
+												×
+											</button>
+										</li>
+									{/each}
+								</ul>
+							</div>
+						{/if}
+
+						<button
+							type="button"
+							onclick={handleUploadBatch}
+							disabled={saving || validPendingCount === 0}
+							class="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+						>
+							{saving
+								? 'Subiendo…'
+								: validPendingCount > 1
+									? `Subir ${validPendingCount} iconos`
+									: validPendingCount === 1
+										? 'Subir 1 icono'
+										: 'Subir iconos'}
+						</button>
 					</div>
 				</div>
 
