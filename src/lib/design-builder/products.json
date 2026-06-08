@@ -1,0 +1,23 @@
+{
+  "presets": [
+    {
+      "id": "tarjeta_metalica",
+      "label": "Tarjeta metálica (86×54 mm)",
+      "widthMm": 86,
+      "heightMm": 54
+    },
+    {
+      "id": "termo",
+      "label": "Termo (100×150 mm)",
+      "widthMm": 100,
+      "heightMm": 150
+    },
+    {
+      "id": "custom",
+      "label": "Personalizado",
+      "widthMm": 100,
+      "heightMm": 100
+    }
+  ],
+  "pxPerMm": 3.7795275591
+}

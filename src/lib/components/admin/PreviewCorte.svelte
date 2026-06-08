@@ -228,7 +228,7 @@
 	{/if}
 
 	<p class="mt-3 text-xs text-gray-500">
-		En DXF/PLT no se dibujan líneas en el borde del material (donde la pieza coincide con el borde de la lámina). Solo cortes internos y los
-		lados libres de las piezas. El contorno completo de la lámina es opcional en el formulario.
+		En DXF/PLT no se dibujan líneas en el borde del material. Los cortes pueden llevar sobrecorte (mm) hacia el desperdicio y fuera de la lámina
+		para abrir la hoja en RDWorks. El contorno completo de la lámina es opcional en el formulario.
 	</p>
 </div>
