@@ -123,9 +123,15 @@
 					permission: 'view_admin_panel',
 					items: [
 						{
-							href: '/admin/cotizacion-chat',
-							label: 'Con IA',
+							href: '/admin/asistente',
+							label: 'Asistente IA',
 							icon: '🤖',
+							permission: 'use_ai_assistant'
+						},
+						{
+							href: '/admin/cotizacion-chat',
+							label: 'Cotiz. IA (legacy)',
+							icon: '📱',
 							permission: 'view_admin_panel'
 						},
 						{
@@ -164,6 +170,13 @@
 			label: 'Herramientas',
 			icon: '🛠️',
 			subItems: [
+				{
+					kind: 'link',
+					href: '/admin/asistente',
+					label: 'Asistente IA',
+					icon: '🧠',
+					permission: 'use_ai_assistant'
+				},
 				{
 					kind: 'link',
 					href: '/admin/nesting',
