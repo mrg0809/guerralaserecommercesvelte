@@ -6,6 +6,7 @@ import { PUBLIC_SUPABASE_URL } from '$env/static/public';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { jsPDF } from 'jspdf';
 import { generateEmbedding, normalizeProductText } from '$lib/utils/embeddings';
+import { addQuotationLogoToPdf } from '$lib/server/quotationLogo';
 
 // Función helper para obtener la instancia de genAI
 async function getGenAI() {
@@ -216,63 +217,6 @@ async function searchProductsByText(supabase: SupabaseClient, productInfo: { nom
 }
 
 
-// --- CARGAR LOGO DESDE ARCHIVO LOCAL (como en cotizaciones normales) ---
-async function loadLogoFromUrl(): Promise<string | null> {
-    try {
-        // Intentar leer el logo desde el sistema de archivos local
-        const fs = await import('fs');
-        const path = await import('path');
-        
-        // Ruta al logo en la carpeta static
-        const logoPath = path.join(process.cwd(), 'static', 'logorectangular.png');
-        console.log(`[LOG] Verificando logo en: ${logoPath}`);
-        
-        if (fs.existsSync(logoPath)) {
-            const logoBuffer = fs.readFileSync(logoPath);
-            const base64 = logoBuffer.toString('base64');
-            console.log('[LOG] Logo cargado desde archivo local');
-            return `data:image/png;base64,${base64}`;
-        } else {
-            console.log('[LOG] Logo no encontrado en archivo local, intentando desde URL...');
-            
-            // Fallback: intentar desde URL si no está disponible localmente
-            // Usar la URL del deployment actual
-            let baseUrl = 'https://guerralaser.com'; // Default producción
-            
-            // Si estamos en desarrollo, usar localhost
-            if (process.env.NODE_ENV === 'development' || process.env.PUBLIC_SUPABASE_URL?.includes('localhost')) {
-                baseUrl = 'http://localhost:5173';
-            }
-            
-            // En Vercel, usar el dominio del deployment
-            if (process.env.VERCEL_URL) {
-                baseUrl = `https://${process.env.VERCEL_URL}`;
-            }
-            
-            const logoUrl = `${baseUrl}/logorectangular.png`;
-            console.log(`[LOG] Intentando cargar logo desde: ${logoUrl}`);
-            
-            const response = await fetch(logoUrl);
-            console.log(`[LOG] Response status: ${response.status}`);
-            
-            if (response.ok) {
-                const arrayBuffer = await response.arrayBuffer();
-                const base64 = Buffer.from(arrayBuffer).toString('base64');
-                console.log('[LOG] Logo cargado desde URL fallback');
-                return `data:image/png;base64,${base64}`;
-            } else {
-                console.log(`[LOG] Error en respuesta: ${response.statusText}`);
-            }
-        }
-        
-        console.log('[LOG] No se pudo cargar el logo');
-        return null;
-    } catch (error) {
-        console.error('[LOG] Error cargando logo:', error);
-        return null;
-    }
-}
-
 // --- GENERACIÓN DE PDF ---
 async function createPdfDocument(data: any): Promise<jsPDF> {
     const { quotationItems, customerName, quotationValidityDays, notes, shippingCost, installationCost } = data;
@@ -280,15 +224,11 @@ async function createPdfDocument(data: any): Promise<jsPDF> {
     let currentY = 10;
     const redColor = [220, 38, 38]; const blueColor = [37, 99, 235];
     
-    // Intentar cargar el logo desde URL
+    // Logo (mismo que cotizaciones manuales)
     try {
-        const logoBase64 = await loadLogoFromUrl();
-        if (logoBase64) {
-            doc.addImage(logoBase64, 'PNG', 10, currentY, 50, 0);
-            currentY += 17;
-        }
+        currentY = await addQuotationLogoToPdf(doc, 10, currentY);
     } catch (e) {
-        console.error("[LOG] Logo no encontrado.");
+        console.error("[LOG] Logo no encontrado.", e);
     }
     doc.setFontSize(16).setFont('helvetica', 'bold').setTextColor(redColor[0], redColor[1], redColor[2]);
     doc.text('COTIZACIÓN', 200, 15, { align: 'right' });
