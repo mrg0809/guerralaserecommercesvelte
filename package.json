@@ -30,6 +30,7 @@
 		"@capacitor/android": "^8.4.1",
 		"@capacitor/cli": "^7.6.7",
 		"@capacitor/core": "^8.4.1",
+		"@google/genai": "^2.10.0",
 		"@google/generative-ai": "^0.24.1",
 		"@stripe/stripe-js": "^4.0.0",
 		"@supabase/auth-helpers-sveltekit": "latest",

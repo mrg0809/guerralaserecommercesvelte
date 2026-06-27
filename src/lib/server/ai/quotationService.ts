@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { generateEmbedding, normalizeProductText } from '$lib/utils/embeddings';
-import { generateJson } from '$lib/server/ai/geminiClient';
+import { generateJson, generateText } from '$lib/server/ai/geminiClient';
 import type { QuoteDraft, QuoteLine } from '$lib/types/assistant';
 
 interface ParsedQuoteRequest {
@@ -116,9 +116,7 @@ Empresa: Guerra Láser México.`;
 
 export async function formatQuoteForWhatsApp(draft: QuoteDraft): Promise<string> {
 	const payload = JSON.stringify(draft, null, 2);
-	const model = (await import('$lib/server/ai/geminiClient')).getChatModel();
-	const result = await model.generateContent(`${WHATSAPP_FORMAT_PROMPT}\n\nDatos:\n${payload}`);
-	return result.response.text().trim();
+	return generateText(WHATSAPP_FORMAT_PROMPT, `Datos:\n${payload}`);
 }
 
 export function calculateQuoteTotals(draft: QuoteDraft) {

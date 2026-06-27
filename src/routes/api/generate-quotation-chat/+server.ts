@@ -375,7 +375,7 @@ export const POST: RequestHandler = async ({ request }) => {
 
   try {
     const genAI = await getGenAI();
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-3.5-flash" });
     
     // Prompt con Chain of Thought (CoT) para mejor análisis
     const prompt = `

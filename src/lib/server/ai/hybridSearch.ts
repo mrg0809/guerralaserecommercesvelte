@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { generateEmbedding } from '$lib/utils/embeddings';
-import type { AiKnowledgeChannel, KnowledgeSource } from '$lib/types/assistant';
+import type { KnowledgeSource } from '$lib/types/assistant';
 
 export interface RetrievedContext {
 	sources: KnowledgeSource[];
@@ -9,8 +9,10 @@ export interface RetrievedContext {
 	usedWeb: boolean;
 }
 
-const CHANNEL_CONTEXT: Record<AiKnowledgeChannel, string> = {
+const CHANNEL_CONTEXT: Record<string, string> = {
 	general: 'Equipos láser, refacciones y servicio técnico industrial.',
+	maquinas: 'Máquinas láser CO2, fibra óptica, híbridas, plasma — modelos Guerra Láser y compatibilidades.',
+	extractores: 'Extractores de humo, filtros, capacidades CFM/W, instalación y mantenimiento.',
 	chillers: 'Enfriadores (chillers) para máquinas láser: CW-3000, CW-5000, CW-5200, capacidad, compatibilidad.',
 	guias_lineales: 'Guías lineales, rieles, carros, HIWIN, compatibilidades y medidas.',
 	tubos_laser: 'Tubos láser CO2: Reci, SP, EFR, potencias, diámetros, equivalencias entre marcas.',
@@ -19,10 +21,11 @@ const CHANNEL_CONTEXT: Record<AiKnowledgeChannel, string> = {
 	soporte_tecnico: 'Diagnóstico de fallas, mantenimiento, calibración, soporte post-venta.'
 };
 
-export function getChannelSystemPrompt(channel: AiKnowledgeChannel): string {
+export function getChannelSystemPrompt(channel: string): string {
+	const label = CHANNEL_CONTEXT[channel] ?? channel;
 	return `Eres el asistente técnico interno de Guerra Láser México.
 Canal activo: ${channel}.
-Contexto del canal: ${CHANNEL_CONTEXT[channel]}
+Contexto del canal: ${label}
 
 Reglas:
 - Responde en español, claro y directo para el equipo de ventas/técnicos.
@@ -35,7 +38,7 @@ Reglas:
 export async function retrieveLocalContext(
 	supabase: SupabaseClient,
 	query: string,
-	channel: AiKnowledgeChannel
+	channel: string
 ): Promise<{ sources: KnowledgeSource[]; contextText: string; bestScore: number }> {
 	const embedding = await generateEmbedding(query);
 	const sources: KnowledgeSource[] = [];
@@ -102,7 +105,7 @@ export async function retrieveLocalContext(
 }
 
 export function buildRagPrompt(
-	channel: AiKnowledgeChannel,
+	channel: string,
 	contextText: string,
 	attachmentTexts: string[] = []
 ): string {

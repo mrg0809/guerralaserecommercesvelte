@@ -6,7 +6,7 @@ import {
 	retrieveLocalContext,
 	shouldSuggestWebFallback
 } from '$lib/server/ai/hybridSearch';
-import { generateText } from '$lib/server/ai/geminiClient';
+import { generateText, generateTextWithGrounding } from '$lib/server/ai/geminiClient';
 import type { AiKnowledgeChannel, AiSessionType } from '$lib/types/assistant';
 
 export const POST: RequestHandler = async ({ request }) => {
@@ -23,7 +23,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		attachmentIds = []
 	} = body as {
 		message: string;
-		channel?: AiKnowledgeChannel;
+		channel?: string;
 		sessionId?: string;
 		sessionType?: AiSessionType;
 		attachmentIds?: string[];
@@ -67,20 +67,24 @@ export const POST: RequestHandler = async ({ request }) => {
 	}
 
 	const { sources, contextText, bestScore } = await retrieveLocalContext(admin, message, channel);
-	const useWebHint = shouldSuggestWebFallback(bestScore, contextText.length > 0);
+	const useWebFallback = shouldSuggestWebFallback(bestScore, contextText.length > 0);
 
-	let webNote = '';
-	if (useWebHint) {
-		webNote =
-			'\n\nNota: No se encontró información suficiente en la base local. Responde con tu mejor conocimiento técnico general sobre equipos láser y refacciones, e indica claramente que conviene verificar con proveedor o guardar la respuesta en la base del equipo si resulta correcta.';
+	const systemPrompt = buildRagPrompt(channel, contextText, attachmentTexts);
+
+	let assistantText: string;
+	let allSources = sources;
+
+	if (useWebFallback) {
+		const grounded = await generateTextWithGrounding(systemPrompt, message);
+		assistantText = grounded.text;
+		allSources = [...sources, ...grounded.webSources];
+	} else {
+		assistantText = await generateText(systemPrompt, message);
 	}
 
-	const systemPrompt = buildRagPrompt(channel, contextText, attachmentTexts) + webNote;
-	const assistantText = await generateText(systemPrompt, message);
-
 	const metadata = {
-		sources,
-		canSave: useWebHint,
+		sources: allSources,
+		canSave: useWebFallback,
 		suggestedTitle: message.slice(0, 120),
 		suggestedContent: assistantText,
 		suggestedChannel: channel

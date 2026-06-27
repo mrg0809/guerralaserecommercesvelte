@@ -1,30 +1,33 @@
 <script lang="ts">
-	import type { AiKnowledgeChannel } from '$lib/types/assistant';
-	import { AI_CHANNELS } from '$lib/types/assistant';
+	export type AiChannel = { slug: string; label: string; emoji: string };
 
 	let {
-		activeChannel = $bindable('general' as AiKnowledgeChannel),
+		channels = [],
+		activeChannel = $bindable('general'),
 		onchange
 	}: {
-		activeChannel?: AiKnowledgeChannel;
-		onchange?: (channel: AiKnowledgeChannel) => void;
+		channels?: AiChannel[];
+		activeChannel?: string;
+		onchange?: (channel: string) => void;
 	} = $props();
 
-	function select(channel: AiKnowledgeChannel) {
-		activeChannel = channel;
-		onchange?.(channel);
+	function select(slug: string) {
+		activeChannel = slug;
+		onchange?.(slug);
 	}
 </script>
 
 <div class="flex flex-wrap gap-2 px-4 py-2 overflow-x-auto">
-	{#each AI_CHANNELS as ch}
+	{#each channels as ch}
 		<button
 			type="button"
-			class="assistant-chip {activeChannel === ch.id ? 'active' : ''}"
-			onclick={() => select(ch.id)}
+			class="assistant-chip {activeChannel === ch.slug ? 'active' : ''}"
+			onclick={() => select(ch.slug)}
 		>
 			<span>{ch.emoji}</span>
 			<span>{ch.label}</span>
 		</button>
+	{:else}
+		<span class="text-xs text-[var(--as-text-muted)] px-2">Cargando temas...</span>
 	{/each}
 </div>

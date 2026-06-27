@@ -1,9 +1,12 @@
 <script lang="ts">
-	import type { AiChatMessage, AiChatSession, AiKnowledgeChannel, QuoteDraft } from '$lib/types/assistant';
+	import type { AiChatMessage, AiChatSession, QuoteDraft } from '$lib/types/assistant';
 	import { aiFetch } from '$lib/assistantApi';
 	import ChannelChips from './ChannelChips.svelte';
 	import QuoteEditor from './QuoteEditor.svelte';
+	import AssistantAdminNav from './AssistantAdminNav.svelte';
 	import './assistant.css';
+
+	type AiChannel = { slug: string; label: string; emoji: string };
 
 	let {
 		mode = 'admin',
@@ -15,7 +18,8 @@
 		initialMode?: 'knowledge' | 'quotation';
 	} = $props();
 
-	let channel = $state<AiKnowledgeChannel>('general');
+	let channels = $state<AiChannel[]>([]);
+	let channel = $state('general');
 	let sessionType = $state<'knowledge' | 'quotation'>(initialMode);
 	let sessions = $state<AiChatSession[]>([]);
 	let messages = $state<AiChatMessage[]>([]);
@@ -33,11 +37,20 @@
 	$effect(() => {
 		loadSessions();
 		loadTeamMembers();
+		loadChannels();
 		if (typeof localStorage !== 'undefined') {
 			const stored = localStorage.getItem('gl_ai_team_member_id');
 			if (stored) teamMemberId = stored;
 		}
 	});
+
+	async function loadChannels() {
+		const res = await aiFetch('/api/ai/channels');
+		if (res.ok) {
+			const data = await res.json();
+			channels = data.channels ?? [];
+		}
+	}
 
 	async function loadTeamMembers() {
 		const res = await aiFetch('/api/ai/team-members');
@@ -266,6 +279,9 @@
 		</aside>
 
 		<div class="assistant-main">
+			{#if mode === 'admin'}
+				<AssistantAdminNav />
+			{/if}
 			<header class="assistant-header">
 				<button type="button" class="assistant-btn md:hidden" onclick={() => (sidebarOpen = true)} aria-label="Menú">☰</button>
 				<img src="/favicon.png" alt="" class="w-7 h-7 rounded" />
@@ -285,14 +301,15 @@
 				{/if}
 
 				{#if showBackLink && mode === 'admin'}
-					<a href="/admin" class="text-xs text-[var(--as-accent)] hover:underline">← Admin</a>
+					<a href="/admin" class="text-xs text-[var(--as-text-muted)] hover:underline hidden sm:inline">Admin</a>
+					<a href="/admin/asistente/conocimiento" class="text-xs text-[var(--as-accent)] hover:underline">⚙️</a>
 				{/if}
 
 				<button type="button" class="assistant-chip md:hidden" onclick={() => newChat('knowledge')}>+ Nuevo</button>
 			</header>
 
 			{#if sessionType === 'knowledge'}
-				<ChannelChips bind:activeChannel={channel} />
+				<ChannelChips {channels} bind:activeChannel={channel} />
 			{:else}
 				<div class="px-4 py-2 text-sm text-[var(--as-accent)]">Modo cotización — describe lo que necesitas cotizar</div>
 			{/if}
