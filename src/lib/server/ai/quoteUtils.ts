@@ -1,0 +1,37 @@
+import type { QuoteDraft, QuoteLine } from '$lib/types/assistant';
+
+export function parsePrice(value: unknown): number {
+	if (value === null || value === undefined || value === '') return 0;
+	const n = typeof value === 'number' ? value : Number(String(value).replace(/,/g, ''));
+	return Number.isFinite(n) ? n : 0;
+}
+
+export function resolveUnitPrice(explicit: number | undefined, dbPrice: unknown): number {
+	if (explicit !== undefined && explicit !== null) return parsePrice(explicit);
+	return parsePrice(dbPrice);
+}
+
+export function normalizeQuoteLine(line: QuoteLine): QuoteLine {
+	return {
+		...line,
+		quantity: Math.max(1, parsePrice(line.quantity)),
+		unit_price: parsePrice(line.unit_price),
+		discount_percent: parsePrice(line.discount_percent)
+	};
+}
+
+export function normalizeQuoteDraft(draft: QuoteDraft): QuoteDraft {
+	return {
+		...draft,
+		shipping_amount:
+			draft.shipping_amount !== undefined && draft.shipping_amount !== null
+				? parsePrice(draft.shipping_amount)
+				: undefined,
+		installation_amount:
+			draft.installation_amount !== undefined && draft.installation_amount !== null
+				? parsePrice(draft.installation_amount)
+				: undefined,
+		validity_days: draft.validity_days ?? 7,
+		lines: (draft.lines ?? []).map(normalizeQuoteLine)
+	};
+}
