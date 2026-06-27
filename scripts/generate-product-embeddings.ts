@@ -7,9 +7,9 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
+import { generateDocumentEmbedding, normalizeProductText } from '../src/lib/utils/embeddings.ts';
 
 // Cargar variables de entorno desde .env manualmente
 function loadEnvFile() {
@@ -54,19 +54,9 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !GEMINI_API_KEY) {
     process.exit(1);
 }
 
+process.env.GEMINI_API_KEY = GEMINI_API_KEY;
+
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-
-async function generateEmbedding(text: string): Promise<number[]> {
-    const model = genAI.getGenerativeModel({ model: 'text-embedding-004' });
-    const result = await model.embedContent(text);
-    return result.embedding.values;
-}
-
-function normalizeProductText(productName: string, variantName?: string): string {
-    const fullText = variantName ? `${productName} ${variantName}` : productName;
-    return fullText.toLowerCase().replace(/\s+/g, ' ').trim();
-}
 
 async function generateProductEmbeddings() {
     console.log('🚀 Iniciando generación de embeddings para productos...\n');
@@ -94,7 +84,7 @@ async function generateProductEmbeddings() {
                     const normalizedText = normalizeProductText(product.name);
                     console.log(`  Procesando: ${product.name} (${product.sku || 'sin SKU'})`);
                     
-                    const embedding = await generateEmbedding(normalizedText);
+                    const embedding = await generateDocumentEmbedding(normalizedText);
                     
                     const { error: updateError } = await supabase
                         .from('products')
@@ -149,7 +139,7 @@ async function generateProductEmbeddings() {
                     );
                     console.log(`  Procesando: ${product.name} - ${variant.name} (${variant.sku || 'sin SKU'})`);
                     
-                    const embedding = await generateEmbedding(normalizedText);
+                    const embedding = await generateDocumentEmbedding(normalizedText);
                     
                     const { error: updateError } = await supabase
                         .from('product_variants')

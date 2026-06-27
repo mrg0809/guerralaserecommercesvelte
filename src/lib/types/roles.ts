@@ -57,7 +57,9 @@ export type Permission =
 	| 'view_machine_deliveries'
 	| 'create_machine_deliveries'
 	| 'complete_machine_deliveries'
-	| 'view_technician_panel';
+	| 'view_technician_panel'
+	// Asistente IA
+	| 'use_ai_assistant';
 
 export interface Role {
 	id: string;
@@ -138,7 +140,8 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
 		'view_reports',
 		'view_machine_deliveries',
 		'create_machine_deliveries',
-		'complete_machine_deliveries'
+		'complete_machine_deliveries',
+		'use_ai_assistant'
 	],
 	superadmin: [
 		// Superadmin tiene todos los permisos
@@ -178,7 +181,8 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
 		'manage_bundles',
 		'view_machine_deliveries',
 		'create_machine_deliveries',
-		'complete_machine_deliveries'
+		'complete_machine_deliveries',
+		'use_ai_assistant'
 	],
 	tecnico: [
 		'view_assigned_services',
@@ -237,7 +241,8 @@ export const PERMISSION_DISPLAY_NAMES: Record<Permission, string> = {
 	view_machine_deliveries: 'Ver Entregas de Máquinas',
 	create_machine_deliveries: 'Crear Entregas',
 	complete_machine_deliveries: 'Completar Entregas',
-	view_technician_panel: 'Panel Técnico'
+	view_technician_panel: 'Panel Técnico',
+	use_ai_assistant: 'Usar Asistente IA'
 };
 
 /**
