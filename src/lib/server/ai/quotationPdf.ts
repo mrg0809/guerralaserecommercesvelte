@@ -2,27 +2,7 @@ import { jsPDF } from 'jspdf';
 import type { QuoteDraft } from '$lib/types/assistant';
 import { calculateQuoteTotals } from '$lib/server/ai/quotationService';
 import { normalizeQuoteDraft, parsePrice } from '$lib/server/ai/quoteUtils';
-
-async function loadLogoBase64(): Promise<string | null> {
-	try {
-		const fs = await import('fs');
-		const path = await import('path');
-		const logoPath = path.join(process.cwd(), 'static', 'logorectangular.png');
-		if (fs.existsSync(logoPath)) {
-			return `data:image/png;base64,${fs.readFileSync(logoPath).toString('base64')}`;
-		}
-		let baseUrl = 'https://guerralaser.com';
-		if (process.env.VERCEL_URL) baseUrl = `https://${process.env.VERCEL_URL}`;
-		const response = await fetch(`${baseUrl}/logorectangular.png`);
-		if (response.ok) {
-			const buf = Buffer.from(await response.arrayBuffer());
-			return `data:image/png;base64,${buf.toString('base64')}`;
-		}
-	} catch {
-		// sin logo
-	}
-	return null;
-}
+import { addQuotationLogoToPdf } from '$lib/server/quotationLogo';
 
 export async function createQuotationPdf(draft: QuoteDraft): Promise<jsPDF> {
 	const quote = normalizeQuoteDraft(draft);
@@ -32,11 +12,7 @@ export async function createQuotationPdf(draft: QuoteDraft): Promise<jsPDF> {
 	const blueColor = [37, 99, 235];
 	const validity = quote.validity_days ?? 7;
 
-	const logo = await loadLogoBase64();
-	if (logo) {
-		doc.addImage(logo, 'PNG', 10, currentY, 50, 0);
-		currentY += 17;
-	}
+	currentY = await addQuotationLogoToPdf(doc, 10, currentY);
 
 	doc.setFontSize(16).setFont('helvetica', 'bold').setTextColor(redColor[0], redColor[1], redColor[2]);
 	doc.text('COTIZACIÓN', 200, 15, { align: 'right' });
