@@ -207,7 +207,7 @@
 	async function downloadPdf(draft: QuoteDraft) {
 		const res = await aiFetch('/api/ai/quote/pdf', {
 			method: 'POST',
-			body: JSON.stringify({ draft })
+			body: JSON.stringify({ draft: quoteDraft ?? draft })
 		});
 		const data = await res.json();
 		if (res.ok && data.downloadUrl) {
@@ -215,6 +215,8 @@
 			a.href = data.downloadUrl;
 			a.download = data.filename;
 			a.click();
+		} else {
+			alert(data.error || 'No se pudo generar el PDF');
 		}
 	}
 

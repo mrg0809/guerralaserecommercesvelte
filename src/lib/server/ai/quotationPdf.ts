@@ -1,6 +1,7 @@
 import { jsPDF } from 'jspdf';
 import type { QuoteDraft } from '$lib/types/assistant';
 import { calculateQuoteTotals } from '$lib/server/ai/quotationService';
+import { normalizeQuoteDraft, parsePrice } from '$lib/server/ai/quoteUtils';
 
 async function loadLogoBase64(): Promise<string | null> {
 	try {
@@ -24,11 +25,12 @@ async function loadLogoBase64(): Promise<string | null> {
 }
 
 export async function createQuotationPdf(draft: QuoteDraft): Promise<jsPDF> {
+	const quote = normalizeQuoteDraft(draft);
 	const doc = new jsPDF();
 	let currentY = 10;
 	const redColor = [220, 38, 38];
 	const blueColor = [37, 99, 235];
-	const validity = draft.validity_days ?? 7;
+	const validity = quote.validity_days ?? 7;
 
 	const logo = await loadLogoBase64();
 	if (logo) {
@@ -55,7 +57,7 @@ export async function createQuotationPdf(draft: QuoteDraft): Promise<jsPDF> {
 	doc.setFontSize(11).setFont('helvetica', 'bold').text('DATOS DEL CLIENTE', 10, currentY);
 	doc.setFont('helvetica', 'normal').setFontSize(9);
 	currentY += 6;
-	doc.text(`Nombre: ${draft.client_name || '-'}`, 10, currentY);
+	doc.text(`Nombre: ${quote.client_name || '-'}`, 10, currentY);
 	currentY += 12;
 	doc.setDrawColor(redColor[0], redColor[1], redColor[2]).line(10, currentY, 200, currentY);
 	currentY += 5;
@@ -70,8 +72,11 @@ export async function createQuotationPdf(draft: QuoteDraft): Promise<jsPDF> {
 	currentY += 5;
 	doc.setFont('helvetica', 'normal').setFontSize(8);
 
-	for (const item of draft.lines) {
-		const lineTotal = item.quantity * item.unit_price * (1 - (item.discount_percent ?? 0) / 100);
+	for (const item of quote.lines) {
+		const unitPrice = parsePrice(item.unit_price);
+		const qty = parsePrice(item.quantity);
+		const discount = parsePrice(item.discount_percent);
+		const lineTotal = qty * unitPrice * (1 - discount / 100);
 		const descLines = doc.splitTextToSize(item.description || '', 75);
 		const rowHeight = descLines.length * 4;
 		if (currentY + rowHeight > 270) {
@@ -80,17 +85,17 @@ export async function createQuotationPdf(draft: QuoteDraft): Promise<jsPDF> {
 		}
 		doc.text(doc.splitTextToSize(item.sku || '-', 18), 11, currentY);
 		doc.text(descLines, 32, currentY);
-		doc.text(String(item.quantity), 110, currentY, { align: 'right' });
-		doc.text(`$${item.unit_price.toFixed(2)}`, 135, currentY, { align: 'right' });
-		doc.text(`${(item.discount_percent ?? 0).toFixed(1)}%`, 160, currentY, { align: 'right' });
+		doc.text(String(qty), 110, currentY, { align: 'right' });
+		doc.text(`$${unitPrice.toFixed(2)}`, 135, currentY, { align: 'right' });
+		doc.text(`${discount.toFixed(1)}%`, 160, currentY, { align: 'right' });
 		doc.text(`$${lineTotal.toFixed(2)}`, 195, currentY, { align: 'right' });
 		currentY += rowHeight + 2;
 		doc.setDrawColor(200, 210, 230).setLineWidth(0.1).line(10, currentY, 200, currentY);
 		currentY += 2;
 	}
 
-	const { subtotal, shipping, installation, total } = calculateQuoteTotals(draft);
-	const grossSubtotal = draft.lines.reduce((s, l) => s + l.quantity * l.unit_price, 0);
+	const { subtotal, shipping, installation, total } = calculateQuoteTotals(quote);
+	const grossSubtotal = quote.lines.reduce((s, l) => s + parsePrice(l.quantity) * parsePrice(l.unit_price), 0);
 	const totalDiscount = grossSubtotal - subtotal;
 
 	currentY += 3;
@@ -120,9 +125,9 @@ export async function createQuotationPdf(draft: QuoteDraft): Promise<jsPDF> {
 	doc.text(`$${total.toFixed(2)} MXN`, 195, currentY, { align: 'right' });
 	currentY += 8;
 
-	if (draft.notes) {
+	if (quote.notes) {
 		doc.setFont('helvetica', 'normal').setFontSize(9).setTextColor(0, 0, 0).text('Notas:', 10, currentY);
-		doc.setFontSize(8).text(doc.splitTextToSize(draft.notes, 180), 10, currentY + 4);
+		doc.setFontSize(8).text(doc.splitTextToSize(quote.notes, 180), 10, currentY + 4);
 	}
 
 	if (currentY < 240) currentY = 240;
@@ -153,8 +158,9 @@ export async function createQuotationPdf(draft: QuoteDraft): Promise<jsPDF> {
 }
 
 export async function quotationPdfBase64(draft: QuoteDraft): Promise<{ base64: string; filename: string }> {
-	const doc = await createQuotationPdf(draft);
-	const clientSlug = (draft.client_name || 'cliente').replace(/\s+/g, '-').slice(0, 30);
+	const quote = normalizeQuoteDraft(draft);
+	const doc = await createQuotationPdf(quote);
+	const clientSlug = (quote.client_name || 'cliente').replace(/\s+/g, '-').slice(0, 30);
 	const filename = `cotizacion-${clientSlug}-${Date.now()}.pdf`;
 	return { base64: doc.output('datauristring'), filename };
 }
