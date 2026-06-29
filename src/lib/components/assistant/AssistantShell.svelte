@@ -252,22 +252,34 @@
 	);
 </script>
 
-<div class="assistant-root">
-	<div class="flex flex-1 min-h-0">
+<div class="assistant-root {mode === 'mobile' ? 'assistant-root--mobile' : ''}">
+	<div class="assistant-shell-body">
 		{#if sidebarOpen}
 			<button class="assistant-sidebar-overlay md:hidden" aria-label="Cerrar" onclick={() => (sidebarOpen = false)}></button>
 		{/if}
 
-		<aside class="assistant-sidebar {sidebarOpen ? 'open' : ''} hidden md:flex">
-			<div class="p-3 border-b border-[var(--as-border)]">
+		<aside
+			class="assistant-sidebar {sidebarOpen ? 'open' : ''} {mode === 'mobile'
+				? 'assistant-sidebar--mobile'
+				: 'hidden md:flex'}"
+		>
+			<div class="assistant-sidebar-top p-3 border-b border-[var(--as-border)]">
 				<button type="button" class="assistant-chip active w-full justify-center" onclick={() => newChat('knowledge')}>
 					+ Nuevo chat
 				</button>
 				<button type="button" class="assistant-chip w-full justify-center mt-2" onclick={() => newChat('quotation')}>
 					💰 Cotizar
 				</button>
+				{#if mode === 'mobile'}
+					<input
+						type="search"
+						class="assistant-select w-full mt-3"
+						placeholder="Buscar conversaciones..."
+						bind:value={searchQuery}
+					/>
+				{/if}
 			</div>
-			<div class="p-2 flex-1 overflow-y-auto">
+			<div class="assistant-sidebar-list p-2">
 				{#each filteredSessions as s}
 					<button
 						type="button"
@@ -283,10 +295,11 @@
 		</aside>
 
 		<div class="assistant-main">
-			{#if mode === 'admin'}
-				<AssistantAdminNav />
-			{/if}
-			<header class="assistant-header">
+			<div class="assistant-top-bar">
+				{#if mode === 'admin'}
+					<AssistantAdminNav />
+				{/if}
+				<header class="assistant-header">
 				<button type="button" class="assistant-btn md:hidden" onclick={() => (sidebarOpen = true)} aria-label="Menú">☰</button>
 				<img src="/favicon.png" alt="" class="w-7 h-7 rounded" />
 				<span class="font-medium text-sm flex-1 truncate">Guerra Láser Asistente</span>
@@ -310,21 +323,24 @@
 				{/if}
 
 				<button type="button" class="assistant-chip md:hidden" onclick={() => newChat('knowledge')}>+ Nuevo</button>
-			</header>
+				</header>
 
-			{#if sessionType === 'knowledge'}
-				<ChannelChips {channels} bind:activeChannel={channel} />
-			{:else}
-				<div class="px-4 py-2 text-sm text-[var(--as-accent)]">Modo cotización — describe lo que necesitas cotizar</div>
-			{/if}
+				{#if sessionType === 'knowledge'}
+					<ChannelChips {channels} bind:activeChannel={channel} />
+				{:else}
+					<div class="px-4 py-2 text-sm text-[var(--as-accent)]">Modo cotización — describe lo que necesitas cotizar</div>
+				{/if}
 
-			<div class="px-4 pb-2">
-				<input
-					type="search"
-					class="assistant-select w-full max-w-3xl mx-auto block"
-					placeholder="Buscar en historial..."
-					bind:value={searchQuery}
-				/>
+				{#if mode !== 'mobile'}
+					<div class="px-4 pb-2">
+						<input
+							type="search"
+							class="assistant-select w-full max-w-3xl mx-auto block"
+							placeholder="Buscar en historial..."
+							bind:value={searchQuery}
+						/>
+					</div>
+				{/if}
 			</div>
 
 			<div class="assistant-messages">

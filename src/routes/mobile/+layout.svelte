@@ -6,7 +6,11 @@
 	let { children } = $props();
 
 	onMount(() => {
+		document.documentElement.classList.add('assistant-standalone-page');
 		void initNativeAssistantApp();
+		return () => {
+			document.documentElement.classList.remove('assistant-standalone-page');
+		};
 	});
 </script>
 

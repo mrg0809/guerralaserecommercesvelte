@@ -1,4 +1,11 @@
 /* Tokens UI estilo Gemini — solo asistente */
+.assistant-standalone-shell {
+	height: 100dvh;
+	max-height: 100dvh;
+	min-height: 0;
+	overflow: hidden;
+}
+
 .assistant-root {
 	--as-bg: #131314;
 	--as-surface: #1e1f20;
@@ -14,31 +21,57 @@
 	background: var(--as-bg);
 	color: var(--as-text);
 	min-height: 100dvh;
+	height: 100%;
 	display: flex;
 	flex-direction: column;
+	overflow: hidden;
+}
+
+.assistant-root--mobile,
+html.capacitor-native .assistant-root {
+	height: 100dvh;
+	max-height: 100dvh;
+}
+
+.assistant-shell-body {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	overflow: hidden;
+	position: relative;
+}
+
+html.assistant-standalone-page {
+	height: 100%;
+	overflow: hidden;
+}
+
+html.assistant-standalone-page body {
+	height: 100%;
+	overflow: hidden;
 }
 
 html.capacitor-native,
 html.assistant-native-app {
 	overscroll-behavior: none;
 	background: #131314;
+	height: 100%;
 }
 
 html.capacitor-native body {
 	background: #131314;
-	padding-top: env(safe-area-inset-top, 0px);
+	height: 100%;
+	overflow: hidden;
+	padding: 0;
+	margin: 0;
 }
 
 html.capacitor-native .assistant-composer-wrap {
-	padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
-}
-
-html.keyboard-open.capacitor-native .assistant-messages {
-	padding-bottom: var(--keyboard-offset);
+	padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
 }
 
 html.capacitor-native .assistant-header {
-	padding-top: max(0.75rem, env(safe-area-inset-top, 0px));
+	padding-top: calc(0.75rem + env(safe-area-inset-top, 0px));
 }
 
 .assistant-sidebar {
@@ -48,6 +81,19 @@ html.capacitor-native .assistant-header {
 	flex-shrink: 0;
 	display: flex;
 	flex-direction: column;
+	min-height: 0;
+}
+
+.assistant-sidebar-top {
+	flex-shrink: 0;
+}
+
+.assistant-sidebar-list {
+	flex: 1;
+	min-height: 0;
+	overflow-y: auto;
+	-webkit-overflow-scrolling: touch;
+	overscroll-behavior: contain;
 }
 
 .assistant-main {
@@ -55,6 +101,14 @@ html.capacitor-native .assistant-header {
 	display: flex;
 	flex-direction: column;
 	min-width: 0;
+	min-height: 0;
+	overflow: hidden;
+}
+
+.assistant-top-bar {
+	flex-shrink: 0;
+	background: var(--as-bg);
+	z-index: 10;
 }
 
 .assistant-header {
@@ -68,8 +122,12 @@ html.capacitor-native .assistant-header {
 
 .assistant-messages {
 	flex: 1;
+	min-height: 0;
 	overflow-y: auto;
+	overflow-x: hidden;
 	padding: 1rem;
+	-webkit-overflow-scrolling: touch;
+	overscroll-behavior: contain;
 }
 
 .assistant-messages-inner {
@@ -79,9 +137,11 @@ html.capacitor-native .assistant-header {
 }
 
 .assistant-composer-wrap {
+	flex-shrink: 0;
 	border-top: 1px solid var(--as-border);
 	padding: 0.75rem 1rem 1rem;
 	background: var(--as-bg);
+	z-index: 10;
 }
 
 .assistant-composer {
@@ -274,16 +334,43 @@ html.capacitor-native .assistant-header {
 	font-size: 0.8125rem;
 }
 
+.assistant-sidebar--mobile {
+	display: flex;
+	position: fixed;
+	top: 0;
+	left: 0;
+	bottom: 0;
+	width: min(300px, 88vw);
+	max-width: 88vw;
+	z-index: 50;
+	transform: translateX(-100%);
+	transition: transform 0.2s;
+	padding-top: env(safe-area-inset-top, 0px);
+	padding-bottom: env(safe-area-inset-bottom, 0px);
+	box-sizing: border-box;
+}
+
+.assistant-sidebar--mobile.open {
+	transform: translateX(0);
+}
+
 @media (max-width: 768px) {
-	.assistant-sidebar {
+	.assistant-sidebar:not(.assistant-sidebar--mobile) {
 		position: fixed;
-		inset: 0 auto 0 0;
+		top: 0;
+		left: 0;
+		bottom: 0;
+		width: min(300px, 88vw);
+		max-width: 88vw;
 		z-index: 50;
 		transform: translateX(-100%);
 		transition: transform 0.2s;
+		padding-top: env(safe-area-inset-top, 0px);
+		padding-bottom: env(safe-area-inset-bottom, 0px);
+		box-sizing: border-box;
 	}
 
-	.assistant-sidebar.open {
+	.assistant-sidebar:not(.assistant-sidebar--mobile).open {
 		transform: translateX(0);
 	}
 
