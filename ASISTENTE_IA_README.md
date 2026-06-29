@@ -17,7 +17,7 @@ Crea también el bucket de Storage `ai-chat-attachments` (privado) en Supabase D
 ### 2. Token móvil (APK)
 
 ```bash
-npx tsx scripts/create-mobile-app-token.ts
+yarn token:mobile
 ```
 
 Copia el token a `.env`:
@@ -55,10 +55,13 @@ Auth móvil: `X-App-Token` + opcional `X-Team-Member-Id`
 
 ## App Android (Capacitor)
 
+Guía detallada: **[APK_ASISTENTE_IA.md](./APK_ASISTENTE_IA.md)**
+
 ```bash
-npm install @capacitor/core @capacitor/cli @capacitor/android
-npx cap add android
-PUBLIC_MOBILE_APP_TOKEN=gl_mob_xxx bash scripts/build-mobile-apk.sh
+yarn install
+yarn token:mobile
+yarn apk:debug
+adb install -r android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
-El APK carga la UI desde Vercel (`capacitor.config.ts` → server.url).
+El APK carga la UI desde Vercel (`capacitor.config.ts` → `server.url`). Usa **Yarn**; no hace falta `npm install --legacy-peer-deps`.
