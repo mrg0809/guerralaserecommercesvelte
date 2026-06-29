@@ -65,3 +65,5 @@ adb install -r android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
 El APK carga la UI desde Vercel (`capacitor.config.ts` → `server.url`). Usa **Yarn**; no hace falta `npm install --legacy-peer-deps`.
+
+**Generar e instalar en el móvil:** ver **[APK_ASISTENTE_IA.md](./APK_ASISTENTE_IA.md)** → sección *Solo generar el APK e instalarlo en tu móvil*.

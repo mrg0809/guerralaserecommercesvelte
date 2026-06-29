@@ -11,6 +11,7 @@
 	import ReauthModal from '$lib/components/ReauthModal.svelte';
 	import CookieBanner from '$lib/components/CookieBanner.svelte';
 	import MetaPixel from '$lib/components/MetaPixel.svelte';
+	import { isNativeCapacitorApp } from '$lib/mobile/appShell';
 	import type { Category } from '$lib/types';
 	import '../app.css';
 	
@@ -27,13 +28,18 @@ let searchResults = $state<any[]>([]);
 let searchTimeout: NodeJS.Timeout;
 let currentPath = $state('/');
 let isAdminRoute = $state(false);
+let isStandaloneApp = $state(false);
+
+const showPublicSiteChrome = $derived(!isAdminRoute && !isStandaloneApp);
 	
 // Detectar cambios de ruta y rastrear con Google Analytics
 page.subscribe(($page) => {
 	currentPath = $page.url.pathname;
 	isAdminRoute = currentPath.startsWith('/admin');
-	// Rastrear page_view en cambios de URL (SPA)
-	trackPageView(currentPath);
+	isStandaloneApp = currentPath.startsWith('/mobile');
+	if (!isStandaloneApp) {
+		trackPageView(currentPath);
+	}
 });
 	
 	cart.subscribe((items) => {
@@ -41,6 +47,10 @@ page.subscribe(($page) => {
 	});
 
 	onMount(async () => {
+		if (isNativeCapacitorApp()) {
+			isStandaloneApp = true;
+		}
+
 		// Inicializar store de usuario si hay sesión
 		const {
 			data: { session }
@@ -78,6 +88,8 @@ page.subscribe(($page) => {
 	});
 
 	onMount(() => {
+		if (isStandaloneApp) return;
+
 		ensureWhatsAppAudio();
 
 		const primeSound = () => {
@@ -330,8 +342,8 @@ page.subscribe(($page) => {
 	<link rel="icon" href={favicon} />
 </svelte:head>
 
-<div class="min-h-screen flex flex-col {isAdminRoute ? '' : 'pt-20'}">
-	{#if !isAdminRoute}
+<div class="min-h-screen flex flex-col {showPublicSiteChrome ? 'pt-20' : ''}">
+	{#if showPublicSiteChrome}
 	<header class="fixed top-0 left-0 right-0 bg-white shadow-md border-b-2 border-red-600 z-50">
 		<nav class="w-full py-4">
 			<div class="flex items-center px-4 justify-between">
@@ -611,7 +623,7 @@ page.subscribe(($page) => {
 	</main>
 
 	<!-- Sección de Ubicación y Horarios - Solo en página de inicio -->
-	{#if !isAdminRoute && currentPath === '/'}
+	{#if !isAdminRoute && !isStandaloneApp && currentPath === '/'}
 	<section id="visitanos" class="bg-gradient-to-br from-blue-50 to-indigo-50 py-16">
 		<div class="container mx-auto px-4">
 			<div class="text-center mb-12">
@@ -691,7 +703,7 @@ page.subscribe(($page) => {
 	</section>
 	{/if}
 
-	{#if !isAdminRoute}
+	{#if showPublicSiteChrome}
 	<footer class="bg-gray-800 text-white py-8">
 		<div class="container mx-auto px-4">
 			<div class="grid grid-cols-1 md:grid-cols-5 gap-8">
@@ -848,7 +860,7 @@ page.subscribe(($page) => {
 	{/if}
 
     <!-- Floating WhatsApp Chat -->
-    {#if !isAdminRoute}
+    {#if showPublicSiteChrome}
 	<div
 		class="fixed bottom-5 right-5 z-50 transition-all duration-500 sm:bottom-6 sm:right-6"
 		class:opacity-0={!showWAButton}
@@ -915,6 +927,7 @@ page.subscribe(($page) => {
 </div>
 
     <!-- Modal de Reautenticación -->
+    {#if !isStandaloneApp}
     <ReauthModal 
         show={$userStore.sessionExpired}
         onReauth={() => {
@@ -928,9 +941,14 @@ page.subscribe(($page) => {
 			window.location.href = '/login';
 		}}
     />
+    {/if}
 
     <!-- Meta Pixel -->
-    <MetaPixel />
+    {#if showPublicSiteChrome}
+    	<MetaPixel />
+    {/if}
 
     <!-- Banner de Cookies -->
-    <CookieBanner />
+    {#if showPublicSiteChrome}
+    	<CookieBanner />
+    {/if}
