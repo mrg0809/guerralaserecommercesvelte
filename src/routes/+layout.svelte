@@ -342,7 +342,7 @@ page.subscribe(($page) => {
 	<link rel="icon" href={favicon} />
 </svelte:head>
 
-<div class="min-h-screen flex flex-col {showPublicSiteChrome ? 'pt-20' : ''}">
+<div class="min-h-screen flex flex-col {showPublicSiteChrome ? 'pt-20' : ''} {isStandaloneApp ? 'assistant-standalone-shell' : ''}">
 	{#if showPublicSiteChrome}
 	<header class="fixed top-0 left-0 right-0 bg-white shadow-md border-b-2 border-red-600 z-50">
 		<nav class="w-full py-4">
@@ -618,7 +618,7 @@ page.subscribe(($page) => {
 	</header>
 	{/if}
 
-	<main class="flex-grow">
+	<main class="flex-grow {isStandaloneApp ? 'assistant-standalone-shell' : ''}">
 		{@render children()}
 	</main>
 
