@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { AiChatMessage, AiChatSession, QuoteDraft } from '$lib/types/assistant';
 	import { aiFetch } from '$lib/assistantApi';
+	import { hapticImpact } from '$lib/mobile/nativeApp';
 	import ChannelChips from './ChannelChips.svelte';
 	import QuoteEditor from './QuoteEditor.svelte';
 	import AssistantAdminNav from './AssistantAdminNav.svelte';
@@ -116,6 +117,7 @@
 	async function sendMessage() {
 		const text = input.trim();
 		if (!text || loading) return;
+		void hapticImpact('light');
 		loading = true;
 		input = '';
 

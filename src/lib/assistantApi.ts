@@ -1,5 +1,6 @@
 import { supabase } from '$lib/supabaseClient';
 import { env as publicEnv } from '$env/dynamic/public';
+import { shouldUseMobileTokenAuth } from '$lib/mobile/appShell';
 
 const TEAM_MEMBER_KEY = 'gl_ai_team_member_id';
 
@@ -16,7 +17,7 @@ export async function getAiAuthHeaders(): Promise<Record<string, string>> {
 	const headers: Record<string, string> = { 'Content-Type': 'application/json' };
 
 	const mobileToken = publicEnv.PUBLIC_MOBILE_APP_TOKEN;
-	if (mobileToken) {
+	if (mobileToken && shouldUseMobileTokenAuth()) {
 		headers['X-App-Token'] = mobileToken;
 		const memberId = getStoredTeamMemberId();
 		if (memberId) headers['X-Team-Member-Id'] = memberId;
@@ -42,5 +43,5 @@ export async function aiFetch(path: string, options: RequestInit = {}) {
 }
 
 export function isMobileAppMode(): boolean {
-	return !!publicEnv.PUBLIC_MOBILE_APP_TOKEN;
+	return shouldUseMobileTokenAuth();
 }

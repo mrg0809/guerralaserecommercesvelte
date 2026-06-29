@@ -10,11 +10,35 @@
 	--as-accent-dim: #669df6;
 	--as-user-bubble: #394457;
 	--as-assistant-bubble: transparent;
+	--keyboard-offset: 0px;
 	background: var(--as-bg);
 	color: var(--as-text);
 	min-height: 100dvh;
 	display: flex;
 	flex-direction: column;
+}
+
+html.capacitor-native,
+html.assistant-native-app {
+	overscroll-behavior: none;
+	background: #131314;
+}
+
+html.capacitor-native body {
+	background: #131314;
+	padding-top: env(safe-area-inset-top, 0px);
+}
+
+html.capacitor-native .assistant-composer-wrap {
+	padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+}
+
+html.keyboard-open.capacitor-native .assistant-messages {
+	padding-bottom: var(--keyboard-offset);
+}
+
+html.capacitor-native .assistant-header {
+	padding-top: max(0.75rem, env(safe-area-inset-top, 0px));
 }
 
 .assistant-sidebar {

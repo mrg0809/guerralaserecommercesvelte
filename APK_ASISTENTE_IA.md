@@ -2,7 +2,83 @@
 
 Guía para generar e instalar el APK de prueba del chat IA (Capacitor + Android).
 
-## Resumen rápido
+---
+
+## Solo generar el APK e instalarlo en tu móvil
+
+> **Requisito previo:** token en `.env` y en Vercel (ya hecho). La app necesita internet.
+
+### En tu PC (Linux)
+
+Abre terminal en la carpeta del proyecto:
+
+```bash
+cd /home/rm/Desarrollo/guerralaserecommercesvelte
+
+# Android SDK (solo si no lo tienes en ~/.zshrc)
+export ANDROID_HOME=$HOME/Android/Sdk
+export PATH=$PATH:$ANDROID_HOME/platform-tools
+
+# Primera vez o tras cambios de dependencias
+yarn install
+
+# Genera el APK (tarda unos minutos la primera vez)
+yarn apk:debug
+```
+
+Al terminar, el archivo queda aquí:
+
+```
+android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+---
+
+### Llevarlo al móvil e instalar
+
+Elige **una** de estas formas:
+
+#### Opción A — Cable USB (la más directa)
+
+1. En el Android: **Ajustes → Acerca del teléfono** → pulsa 7 veces *Número de compilación* → activa **Opciones de desarrollador** → **Depuración USB**.
+2. Conecta el cable USB al PC.
+3. En el teléfono acepta *Permitir depuración USB*.
+4. En la PC:
+
+```bash
+adb devices          # debe aparecer tu dispositivo
+adb install -r android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+5. En el cajón de apps busca **Guerra Láser Asistente** y ábrela.
+
+#### Opción B — Sin cable (WhatsApp, Drive, correo, etc.)
+
+1. Copia `app-debug.apk` al teléfono (adjunto, Drive, Telegram…).
+2. En el móvil abre el archivo `.apk`.
+3. Si Android lo pide, permite **instalar apps desconocidas** para esa app (Chrome, Archivos, etc.).
+4. Pulsa **Instalar**.
+
+#### Opción C — Explorador de archivos en la misma red
+
+1. Copia el APK a una carpeta accesible o súbelo a Drive.
+2. Descárgalo en el móvil e instálalo como en la opción B.
+
+---
+
+Al abrir la app
+
+1. Debe cargar **solo** la interfaz oscura del asistente (sin header de tienda, footer ni botón flotante de WhatsApp).
+2. Elige tu nombre en **“¿Quién eres?”** (solo la primera vez).
+3. Al escribir, el teclado debe empujar el contenido (plugin Keyboard). Los toques en botones vibran ligeramente (Haptics).
+
+Si aún ves la web completa: **despliega los cambios en Vercel** y reinstala el APK (`yarn apk:debug`).
+
+Si ves pantalla en blanco o error de auth: comprueba internet y token en Vercel.
+
+---
+
+## Resumen rápido (setup completo desde cero)
 
 ```bash
 # 1. Dependencias (solo yarn — NO uses npm install --legacy-peer-deps)

@@ -27,3 +27,16 @@ allprojects {
 task clean(type: Delete) {
     delete rootProject.buildDir
 }
+
+subprojects {
+    project.configurations.configureEach { configuration ->
+        configuration.resolutionStrategy.eachDependency { DependencyResolveDetails details ->
+            if (details.requested.group == 'org.jetbrains.kotlin') {
+                // Forzar a que usen la misma versión estándar de stdlib
+                if (details.requested.name == 'kotlin-stdlib-jdk7' || details.requested.name == 'kotlin-stdlib-jdk8') {
+                    details.useTarget "org.jetbrains.kotlin:kotlin-stdlib:${details.requested.version}"
+                }
+            }
+        }
+    }
+}

@@ -7,6 +7,21 @@ const config: CapacitorConfig = {
 	server: {
 		url: 'https://guerralaser.com/mobile/asistente',
 		cleartext: false
+	},
+	plugins: {
+		Keyboard: {
+			resize: 'body',
+			resizeOnFullScreen: true
+		},
+		SplashScreen: {
+			launchAutoHide: true,
+			backgroundColor: '#131314',
+			showSpinner: false
+		},
+		StatusBar: {
+			style: 'DARK',
+			backgroundColor: '#131314'
+		}
 	}
 };
 
