@@ -2,6 +2,7 @@
 	import { cart } from '$lib/stores/cart';
 	import { formatPrice } from '$lib/utils';
 	import { getImageKitUrl } from '$lib/storage';
+	import FormattedText from '$lib/components/FormattedText.svelte';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -404,7 +405,7 @@
 									<h1 class="text-4xl font-bold mb-4">{data.product.name}</h1>
 
 									{#if data.product.short_description}
-										<p class="text-xl text-gray-600 mb-6">{data.product.short_description}</p>
+										<FormattedText text={data.product.short_description} class="text-xl text-gray-600 mb-6" />
 									{/if}
 
 									{#if data.product.technical_sheet_url || data.product.manual_pdf_url}
@@ -655,9 +656,7 @@
 {#if data.product.description}
 	<div class="mt-12">
 		<h2 class="text-2xl font-bold mb-4">Descripción</h2>
-		<div class="prose max-w-none">
-			<p class="text-gray-700 whitespace-pre-line">{data.product.description}</p>
-		</div>
+		<FormattedText text={data.product.description} class="text-gray-700 max-w-none" />
 	</div>
 {/if}
 </div>
