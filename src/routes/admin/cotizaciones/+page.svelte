@@ -590,69 +590,79 @@
 		const SKU_X = 30;
 		const DESC_X = 48;
 		const DESC_WIDTH = 58;
+		const ROW_GAP = 3;
+
+		function getLineHeightMm() {
+			return (doc.getFontSize() * doc.getLineHeightFactor()) / doc.internal.scaleFactor;
+		}
+
+		function drawTableHeader() {
+			doc.setFillColor(240, 240, 240);
+			doc.rect(10, currentY - 4, 190, 6, 'F');
+			doc.setFont('helvetica', 'bold');
+			doc.setFontSize(9);
+			doc.text('Foto', 11, currentY);
+			doc.text('SKU', 30, currentY);
+			doc.text('Descripción', 48, currentY);
+			doc.text('Cant.', 110, currentY, { align: 'right' });
+			doc.text('Precio Unit.', 135, currentY, { align: 'right' });
+			doc.text('Desc.%', 160, currentY, { align: 'right' });
+			doc.text('Total', 195, currentY, { align: 'right' });
+			currentY += 5;
+			doc.setFont('helvetica', 'normal');
+			doc.setFontSize(8);
+		}
 
 		// Filas de productos con mejor manejo de texto
 		for (const item of quotationItems) {
-			const subtotal = lineSubtotal(item);
 			const total = lineTotal(item);
+			const lineHeight = getLineHeightMm();
 
-			// Calcular altura necesaria para esta fila
 			const skuLines = doc.splitTextToSize(item.sku || '-', 16);
 			const descLines = doc.splitTextToSize(item.description || '', DESC_WIDTH);
-			const textHeight = Math.max(skuLines.length, descLines.length) * 4;
-			const rowHeight = Math.max(textHeight, item.imageUrl ? IMAGE_SIZE + 2 : textHeight);
+			const textLineCount = Math.max(skuLines.length, descLines.length);
+			const textBlockHeight = textLineCount * lineHeight;
+			const hasImage = Boolean(item.imageUrl && imageCache.get(item.imageUrl));
+			const imageBlockHeight = hasImage ? IMAGE_SIZE : 0;
+			const contentHeight = Math.max(textBlockHeight, imageBlockHeight);
+			const rowHeight = contentHeight + ROW_GAP;
 
-			// Salto de página si es necesario
-			if (currentY + rowHeight > 270) {
+			if (currentY + rowHeight + 2 > 270) {
 				doc.addPage();
 				currentY = 20;
-				
-				// Repetir encabezados en nueva página
-				doc.setFillColor(240, 240, 240);
-				doc.rect(10, currentY - 4, 190, 6, 'F');
-				doc.setFont('helvetica', 'bold');
-				doc.setFontSize(9);
-				doc.text('Foto', 11, currentY);
-				doc.text('SKU', 30, currentY);
-				doc.text('Descripción', 48, currentY);
-				doc.text('Cant.', 110, currentY, { align: 'right' });
-				doc.text('Precio Unit.', 135, currentY, { align: 'right' });
-				doc.text('Desc.%', 160, currentY, { align: 'right' });
-				doc.text('Total', 195, currentY, { align: 'right' });
-				currentY += 5;
-				doc.setFont('helvetica', 'normal');
-				doc.setFontSize(8);
+				drawTableHeader();
 			}
 
-			if (item.imageUrl) {
-				const loadedImage = imageCache.get(item.imageUrl);
+			const rowTop = currentY;
+
+			if (hasImage) {
+				const loadedImage = imageCache.get(item.imageUrl!);
 				if (loadedImage) {
 					doc.addImage(
 						loadedImage.dataUrl,
 						loadedImage.format,
 						IMAGE_X,
-						currentY - 2,
+						rowTop,
 						IMAGE_SIZE,
 						IMAGE_SIZE
 					);
 				}
 			}
 
-			// Dibujar contenido de la fila
-			doc.text(skuLines, SKU_X, currentY);
-			doc.text(descLines, DESC_X, currentY);
-			doc.text(String(item.quantity), 110, currentY + 2, { align: 'right' });
-			doc.text(`$${item.price.toFixed(2)}`, 135, currentY + 2, { align: 'right' });
-			doc.text(`${item.discount.toFixed(1)}%`, 160, currentY + 2, { align: 'right' });
-			doc.text(`$${total.toFixed(2)}`, 195, currentY + 2, { align: 'right' });
-			
-			currentY += rowHeight + 1;
-			
-			// Línea divisoria entre productos (azul suave)
+			const textY = rowTop + 1;
+			doc.text(skuLines, SKU_X, textY);
+			doc.text(descLines, DESC_X, textY);
+			doc.text(String(item.quantity), 110, textY, { align: 'right' });
+			doc.text(`$${item.price.toFixed(2)}`, 135, textY, { align: 'right' });
+			doc.text(`${item.discount.toFixed(1)}%`, 160, textY, { align: 'right' });
+			doc.text(`$${total.toFixed(2)}`, 195, textY, { align: 'right' });
+
+			currentY = rowTop + rowHeight;
+
 			doc.setDrawColor(200, 210, 230);
 			doc.setLineWidth(0.1);
 			doc.line(10, currentY, 200, currentY);
-			currentY += 1;
+			currentY += ROW_GAP;
 		}
 
 		// Totales
