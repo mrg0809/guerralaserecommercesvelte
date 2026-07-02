@@ -2,6 +2,8 @@
 	import { supabase } from '$lib/supabaseClient';
 	import jsPDF from 'jspdf';
 	import CustomerSearch from '$lib/components/customers/CustomerSearch.svelte';
+	import { getPrimaryProductImageUrl } from '$lib/utils/productMedia';
+	import { loadImageForPdf } from '$lib/utils/pdfImages';
 	import type { Database } from '$lib/types/database.types';
 
 	type Customer = Database['public']['Tables']['customers']['Row'];
@@ -23,6 +25,7 @@
 		discount: number; // porcentaje por línea
 		isVariant?: boolean;
 		variantId?: string | null;
+		imageUrl?: string;
 	};
 
 	let quotationItems = $state<QuotationItem[]>([]);
@@ -84,7 +87,7 @@
 		// Cargar productos con variantes
 		const { data: productsData } = await supabase
 			.from('products')
-			.select('id, sku, name, base_price, stock_quantity, product_variants(id, name, sku, price, stock_quantity)')
+			.select('id, sku, name, base_price, stock_quantity, product_variants(id, name, sku, price, stock_quantity), product_media(url, is_primary, display_order)')
 			.eq('is_active', true)
 			.order('name');
 
@@ -94,6 +97,7 @@
 		productItems = [];
 		for (const product of products) {
 			const variants = product.product_variants || [];
+			const imageUrl = getPrimaryProductImageUrl(product.product_media);
 			
 			if (variants.length > 0) {
 				// Producto con variantes: agregar solo las variantes
@@ -106,7 +110,8 @@
 						price: variant.price || product.base_price,
 						stock_quantity: variant.stock_quantity || 0,
 						isVariant: true,
-						variantId: variant.id
+						variantId: variant.id,
+						imageUrl
 					});
 				}
 			} else {
@@ -119,7 +124,8 @@
 					price: product.base_price,
 					stock_quantity: product.stock_quantity || 0,
 					isVariant: false,
-					variantId: null
+					variantId: null,
+					imageUrl
 				});
 			}
 		}
@@ -165,7 +171,8 @@
 				price: basePrice,
 				discount: 0,
 				isVariant: product.isVariant,
-				variantId: product.variantId
+				variantId: product.variantId,
+				imageUrl: product.imageUrl || ''
 			}
 		];
 	}
@@ -555,8 +562,9 @@
 		doc.rect(10, currentY - 4, 190, 6, 'F');
 		doc.setFontSize(9);
 		doc.setFont('helvetica', 'bold');
-		doc.text('SKU', 11, currentY);
-		doc.text('Descripción', 32, currentY);
+		doc.text('Foto', 11, currentY);
+		doc.text('SKU', 30, currentY);
+		doc.text('Descripción', 48, currentY);
 		doc.text('Cant.', 110, currentY, { align: 'right' });
 		doc.text('Precio Unit.', 135, currentY, { align: 'right' });
 		doc.text('Desc.%', 160, currentY, { align: 'right' });
@@ -566,16 +574,33 @@
 		doc.setFont('helvetica', 'normal');
 		doc.setFontSize(8);
 
+		const imageCache = new Map<string, { dataUrl: string; format: 'PNG' | 'JPEG' }>();
+		await Promise.all(
+			quotationItems
+				.filter((item) => item.imageUrl)
+				.map(async (item) => {
+					if (!item.imageUrl || imageCache.has(item.imageUrl)) return;
+					const loaded = await loadImageForPdf(item.imageUrl);
+					if (loaded) imageCache.set(item.imageUrl, loaded);
+				})
+		);
+
+		const IMAGE_SIZE = 16;
+		const IMAGE_X = 11;
+		const SKU_X = 30;
+		const DESC_X = 48;
+		const DESC_WIDTH = 58;
+
 		// Filas de productos con mejor manejo de texto
 		for (const item of quotationItems) {
 			const subtotal = lineSubtotal(item);
 			const total = lineTotal(item);
 
 			// Calcular altura necesaria para esta fila
-			const skuLines = doc.splitTextToSize(item.sku || '-', 18);
-			const descLines = doc.splitTextToSize(item.description || '', 75);
-			const maxLines = Math.max(skuLines.length, descLines.length);
-			const rowHeight = maxLines * 4;
+			const skuLines = doc.splitTextToSize(item.sku || '-', 16);
+			const descLines = doc.splitTextToSize(item.description || '', DESC_WIDTH);
+			const textHeight = Math.max(skuLines.length, descLines.length) * 4;
+			const rowHeight = Math.max(textHeight, item.imageUrl ? IMAGE_SIZE + 2 : textHeight);
 
 			// Salto de página si es necesario
 			if (currentY + rowHeight > 270) {
@@ -587,8 +612,9 @@
 				doc.rect(10, currentY - 4, 190, 6, 'F');
 				doc.setFont('helvetica', 'bold');
 				doc.setFontSize(9);
-				doc.text('SKU', 11, currentY);
-				doc.text('Descripción', 32, currentY);
+				doc.text('Foto', 11, currentY);
+				doc.text('SKU', 30, currentY);
+				doc.text('Descripción', 48, currentY);
 				doc.text('Cant.', 110, currentY, { align: 'right' });
 				doc.text('Precio Unit.', 135, currentY, { align: 'right' });
 				doc.text('Desc.%', 160, currentY, { align: 'right' });
@@ -598,9 +624,23 @@
 				doc.setFontSize(8);
 			}
 
+			if (item.imageUrl) {
+				const loadedImage = imageCache.get(item.imageUrl);
+				if (loadedImage) {
+					doc.addImage(
+						loadedImage.dataUrl,
+						loadedImage.format,
+						IMAGE_X,
+						currentY - 2,
+						IMAGE_SIZE,
+						IMAGE_SIZE
+					);
+				}
+			}
+
 			// Dibujar contenido de la fila
-			doc.text(skuLines, 11, currentY);
-			doc.text(descLines, 32, currentY);
+			doc.text(skuLines, SKU_X, currentY);
+			doc.text(descLines, DESC_X, currentY);
 			doc.text(String(item.quantity), 110, currentY + 2, { align: 'right' });
 			doc.text(`$${item.price.toFixed(2)}`, 135, currentY + 2, { align: 'right' });
 			doc.text(`${item.discount.toFixed(1)}%`, 160, currentY + 2, { align: 'right' });
@@ -938,6 +978,7 @@
 							<table class="min-w-full text-sm border">
 								<thead class="bg-gray-100">
 									<tr>
+										<th class="px-3 py-2 text-center border w-16">Foto</th>
 										<th class="px-3 py-2 text-left border">SKU</th>
 										<th class="px-3 py-2 text-left border">Descripción</th>
 										<th class="px-3 py-2 text-right border w-24">Cantidad</th>
@@ -950,6 +991,15 @@
 								<tbody>
 									{#each quotationItems as item, index}
 										<tr class="border-t">
+											<td class="px-3 py-2 border align-middle text-center w-16">
+												{#if item.imageUrl}
+													<img
+														src={item.imageUrl}
+														alt=""
+														class="h-12 w-12 object-contain mx-auto rounded border border-gray-200 bg-white"
+													/>
+												{/if}
+											</td>
 											<td class="px-3 py-2 border align-top">{item.sku}</td>
 											<td class="px-3 py-2 border align-top">
 												<textarea
