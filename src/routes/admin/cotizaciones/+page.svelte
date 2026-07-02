@@ -227,6 +227,17 @@
 		return total + shippingCost + installationCost;
 	}
 
+	const IVA_FACTOR = 1.16;
+
+	function quotationTaxBreakdown() {
+		const totalConIva = quotationTotal();
+		const subtotalSinIva = Math.round((totalConIva / IVA_FACTOR) * 100) / 100;
+		const iva = Math.round((totalConIva - subtotalSinIva) * 100) / 100;
+		return { totalConIva, subtotalSinIva, iva };
+	}
+
+	const taxBreakdown = $derived.by(() => quotationTaxBreakdown());
+
 	function resetQuotation() {
 		quotationItems = [];
 		productSearch = '';
@@ -674,10 +685,10 @@
 		
 		const subtotal = quotationSubtotal();
 		const genDiscount = generalDiscountAmount();
-		const total = quotationTotal();
+		const { totalConIva, subtotalSinIva, iva } = quotationTaxBreakdown();
 
 		doc.setFontSize(9);
-		doc.text('Subtotal:', 155, currentY, { align: 'right' });
+		doc.text('Subtotal productos:', 155, currentY, { align: 'right' });
 		doc.text(`$${subtotal.toFixed(2)} MXN`, 195, currentY, { align: 'right' });
 		currentY += 5;
 		
@@ -700,12 +711,26 @@
 			doc.text(`$${installationCost.toFixed(2)} MXN`, 195, currentY, { align: 'right' });
 			currentY += 5;
 		}
+
+		currentY += 2;
+		doc.setDrawColor(200, 210, 230);
+		doc.setLineWidth(0.1);
+		doc.line(120, currentY, 200, currentY);
+		currentY += 5;
+
+		doc.text('Subtotal (sin IVA):', 155, currentY, { align: 'right' });
+		doc.text(`$${subtotalSinIva.toFixed(2)} MXN`, 195, currentY, { align: 'right' });
+		currentY += 5;
+
+		doc.text('IVA (16%):', 155, currentY, { align: 'right' });
+		doc.text(`$${iva.toFixed(2)} MXN`, 195, currentY, { align: 'right' });
+		currentY += 5;
 		
 		doc.setFont('helvetica', 'bold');
 		doc.setFontSize(11);
 		doc.setTextColor(blueColor[0], blueColor[1], blueColor[2]);
 		doc.text('Total:', 155, currentY, { align: 'right' });
-		doc.text(`$${total.toFixed(2)} MXN`, 195, currentY, { align: 'right' });
+		doc.text(`$${totalConIva.toFixed(2)} MXN`, 195, currentY, { align: 'right' });
 		doc.setTextColor(0, 0, 0);
 		doc.setFont('helvetica', 'normal');
 		currentY += 8;
@@ -1083,7 +1108,7 @@
 								<div class="bg-gray-50 rounded-lg p-4 min-w-[280px]">
 									<div class="space-y-2">
 										<div class="flex justify-between text-sm">
-											<span class="font-medium">Subtotal:</span>
+											<span class="font-medium">Subtotal productos:</span>
 											<span class="font-semibold">${quotationSubtotal().toFixed(2)}</span>
 										</div>
 										{#if generalDiscount > 0}
@@ -1104,9 +1129,19 @@
 												<span class="font-semibold">${installationCost.toFixed(2)}</span>
 											</div>
 										{/if}
+										<div class="border-t border-gray-300 pt-2 space-y-2">
+											<div class="flex justify-between text-sm">
+												<span class="font-medium">Subtotal (sin IVA):</span>
+												<span class="font-semibold">${taxBreakdown.subtotalSinIva.toFixed(2)}</span>
+											</div>
+											<div class="flex justify-between text-sm">
+												<span class="font-medium">IVA (16%):</span>
+												<span class="font-semibold">${taxBreakdown.iva.toFixed(2)}</span>
+											</div>
+										</div>
 										<div class="flex justify-between text-lg font-bold border-t pt-2">
 											<span>Total:</span>
-											<span class="text-blue-600">${quotationTotal().toFixed(2)} MXN</span>
+											<span class="text-blue-600">${taxBreakdown.totalConIva.toFixed(2)} MXN</span>
 										</div>
 									</div>
 								</div>
