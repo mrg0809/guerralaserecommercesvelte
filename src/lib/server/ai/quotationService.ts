@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { generateJson, generateText } from '$lib/server/ai/geminiClient';
-import { searchProductLine } from '$lib/server/ai/productCatalogSearch';
+import { searchProductLine, enrichQuoteLine } from '$lib/server/ai/productCatalogSearch';
 import { normalizeQuoteDraft } from '$lib/server/ai/quoteUtils';
 import type { QuoteDraft, QuoteLine } from '$lib/types/assistant';
 
@@ -31,7 +31,7 @@ export async function parseQuoteFromMessage(
 			precio: p.precio,
 			descuento: p.descuento
 		});
-		lines.push(line);
+		lines.push(line.product_id ? await enrichQuoteLine(supabase, line) : line);
 	}
 
 	return normalizeQuoteDraft({

@@ -19,3 +19,11 @@ export function getPrimaryProductImageUrl(
 
 	return getImageKitUrl(sorted[0]?.url);
 }
+
+export function buildCatalogDetail(product: {
+	short_description?: string | null;
+	description?: string | null;
+}) {
+	const parts = [product.short_description, product.description].filter(Boolean);
+	return parts.join('\n\n');
+}

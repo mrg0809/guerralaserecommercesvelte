@@ -1,17 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { generateEmbedding, normalizeProductText } from '$lib/utils/embeddings';
 import { parsePrice, resolveUnitPrice } from '$lib/server/ai/quoteUtils';
-import type { QuoteLine } from '$lib/types/assistant';
+import { fetchProductCatalogExtras } from '$lib/server/quotationProductEnrichment';
+import type { CatalogProductHit, QuoteLine } from '$lib/types/assistant';
 
-export interface CatalogProductHit {
-	id: string;
-	product_id: string;
-	variant_id?: string;
-	description: string;
-	sku?: string;
-	unit_price: number;
-	is_variant: boolean;
-}
+export type { CatalogProductHit };
 
 function newLineId(): string {
 	return crypto.randomUUID();
@@ -27,6 +20,28 @@ function normalizeSearchQuery(query: string): string {
 		.replace(/máquina|maquina|tubo|pieza|unidad de|un|una|dame|cotiza/gi, '')
 		.replace(/[^a-z0-9\s]/g, '')
 		.trim();
+}
+
+async function enrichCatalogHits(
+	supabase: SupabaseClient,
+	hits: CatalogProductHit[]
+): Promise<CatalogProductHit[]> {
+	const cache = new Map<string, Awaited<ReturnType<typeof fetchProductCatalogExtras>>>();
+
+	return Promise.all(
+		hits.map(async (hit) => {
+			if (!hit.product_id) return hit;
+			if (!cache.has(hit.product_id)) {
+				cache.set(hit.product_id, await fetchProductCatalogExtras(supabase, hit.product_id));
+			}
+			const extras = cache.get(hit.product_id)!;
+			return {
+				...hit,
+				image_url: extras.imageUrl || undefined,
+				catalog_detail: extras.catalogDetail || undefined
+			};
+		})
+	);
 }
 
 async function searchByText(
@@ -112,7 +127,7 @@ export async function searchCatalogProducts(
 		});
 	}
 
-	if (hits.length >= limit) return hits.slice(0, limit);
+	if (hits.length >= limit) return enrichCatalogHits(supabase, hits.slice(0, limit));
 
 	const { data: products } = await supabase
 		.from('products')
@@ -136,7 +151,7 @@ export async function searchCatalogProducts(
 		if (hits.length >= limit) break;
 	}
 
-	return hits.slice(0, limit);
+	return enrichCatalogHits(supabase, hits.slice(0, limit));
 }
 
 export async function searchProductLine(
@@ -261,6 +276,23 @@ export function catalogHitToQuoteLine(hit: CatalogProductHit, quantity = 1): Quo
 		quantity,
 		unit_price: hit.unit_price,
 		discount_percent: 0,
-		sku: hit.sku
+		sku: hit.sku,
+		image_url: hit.image_url,
+		catalog_detail: hit.catalog_detail,
+		detail_description: '',
+		include_detail: false
+	};
+}
+
+export async function enrichQuoteLine(
+	supabase: SupabaseClient,
+	line: QuoteLine
+): Promise<QuoteLine> {
+	if (!line.product_id) return line;
+	const extras = await fetchProductCatalogExtras(supabase, line.product_id);
+	return {
+		...line,
+		image_url: extras.imageUrl || line.image_url,
+		catalog_detail: extras.catalogDetail || line.catalog_detail
 	};
 }

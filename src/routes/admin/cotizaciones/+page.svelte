@@ -2,8 +2,9 @@
 	import { supabase } from '$lib/supabaseClient';
 	import jsPDF from 'jspdf';
 	import CustomerSearch from '$lib/components/customers/CustomerSearch.svelte';
-	import { getPrimaryProductImageUrl } from '$lib/utils/productMedia';
+	import { getPrimaryProductImageUrl, buildCatalogDetail } from '$lib/utils/productMedia';
 	import { loadImageForPdf } from '$lib/utils/pdfImages';
+	import { calculateQuotationTaxBreakdown } from '$lib/utils/quotationTax';
 	import type { Database } from '$lib/types/database.types';
 
 	type Customer = Database['public']['Tables']['customers']['Row'];
@@ -84,14 +85,6 @@
 	$effect(() => {
 		loadProducts();
 	});
-
-	function buildCatalogDetail(product: {
-		short_description?: string | null;
-		description?: string | null;
-	}) {
-		const parts = [product.short_description, product.description].filter(Boolean);
-		return parts.join('\n\n');
-	}
 
 	async function loadProducts() {
 		loading = true;
@@ -271,13 +264,8 @@
 		return total + shippingCost + installationCost;
 	}
 
-	const IVA_FACTOR = 1.16;
-
 	function quotationTaxBreakdown() {
-		const totalConIva = quotationTotal();
-		const subtotalSinIva = Math.round((totalConIva / IVA_FACTOR) * 100) / 100;
-		const iva = Math.round((totalConIva - subtotalSinIva) * 100) / 100;
-		return { totalConIva, subtotalSinIva, iva };
+		return calculateQuotationTaxBreakdown(quotationTotal());
 	}
 
 	const taxBreakdown = $derived.by(() => quotationTaxBreakdown());
