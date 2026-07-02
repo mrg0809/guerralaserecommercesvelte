@@ -26,11 +26,15 @@
 		isVariant?: boolean;
 		variantId?: string | null;
 		imageUrl?: string;
+		catalogDetail?: string;
+		detailDescription?: string;
+		includeDetail?: boolean;
 	};
 
 	let quotationItems = $state<QuotationItem[]>([]);
 	let productSearch = $state('');
 	let generalDiscount = $state(0); // porcentaje de descuento general
+	let includeAllDetails = $state(false);
 
 	// Datos de cliente para la cotización
 	let selectedCustomerId = $state<string | null>(null);
@@ -81,13 +85,21 @@
 		loadProducts();
 	});
 
+	function buildCatalogDetail(product: {
+		short_description?: string | null;
+		description?: string | null;
+	}) {
+		const parts = [product.short_description, product.description].filter(Boolean);
+		return parts.join('\n\n');
+	}
+
 	async function loadProducts() {
 		loading = true;
 
 		// Cargar productos con variantes
 		const { data: productsData } = await supabase
 			.from('products')
-			.select('id, sku, name, base_price, stock_quantity, product_variants(id, name, sku, price, stock_quantity), product_media(url, is_primary, display_order)')
+			.select('id, sku, name, base_price, stock_quantity, short_description, description, product_variants(id, name, sku, price, stock_quantity), product_media(url, is_primary, display_order)')
 			.eq('is_active', true)
 			.order('name');
 
@@ -98,6 +110,7 @@
 		for (const product of products) {
 			const variants = product.product_variants || [];
 			const imageUrl = getPrimaryProductImageUrl(product.product_media);
+			const catalogDetail = buildCatalogDetail(product);
 			
 			if (variants.length > 0) {
 				// Producto con variantes: agregar solo las variantes
@@ -111,7 +124,8 @@
 						stock_quantity: variant.stock_quantity || 0,
 						isVariant: true,
 						variantId: variant.id,
-						imageUrl
+						imageUrl,
+						catalogDetail
 					});
 				}
 			} else {
@@ -125,7 +139,8 @@
 					stock_quantity: product.stock_quantity || 0,
 					isVariant: false,
 					variantId: null,
-					imageUrl
+					imageUrl,
+					catalogDetail
 				});
 			}
 		}
@@ -172,9 +187,38 @@
 				discount: 0,
 				isVariant: product.isVariant,
 				variantId: product.variantId,
-				imageUrl: product.imageUrl || ''
+				imageUrl: product.imageUrl || '',
+				catalogDetail: product.catalogDetail || '',
+				detailDescription: '',
+				includeDetail: false
 			}
 		];
+	}
+
+	function fillDetailFromCatalog(index: number) {
+		const item = quotationItems[index];
+		if (!item.catalogDetail) return;
+		item.detailDescription = item.catalogDetail;
+		item.includeDetail = true;
+		quotationItems = [...quotationItems];
+	}
+
+	function toggleIncludeAllDetails() {
+		for (const item of quotationItems) {
+			item.includeDetail = includeAllDetails;
+			if (includeAllDetails && !item.detailDescription?.trim() && item.catalogDetail) {
+				item.detailDescription = item.catalogDetail;
+			}
+		}
+		quotationItems = [...quotationItems];
+	}
+
+	function toggleItemDetail(index: number, include: boolean) {
+		quotationItems[index].includeDetail = include;
+		if (include && !quotationItems[index].detailDescription?.trim() && quotationItems[index].catalogDetail) {
+			quotationItems[index].detailDescription = quotationItems[index].catalogDetail;
+		}
+		quotationItems = [...quotationItems];
 	}
 
 	function updateItemQuantity(index: number, value: string) {
@@ -242,6 +286,7 @@
 		quotationItems = [];
 		productSearch = '';
 		generalDiscount = 0;
+		includeAllDetails = false;
 		customerName = '';
 		customerCompany = '';
 		customerRfc = '';
@@ -624,6 +669,30 @@
 			doc.setFontSize(8);
 		}
 
+		function drawItemDetailBlock(detailText: string) {
+			const detailLineHeight = getLineHeightMm();
+			const detailLines = doc.splitTextToSize(detailText.trim(), 188);
+
+			currentY += 2;
+			doc.setFontSize(7);
+			doc.setTextColor(70, 70, 70);
+
+			for (const line of detailLines) {
+				if (currentY + detailLineHeight > 270) {
+					doc.addPage();
+					currentY = 20;
+					doc.setFontSize(7);
+					doc.setTextColor(70, 70, 70);
+				}
+				doc.text(line, 11, currentY);
+				currentY += detailLineHeight;
+			}
+
+			currentY += 2;
+			doc.setFontSize(8);
+			doc.setTextColor(0, 0, 0);
+		}
+
 		// Filas de productos con mejor manejo de texto
 		for (const item of quotationItems) {
 			const total = lineTotal(item);
@@ -670,6 +739,10 @@
 
 			currentY = rowTop + rowHeight;
 
+			if (item.includeDetail && item.detailDescription?.trim()) {
+				drawItemDetailBlock(item.detailDescription);
+			}
+
 			doc.setDrawColor(200, 210, 230);
 			doc.setLineWidth(0.1);
 			doc.line(10, currentY, 200, currentY);
@@ -683,15 +756,11 @@
 		doc.line(120, currentY, 200, currentY);
 		currentY += 6;
 		
-		const subtotal = quotationSubtotal();
 		const genDiscount = generalDiscountAmount();
 		const { totalConIva, subtotalSinIva, iva } = quotationTaxBreakdown();
 
 		doc.setFontSize(9);
-		doc.text('Subtotal productos:', 155, currentY, { align: 'right' });
-		doc.text(`$${subtotal.toFixed(2)} MXN`, 195, currentY, { align: 'right' });
-		currentY += 5;
-		
+
 		if (genDiscount > 0) {
 			doc.setTextColor(redColor[0], redColor[1], redColor[2]);
 			doc.text(`Descuento general (${generalDiscount || 0}%):`, 155, currentY, { align: 'right' });
@@ -992,14 +1061,25 @@
 			<!-- Detalle de cotización -->
 			<div class="lg:col-span-3">
 				<div class="bg-white rounded-lg shadow-md p-6">
-					<div class="flex justify-between items-center mb-4">
+					<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
 						<h3 class="text-lg font-semibold">Productos en la Cotización</h3>
-						<button
-							onclick={resetQuotation}
-							class="text-sm text-red-600 hover:text-red-700 underline"
-						>
-							Limpiar todo
-						</button>
+						<div class="flex flex-wrap items-center gap-4">
+							<label class="flex items-center gap-2 text-sm text-gray-700">
+								<input
+									type="checkbox"
+									class="rounded border-gray-300"
+									bind:checked={includeAllDetails}
+									onchange={toggleIncludeAllDetails}
+								/>
+								Incluir descripciones detalladas en el PDF
+							</label>
+							<button
+								onclick={resetQuotation}
+								class="text-sm text-red-600 hover:text-red-700 underline"
+							>
+								Limpiar todo
+							</button>
+						</div>
 					</div>
 
 					{#if quotationItems.length === 0}
@@ -1041,6 +1121,7 @@
 													rows="2"
 													class="w-full border rounded-md px-2 py-1 text-sm"
 													bind:value={item.description}
+													placeholder="Nombre del artículo"
 												></textarea>
 											</td>
 											<td class="px-3 py-2 border align-top">
@@ -1085,6 +1166,50 @@
 												</button>
 											</td>
 										</tr>
+										<tr class="border-t bg-gray-50">
+											<td colspan="8" class="px-3 py-3 border">
+												<label class="flex items-center gap-2 text-sm text-gray-700 mb-2">
+													<input
+														type="checkbox"
+														class="rounded border-gray-300"
+														checked={item.includeDetail}
+														onchange={(e) => toggleItemDetail(index, e.currentTarget.checked)}
+													/>
+													Incluir descripción detallada en el PDF
+												</label>
+												{#if item.includeDetail}
+													<textarea
+														rows="4"
+														class="w-full border rounded-md px-3 py-2 text-sm"
+														bind:value={item.detailDescription}
+														placeholder="Características, especificaciones técnicas, accesorios incluidos..."
+													></textarea>
+													<div class="flex flex-wrap gap-2 mt-2">
+														{#if item.catalogDetail}
+															<button
+																type="button"
+																onclick={() => fillDetailFromCatalog(index)}
+																class="text-xs px-3 py-1.5 bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200"
+															>
+																Usar descripción del catálogo
+															</button>
+														{/if}
+														{#if item.detailDescription?.trim()}
+															<button
+																type="button"
+																onclick={() => {
+																	item.detailDescription = '';
+																	quotationItems = [...quotationItems];
+																}}
+																class="text-xs px-3 py-1.5 bg-gray-100 text-gray-600 rounded-md hover:bg-gray-200"
+															>
+																Limpiar descripción
+															</button>
+														{/if}
+													</div>
+												{/if}
+											</td>
+										</tr>
 									{/each}
 								</tbody>
 							</table>
@@ -1107,10 +1232,6 @@
 
 								<div class="bg-gray-50 rounded-lg p-4 min-w-[280px]">
 									<div class="space-y-2">
-										<div class="flex justify-between text-sm">
-											<span class="font-medium">Subtotal productos:</span>
-											<span class="font-semibold">${quotationSubtotal().toFixed(2)}</span>
-										</div>
 										{#if generalDiscount > 0}
 											<div class="flex justify-between text-sm text-red-600">
 												<span class="font-medium">Descuento ({generalDiscount}%):</span>
