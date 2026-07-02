@@ -1,12 +1,15 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { SUPABASE_SERVICE_ROLE_KEY } from '$env/static/private';
 import { PUBLIC_SUPABASE_URL } from '$env/static/public';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { jsPDF } from 'jspdf';
 import { generateEmbedding, normalizeProductText } from '$lib/utils/embeddings';
-import { addQuotationLogoToPdf } from '$lib/server/quotationLogo';
+import { buildQuotationPdf, type QuotationPdfItem } from '$lib/server/quotationPdfBuilder';
+import {
+	fetchProductCatalogExtras,
+	fetchProductIdForVariant
+} from '$lib/server/quotationProductEnrichment';
 
 // Función helper para obtener la instancia de genAI
 async function getGenAI() {
@@ -38,6 +41,26 @@ async function getGenAI() {
 	return new GoogleGenerativeAI(GEMINI_API_KEY);
 }
 const createSupabaseAdminClient = () => createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+type ChatQuotationItem = QuotationPdfItem & {
+	product_id?: string;
+	variant_id?: string;
+};
+
+async function enrichChatQuotationItem(
+	supabase: SupabaseClient,
+	item: ChatQuotationItem,
+	productId: string | null
+): Promise<ChatQuotationItem> {
+	if (!productId) return item;
+	const extras = await fetchProductCatalogExtras(supabase, productId);
+	return {
+		...item,
+		imageUrl: extras.imageUrl || item.imageUrl,
+		includeDetail: item.includeDetail ?? false,
+		detailDescription: item.detailDescription ?? ''
+	};
+}
 
 // --- BÚSQUEDA SEMÁNTICA DE PRODUCTOS CON EMBEDDINGS ---
 async function searchProductsWithEmbeddings(supabase: SupabaseClient, productInfo: { nombre: string, cantidad: number, precio?: number, descuento?: number }) {
@@ -76,14 +99,18 @@ async function searchProductsWithEmbeddings(supabase: SupabaseClient, productInf
             
             console.log(`[LOG] Precio final: ${finalPrice} (DB: ${v.price}), Descuento final: ${finalDiscount}%`);
 
-            return { 
-                id: v.id, 
+            return await enrichChatQuotationItem(supabase, { 
+                id: v.id,
+                product_id: v.product_id,
+                variant_id: v.id,
                 sku: v.sku || 'N/A', 
                 description: `${v.product_name} - ${v.variant_name}`, 
                 quantity: cantidad, 
                 price: finalPrice, 
-                discount: finalDiscount 
-            };
+                discount: finalDiscount,
+                includeDetail: false,
+                detailDescription: ''
+            }, v.product_id ?? (await fetchProductIdForVariant(supabase, v.id)));
         }
 
         // Estrategia 2: Si no hay variantes, buscar en productos principales
@@ -109,14 +136,17 @@ async function searchProductsWithEmbeddings(supabase: SupabaseClient, productInf
             
             console.log(`[LOG] Precio final: ${finalPrice} (DB: ${p.base_price}), Descuento final: ${finalDiscount}%`);
 
-            return { 
-                id: p.id, 
+            return await enrichChatQuotationItem(supabase, { 
+                id: p.id,
+                product_id: p.id,
                 sku: p.sku || 'N/A', 
                 description: p.name, 
                 quantity: cantidad, 
                 price: finalPrice, 
-                discount: finalDiscount 
-            };
+                discount: finalDiscount,
+                includeDetail: false,
+                detailDescription: ''
+            }, p.id);
         }
 
         console.log(`[LOG] No se encontró nada para "${nombre}" con búsqueda semántica.`);
@@ -171,14 +201,18 @@ async function searchProductsByText(supabase: SupabaseClient, productInfo: { nom
         const finalPrice = precio !== undefined ? precio : v.price || 0;
         const finalDiscount = descuento !== undefined ? descuento : 0;
         
-        return {
+        return await enrichChatQuotationItem(supabase, {
             id: v.id,
+            product_id: product.id,
+            variant_id: v.id,
             sku: v.sku || 'N/A',
             description: `${product.name} - ${v.name}`,
             quantity: cantidad,
             price: finalPrice,
-            discount: finalDiscount
-        };
+            discount: finalDiscount,
+            includeDetail: false,
+            detailDescription: ''
+        }, product.id);
     }
     
     // Buscar en productos con ILIKE
@@ -202,109 +236,23 @@ async function searchProductsByText(supabase: SupabaseClient, productInfo: { nom
         const finalPrice = precio !== undefined ? precio : p.base_price || 0;
         const finalDiscount = descuento !== undefined ? descuento : 0;
         
-        return {
+        return await enrichChatQuotationItem(supabase, {
             id: p.id,
+            product_id: p.id,
             sku: p.sku || 'N/A',
             description: p.name,
             quantity: cantidad,
             price: finalPrice,
-            discount: finalDiscount
-        };
+            discount: finalDiscount,
+            includeDetail: false,
+            detailDescription: ''
+        }, p.id);
     }
     
     console.log(`[LOG] No se encontró nada para "${nombre}"`);
     return null;
 }
 
-
-// --- GENERACIÓN DE PDF ---
-async function createPdfDocument(data: any): Promise<jsPDF> {
-    const { quotationItems, customerName, quotationValidityDays, notes, shippingCost, installationCost } = data;
-    const doc = new jsPDF();
-    let currentY = 10;
-    const redColor = [220, 38, 38]; const blueColor = [37, 99, 235];
-    
-    // Logo (mismo que cotizaciones manuales)
-    try {
-        currentY = await addQuotationLogoToPdf(doc, 10, currentY);
-    } catch (e) {
-        console.error("[LOG] Logo no encontrado.", e);
-    }
-    doc.setFontSize(16).setFont('helvetica', 'bold').setTextColor(redColor[0], redColor[1], redColor[2]);
-    doc.text('COTIZACIÓN', 200, 15, { align: 'right' });
-    doc.setFontSize(9).setFont('helvetica', 'normal').setTextColor(0, 0, 0);
-    doc.text(`Fecha: ${new Date().toLocaleDateString('es-MX')}`, 200, 22, { align: 'right' });
-    doc.text(`Vigencia: ${quotationValidityDays || 15} días`, 200, 27, { align: 'right' });
-    doc.setFontSize(8).setTextColor(80, 80, 80);
-    doc.text('Guerra Laser México', 200, 35, { align: 'right' });
-    doc.text('Tel: 33 2015 2372', 200, 39, { align: 'right' });
-    doc.text('Cel: 33 3475 8653 | 33 1864 0008', 200, 43, { align: 'right' });
-    doc.text('contacto@guerralaser.com', 200, 47, { align: 'right' });
-    doc.text('Av. Las Torres 5301, Col. Glorias del Colli', 200, 51, { align: 'right' });
-    doc.text('Zapopan, Jalisco CP 45010', 200, 55, { align: 'right' });
-    currentY = Math.max(currentY, 62);
-    doc.setDrawColor(blueColor[0], blueColor[1], blueColor[2]).setLineWidth(0.5).line(10, currentY, 200, currentY); currentY += 6;
-    doc.setFontSize(11).setFont('helvetica', 'bold').setTextColor(0, 0, 0).text('DATOS DEL CLIENTE', 10, currentY);
-    doc.setFont('helvetica', 'normal').setFontSize(9); currentY += 6;
-    doc.text(`Nombre: ${customerName || '-'}`, 10, currentY); currentY += 12;
-    doc.setDrawColor(redColor[0], redColor[1], redColor[2]).line(10, currentY, 200, currentY); currentY += 5;
-    doc.setFillColor(240, 240, 240).rect(10, currentY - 4, 190, 6, 'F');
-    doc.setFontSize(9).setFont('helvetica', 'bold');
-    doc.text('SKU', 11, currentY); doc.text('Descripción', 32, currentY); doc.text('Cant.', 110, currentY, { align: 'right' }); doc.text('Precio Unit.', 135, currentY, { align: 'right' }); doc.text('Desc.%', 160, currentY, { align: 'right' }); doc.text('Total', 195, currentY, { align: 'right' });
-    currentY += 5; doc.setFont('helvetica', 'normal').setFontSize(8);
-    for (const item of quotationItems) {
-        const lineTotal = (item.quantity * item.price) * (1 - (item.discount || 0) / 100);
-        const descLines = doc.splitTextToSize(item.description || '', 75); const rowHeight = descLines.length * 4;
-        if (currentY + rowHeight > 270) { doc.addPage(); currentY = 20; }
-        doc.text(doc.splitTextToSize(item.sku || '-', 18), 11, currentY); doc.text(descLines, 32, currentY);
-        doc.text(String(item.quantity), 110, currentY, { align: 'right' }); doc.text(`$${item.price.toFixed(2)}`, 135, currentY, { align: 'right' }); doc.text(`${(item.discount || 0).toFixed(1)}%`, 160, currentY, { align: 'right' }); doc.text(`$${lineTotal.toFixed(2)}`, 195, currentY, { align: 'right' });
-        currentY += rowHeight + 2; doc.setDrawColor(200, 210, 230).setLineWidth(0.1).line(10, currentY, 200, currentY); currentY += 2;
-    }
-    currentY += 3; doc.setDrawColor(blueColor[0], blueColor[1], blueColor[2]).setLineWidth(0.5).line(120, currentY, 200, currentY); currentY += 6;
-    const subtotal = quotationItems.reduce((sum: number, item: any) => sum + (item.quantity * item.price), 0);
-    const totalDiscountAmount = quotationItems.reduce((sum: number, item: any) => sum + (item.quantity * item.price * (item.discount/100)), 0);
-    const finalTotal = subtotal - totalDiscountAmount + (shippingCost || 0) + (installationCost || 0);
-    doc.setFontSize(9);
-    doc.text('Subtotal:', 155, currentY, { align: 'right' }); doc.text(`$${subtotal.toFixed(2)} MXN`, 195, currentY, { align: 'right' }); currentY += 5;
-    doc.text('Descuento:', 155, currentY, { align: 'right' }); doc.text(`-$${totalDiscountAmount.toFixed(2)} MXN`, 195, currentY, { align: 'right' }); currentY += 5;
-    if (shippingCost && shippingCost > 0) {
-        doc.text('Envío:', 155, currentY, { align: 'right' });
-        doc.text(`$${shippingCost.toFixed(2)} MXN`, 195, currentY, { align: 'right' });
-        currentY += 5;
-    }
-    if (installationCost && installationCost > 0) {
-        doc.text('Instalación:', 155, currentY, { align: 'right' });
-        doc.text(`$${installationCost.toFixed(2)} MXN`, 195, currentY, { align: 'right' });
-        currentY += 5;
-    }
-    doc.setFont('helvetica', 'bold').setFontSize(11).setTextColor(blueColor[0], blueColor[1], blueColor[2]);
-    doc.text('Total:', 155, currentY, { align: 'right' }); doc.text(`$${finalTotal.toFixed(2)} MXN`, 195, currentY, { align: 'right' }); currentY += 8;
-    doc.setFont('helvetica', 'normal');
-    if (notes) { doc.setFontSize(9).setFont('helvetica', 'bold').setTextColor(0,0,0).text('Notas:', 10, currentY); const splitNotes = doc.splitTextToSize(notes, 180); doc.setFontSize(8).setFont('helvetica', 'normal').text(splitNotes, 10, currentY + 4); }
-    // Pie de página con datos bancarios
-    if (currentY < 240) {
-        currentY = 240;
-    }
-    doc.setDrawColor(redColor[0], redColor[1], redColor[2]).line(10, currentY, 200, currentY);
-    currentY += 6;
-    
-    // Datos bancarios
-    doc.setFontSize(9).setFont('helvetica', 'bold').setTextColor(0, 0, 0);
-    doc.text('DATOS BANCARIOS PARA DEPÓSITO O TRANSFERENCIA', 105, currentY, { align: 'center' });
-    currentY += 5;
-    
-    doc.setFont('helvetica', 'normal').setFontSize(8).setTextColor(60, 60, 60);
-    doc.text('Banco: BBVA Bancomer', 105, currentY, { align: 'center' }); currentY += 4;
-    doc.text('Nombre: Luis Enrique Guerra Zavala', 105, currentY, { align: 'center' }); currentY += 4;
-    doc.text('Cuenta: 0101373439', 105, currentY, { align: 'center' }); currentY += 4;
-    doc.text('Cuenta interbancaria: 012320001013734399', 105, currentY, { align: 'center' }); currentY += 4;
-    doc.text('Número de tarjeta: 4152 3132 0228 1320', 105, currentY, { align: 'center' }); currentY += 6;
-    
-    doc.setFontSize(7).setTextColor(100, 100, 100);
-    doc.text(`Esta cotización tiene una vigencia de ${quotationValidityDays || 15} días naturales.`, 105, currentY, { align: 'center' });
-    doc.text('Gracias por su preferencia - Guerra Laser México', 105, currentY + 4, { align: 'center' });
-    return doc;
-}
 
 // --- ENDPOINT PRINCIPAL ---
 export const POST: RequestHandler = async ({ request }) => {
@@ -429,12 +377,22 @@ Ahora procesa el siguiente mensaje:
     }
     console.log(`[LOG] Final: Productos encontrados: ${JSON.stringify(productosEncontrados, null, 2)}`);
 
-    const pdfDoc = await createPdfDocument({
-        quotationItems: productosEncontrados,
+    const pdfDoc = await buildQuotationPdf({
         customerName: parsedResult.cliente || 'Cliente Chat',
         notes: 'Cotización generada por asistente de IA.',
-        shippingCost: parsedResult.envio,
-        installationCost: parsedResult.instalacion
+        validityDays: 15,
+        shippingCost: parsedResult.envio ?? 0,
+        installationCost: parsedResult.instalacion ?? 0,
+        items: productosEncontrados.map((item) => ({
+            sku: item.sku,
+            description: item.description,
+            quantity: item.quantity,
+            price: item.price,
+            discount: item.discount,
+            imageUrl: item.imageUrl,
+            includeDetail: item.includeDetail,
+            detailDescription: item.detailDescription
+        }))
     });
     
     // Generar PDF en memoria y devolverlo como base64

@@ -161,7 +161,7 @@
 						{/if}
 						<h3 class="text-lg font-bold mb-2">{product.name}</h3>
 						{#if product.short_description}
-							<p class="text-gray-600 text-sm mb-3 line-clamp-2">{product.short_description}</p>
+							<p class="text-gray-600 text-sm mb-3 line-clamp-2 whitespace-pre-line">{product.short_description}</p>
 						{/if}
 						<div class="flex items-center justify-between">
 							<div class="flex items-baseline gap-1">

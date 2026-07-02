@@ -11,6 +11,18 @@ export type AiSessionType = 'knowledge' | 'quotation';
 
 export type QuoteLineSource = 'catalog' | 'manual';
 
+export interface CatalogProductHit {
+	id: string;
+	product_id: string;
+	variant_id?: string;
+	description: string;
+	sku?: string;
+	unit_price: number;
+	is_variant: boolean;
+	image_url?: string;
+	catalog_detail?: string;
+}
+
 export interface QuoteLine {
 	id: string;
 	source: QuoteLineSource;
@@ -21,6 +33,10 @@ export interface QuoteLine {
 	unit_price: number;
 	discount_percent?: number;
 	sku?: string;
+	image_url?: string;
+	catalog_detail?: string;
+	detail_description?: string;
+	include_detail?: boolean;
 }
 
 export interface QuoteDraft {

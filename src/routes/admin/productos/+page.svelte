@@ -2144,12 +2144,13 @@
 
 							<div>
 								<label class="block text-sm font-semibold mb-2" for="product-short-description">Descripción Corta</label>
-								<input
+								<textarea
 									id="product-short-description"
-									type="text"
 									bind:value={formData.short_description}
+									rows="3"
 									class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-								/>
+								></textarea>
+								<p class="text-xs text-gray-500 mt-1">Soporta saltos de línea y markdown básico (**negrita**, listas con -).</p>
 							</div>
 
 							<div>
@@ -2157,9 +2158,10 @@
 								<textarea
 									id="product-description"
 									bind:value={formData.description}
-									rows="4"
+									rows="8"
 									class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
 								></textarea>
+								<p class="text-xs text-gray-500 mt-1">Soporta saltos de línea y markdown básico (**negrita**, listas con -, ## títulos).</p>
 							</div>
 
 							<div class="border border-gray-200 rounded-lg p-4 bg-gray-50">

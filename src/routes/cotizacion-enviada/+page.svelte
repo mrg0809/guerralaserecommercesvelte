@@ -3,10 +3,10 @@
 
 	let quotationId = $state('');
 	let loading = $state(true);
-	let quotationData: any = null;
+	let quotationData = $state<any>(null);
 	let error = $state('');
 
-	$effect(async () => {
+	$effect(() => {
 		const id = $page.url.searchParams.get('id');
 		if (!id) {
 			error = 'ID de cotización no encontrado';
@@ -15,18 +15,20 @@
 		}
 
 		quotationId = id;
+		loading = true;
 
-		// Fetch quotation details
-		try {
-			const response = await fetch(`/api/quotations/shipping?id=${id}`);
-			if (response.ok) {
-				quotationData = await response.json();
+		void (async () => {
+			try {
+				const response = await fetch(`/api/quotations/shipping?id=${id}`);
+				if (response.ok) {
+					quotationData = await response.json();
+				}
+			} catch (e) {
+				console.error('Error fetching quotation:', e);
+			} finally {
+				loading = false;
 			}
-		} catch (e) {
-			console.error('Error fetching quotation:', e);
-		}
-
-		loading = false;
+		})();
 	});
 </script>
 

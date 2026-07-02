@@ -1,4 +1,5 @@
 import type { QuoteDraft } from '$lib/types/assistant';
+import { calculateQuotationTaxBreakdown } from '$lib/utils/quotationTax';
 
 function parsePrice(value: unknown): number {
 	if (value === null || value === undefined || value === '') return 0;
@@ -17,7 +18,16 @@ export function calculateQuoteTotals(draft: QuoteDraft) {
 	);
 	const shipping = parsePrice(draft.shipping_amount);
 	const installation = parsePrice(draft.installation_amount);
-	return { subtotal, shipping, installation, total: subtotal + shipping + installation };
+	const totalConIva = subtotal + shipping + installation;
+	const tax = calculateQuotationTaxBreakdown(totalConIva);
+	return {
+		subtotal,
+		shipping,
+		installation,
+		total: totalConIva,
+		subtotalSinIva: tax.subtotalSinIva,
+		iva: tax.iva
+	};
 }
 
 export function emptyQuoteDraft(): QuoteDraft {

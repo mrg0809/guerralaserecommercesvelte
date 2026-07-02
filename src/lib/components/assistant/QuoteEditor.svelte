@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { QuoteDraft, QuoteLine } from '$lib/types/assistant';
+	import type { QuoteDraft, QuoteLine, CatalogProductHit } from '$lib/types/assistant';
 	import { calculateQuoteTotals } from '$lib/assistantQuoteUtils';
 	import { aiFetch } from '$lib/assistantApi';
 
@@ -11,22 +11,18 @@
 		onconfirm?: (draft: QuoteDraft) => void;
 	} = $props();
 
-	type CatalogHit = {
-		id: string;
-		product_id: string;
-		variant_id?: string;
-		description: string;
-		sku?: string;
-		unit_price: number;
-		is_variant: boolean;
-	};
-
 	let catalogQuery = $state('');
-	let catalogResults = $state<CatalogHit[]>([]);
+	let catalogResults = $state<CatalogProductHit[]>([]);
 	let catalogLoading = $state(false);
+	let includeAllDetails = $state(false);
 	let searchTimer: ReturnType<typeof setTimeout> | undefined;
 
 	const totals = $derived(calculateQuoteTotals(draft));
+
+	function lineTotal(line: QuoteLine) {
+		const discount = line.discount_percent ?? 0;
+		return line.quantity * line.unit_price * (1 - discount / 100);
+	}
 
 	function addLine() {
 		draft.lines = [
@@ -37,12 +33,14 @@
 				description: '',
 				quantity: 1,
 				unit_price: 0,
-				discount_percent: 0
+				discount_percent: 0,
+				detail_description: '',
+				include_detail: false
 			}
 		];
 	}
 
-	function addCatalogProduct(hit: CatalogHit) {
+	function addCatalogProduct(hit: CatalogProductHit) {
 		draft.lines = [
 			...draft.lines,
 			{
@@ -54,7 +52,11 @@
 				quantity: 1,
 				unit_price: hit.unit_price,
 				discount_percent: 0,
-				sku: hit.sku
+				sku: hit.sku,
+				image_url: hit.image_url,
+				catalog_detail: hit.catalog_detail,
+				detail_description: '',
+				include_detail: false
 			}
 		];
 		catalogQuery = '';
@@ -67,6 +69,35 @@
 
 	function updateLine(id: string, patch: Partial<QuoteLine>) {
 		draft.lines = draft.lines.map((l) => (l.id === id ? { ...l, ...patch } : l));
+	}
+
+	function fillDetailFromCatalog(lineId: string) {
+		const line = draft.lines.find((l) => l.id === lineId);
+		if (!line?.catalog_detail) return;
+		updateLine(lineId, {
+			detail_description: line.catalog_detail,
+			include_detail: true
+		});
+	}
+
+	function toggleIncludeAllDetails() {
+		for (const line of draft.lines) {
+			line.include_detail = includeAllDetails;
+			if (includeAllDetails && !line.detail_description?.trim() && line.catalog_detail) {
+				line.detail_description = line.catalog_detail;
+			}
+		}
+		draft.lines = [...draft.lines];
+	}
+
+	function toggleLineDetail(lineId: string, include: boolean) {
+		const line = draft.lines.find((l) => l.id === lineId);
+		if (!line) return;
+		const patch: Partial<QuoteLine> = { include_detail: include };
+		if (include && !line.detail_description?.trim() && line.catalog_detail) {
+			patch.detail_description = line.catalog_detail;
+		}
+		updateLine(lineId, patch);
 	}
 
 	function onCatalogQueryInput(value: string) {
@@ -146,12 +177,19 @@
 				{#each catalogResults as hit (hit.id)}
 					<button
 						type="button"
-						class="w-full text-left px-3 py-2 text-sm hover:bg-[var(--as-surface-hover)] border-b border-[var(--as-border)] last:border-b-0"
+						class="w-full text-left px-3 py-2 text-sm hover:bg-[var(--as-surface-hover)] border-b border-[var(--as-border)] last:border-b-0 flex gap-3 items-center"
 						onclick={() => addCatalogProduct(hit)}
 					>
-						<div class="font-medium">{hit.description}</div>
-						<div class="text-xs text-[var(--as-text-muted)]">
-							{hit.sku ? `SKU: ${hit.sku} · ` : ''}${hit.unit_price > 0 ? `$${hit.unit_price.toFixed(2)}` : 'Sin precio — editar manual'}
+						{#if hit.image_url}
+							<img src={hit.image_url} alt="" class="h-10 w-10 object-contain rounded border border-[var(--as-border)] bg-white shrink-0" />
+						{:else}
+							<span class="h-10 w-10 shrink-0"></span>
+						{/if}
+						<div class="min-w-0">
+							<div class="font-medium">{hit.description}</div>
+							<div class="text-xs text-[var(--as-text-muted)]">
+								{hit.sku ? `SKU: ${hit.sku} · ` : ''}{hit.unit_price > 0 ? `$${hit.unit_price.toFixed(2)}` : 'Sin precio — editar manual'}
+							</div>
 						</div>
 					</button>
 				{/each}
@@ -159,20 +197,39 @@
 		{/if}
 	</div>
 
+	<div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+		<label class="flex items-center gap-2 text-xs text-[var(--as-text-muted)]">
+			<input
+				type="checkbox"
+				class="rounded"
+				bind:checked={includeAllDetails}
+				onchange={toggleIncludeAllDetails}
+			/>
+			Incluir descripciones detalladas en el PDF
+		</label>
+	</div>
+
 	<div class="overflow-x-auto">
 		<table>
 			<thead>
 				<tr>
+					<th style="width:52px">Foto</th>
 					<th>Descripción</th>
 					<th style="width:70px">Cant.</th>
 					<th style="width:90px">Precio</th>
 					<th style="width:60px">Desc%</th>
+					<th style="width:70px">Total</th>
 					<th style="width:40px"></th>
 				</tr>
 			</thead>
 			<tbody>
 				{#each draft.lines as line (line.id)}
 					<tr>
+						<td class="align-middle text-center">
+							{#if line.image_url}
+								<img src={line.image_url} alt="" class="h-10 w-10 object-contain mx-auto rounded border border-[var(--as-border)] bg-white" />
+							{/if}
+						</td>
 						<td>
 							<input
 								value={line.description}
@@ -208,6 +265,7 @@
 									updateLine(line.id, { discount_percent: Number(e.currentTarget.value) || 0 })}
 							/>
 						</td>
+						<td class="text-right text-sm whitespace-nowrap">${lineTotal(line).toFixed(2)}</td>
 						<td>
 							<button
 								type="button"
@@ -217,6 +275,38 @@
 							>
 						</td>
 					</tr>
+					<tr>
+						<td colspan="7" class="!py-2 !px-2 bg-[var(--as-surface-hover)]/40">
+							<label class="flex items-center gap-2 text-xs text-[var(--as-text-muted)] mb-2">
+								<input
+									type="checkbox"
+									class="rounded"
+									checked={line.include_detail}
+									onchange={(e) => toggleLineDetail(line.id, e.currentTarget.checked)}
+								/>
+								Incluir descripción detallada en el PDF
+							</label>
+							{#if line.include_detail}
+								<textarea
+									class="assistant-select w-full min-h-[80px] text-sm"
+									value={line.detail_description ?? ''}
+									oninput={(e) => updateLine(line.id, { detail_description: e.currentTarget.value })}
+									placeholder="Características, especificaciones técnicas..."
+								></textarea>
+								<div class="flex flex-wrap gap-2 mt-2">
+									{#if line.catalog_detail}
+										<button
+											type="button"
+											class="assistant-chip text-xs"
+											onclick={() => fillDetailFromCatalog(line.id)}
+										>
+											Usar descripción del catálogo
+										</button>
+									{/if}
+								</div>
+							{/if}
+						</td>
+					</tr>
 				{/each}
 			</tbody>
 		</table>
@@ -224,8 +314,18 @@
 
 	<div class="flex flex-wrap gap-2 mt-3 items-center justify-between">
 		<button type="button" class="assistant-chip" onclick={addLine}>+ Línea manual</button>
-		<div class="text-sm">
-			Total: <strong class="text-[var(--as-accent)]">${totals.total.toFixed(2)} MXN</strong>
+		<div class="text-sm space-y-1 text-right">
+			{#if totals.shipping > 0}
+				<div class="text-[var(--as-text-muted)]">Envío: ${totals.shipping.toFixed(2)}</div>
+			{/if}
+			{#if totals.installation > 0}
+				<div class="text-[var(--as-text-muted)]">Instalación: ${totals.installation.toFixed(2)}</div>
+			{/if}
+			<div class="text-[var(--as-text-muted)]">Subtotal (sin IVA): ${totals.subtotalSinIva.toFixed(2)}</div>
+			<div class="text-[var(--as-text-muted)]">IVA (16%): ${totals.iva.toFixed(2)}</div>
+			<div>
+				Total: <strong class="text-[var(--as-accent)]">${totals.total.toFixed(2)} MXN</strong>
+			</div>
 		</div>
 	</div>
 

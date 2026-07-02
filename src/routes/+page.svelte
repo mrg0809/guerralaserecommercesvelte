@@ -331,7 +331,7 @@
 								{/if}
 							<h3 class="text-xl font-bold mb-2 line-clamp-2">{product.name}</h3>
 							{#if product.short_description}
-								<p class="text-gray-600 mb-4 line-clamp-2">{product.short_description}</p>
+								<p class="text-gray-600 mb-4 line-clamp-2 whitespace-pre-line">{product.short_description}</p>
 						{/if}
 					<div class="flex items-baseline gap-1">
 							{#if displayPrice.hasVariants}

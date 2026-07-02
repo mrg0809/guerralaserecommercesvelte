@@ -2,6 +2,9 @@
 	import { supabase } from '$lib/supabaseClient';
 	import jsPDF from 'jspdf';
 	import CustomerSearch from '$lib/components/customers/CustomerSearch.svelte';
+	import { getPrimaryProductImageUrl, buildCatalogDetail } from '$lib/utils/productMedia';
+	import { loadImageForPdf } from '$lib/utils/pdfImages';
+	import { calculateQuotationTaxBreakdown } from '$lib/utils/quotationTax';
 	import type { Database } from '$lib/types/database.types';
 
 	type Customer = Database['public']['Tables']['customers']['Row'];
@@ -23,11 +26,16 @@
 		discount: number; // porcentaje por línea
 		isVariant?: boolean;
 		variantId?: string | null;
+		imageUrl?: string;
+		catalogDetail?: string;
+		detailDescription?: string;
+		includeDetail?: boolean;
 	};
 
 	let quotationItems = $state<QuotationItem[]>([]);
 	let productSearch = $state('');
 	let generalDiscount = $state(0); // porcentaje de descuento general
+	let includeAllDetails = $state(false);
 
 	// Datos de cliente para la cotización
 	let selectedCustomerId = $state<string | null>(null);
@@ -84,7 +92,7 @@
 		// Cargar productos con variantes
 		const { data: productsData } = await supabase
 			.from('products')
-			.select('id, sku, name, base_price, stock_quantity, product_variants(id, name, sku, price, stock_quantity)')
+			.select('id, sku, name, base_price, stock_quantity, short_description, description, product_variants(id, name, sku, price, stock_quantity), product_media(url, is_primary, display_order)')
 			.eq('is_active', true)
 			.order('name');
 
@@ -94,6 +102,8 @@
 		productItems = [];
 		for (const product of products) {
 			const variants = product.product_variants || [];
+			const imageUrl = getPrimaryProductImageUrl(product.product_media);
+			const catalogDetail = buildCatalogDetail(product);
 			
 			if (variants.length > 0) {
 				// Producto con variantes: agregar solo las variantes
@@ -106,7 +116,9 @@
 						price: variant.price || product.base_price,
 						stock_quantity: variant.stock_quantity || 0,
 						isVariant: true,
-						variantId: variant.id
+						variantId: variant.id,
+						imageUrl,
+						catalogDetail
 					});
 				}
 			} else {
@@ -119,7 +131,9 @@
 					price: product.base_price,
 					stock_quantity: product.stock_quantity || 0,
 					isVariant: false,
-					variantId: null
+					variantId: null,
+					imageUrl,
+					catalogDetail
 				});
 			}
 		}
@@ -165,9 +179,39 @@
 				price: basePrice,
 				discount: 0,
 				isVariant: product.isVariant,
-				variantId: product.variantId
+				variantId: product.variantId,
+				imageUrl: product.imageUrl || '',
+				catalogDetail: product.catalogDetail || '',
+				detailDescription: '',
+				includeDetail: false
 			}
 		];
+	}
+
+	function fillDetailFromCatalog(index: number) {
+		const item = quotationItems[index];
+		if (!item.catalogDetail) return;
+		item.detailDescription = item.catalogDetail;
+		item.includeDetail = true;
+		quotationItems = [...quotationItems];
+	}
+
+	function toggleIncludeAllDetails() {
+		for (const item of quotationItems) {
+			item.includeDetail = includeAllDetails;
+			if (includeAllDetails && !item.detailDescription?.trim() && item.catalogDetail) {
+				item.detailDescription = item.catalogDetail;
+			}
+		}
+		quotationItems = [...quotationItems];
+	}
+
+	function toggleItemDetail(index: number, include: boolean) {
+		quotationItems[index].includeDetail = include;
+		if (include && !quotationItems[index].detailDescription?.trim() && quotationItems[index].catalogDetail) {
+			quotationItems[index].detailDescription = quotationItems[index].catalogDetail;
+		}
+		quotationItems = [...quotationItems];
 	}
 
 	function updateItemQuantity(index: number, value: string) {
@@ -220,10 +264,17 @@
 		return total + shippingCost + installationCost;
 	}
 
+	function quotationTaxBreakdown() {
+		return calculateQuotationTaxBreakdown(quotationTotal());
+	}
+
+	const taxBreakdown = $derived.by(() => quotationTaxBreakdown());
+
 	function resetQuotation() {
 		quotationItems = [];
 		productSearch = '';
 		generalDiscount = 0;
+		includeAllDetails = false;
 		customerName = '';
 		customerCompany = '';
 		customerRfc = '';
@@ -555,8 +606,9 @@
 		doc.rect(10, currentY - 4, 190, 6, 'F');
 		doc.setFontSize(9);
 		doc.setFont('helvetica', 'bold');
-		doc.text('SKU', 11, currentY);
-		doc.text('Descripción', 32, currentY);
+		doc.text('Foto', 11, currentY);
+		doc.text('SKU', 30, currentY);
+		doc.text('Descripción', 48, currentY);
 		doc.text('Cant.', 110, currentY, { align: 'right' });
 		doc.text('Precio Unit.', 135, currentY, { align: 'right' });
 		doc.text('Desc.%', 160, currentY, { align: 'right' });
@@ -566,53 +618,123 @@
 		doc.setFont('helvetica', 'normal');
 		doc.setFontSize(8);
 
-		// Filas de productos con mejor manejo de texto
-		for (const item of quotationItems) {
-			const subtotal = lineSubtotal(item);
-			const total = lineTotal(item);
+		const imageCache = new Map<string, { dataUrl: string; format: 'PNG' | 'JPEG' }>();
+		await Promise.all(
+			quotationItems
+				.filter((item) => item.imageUrl)
+				.map(async (item) => {
+					if (!item.imageUrl || imageCache.has(item.imageUrl)) return;
+					const loaded = await loadImageForPdf(item.imageUrl);
+					if (loaded) imageCache.set(item.imageUrl, loaded);
+				})
+		);
 
-			// Calcular altura necesaria para esta fila
-			const skuLines = doc.splitTextToSize(item.sku || '-', 18);
-			const descLines = doc.splitTextToSize(item.description || '', 75);
-			const maxLines = Math.max(skuLines.length, descLines.length);
-			const rowHeight = maxLines * 4;
+		const IMAGE_SIZE = 16;
+		const IMAGE_X = 11;
+		const SKU_X = 30;
+		const DESC_X = 48;
+		const DESC_WIDTH = 58;
+		const ROW_GAP = 3;
 
-			// Salto de página si es necesario
-			if (currentY + rowHeight > 270) {
-				doc.addPage();
-				currentY = 20;
-				
-				// Repetir encabezados en nueva página
-				doc.setFillColor(240, 240, 240);
-				doc.rect(10, currentY - 4, 190, 6, 'F');
-				doc.setFont('helvetica', 'bold');
-				doc.setFontSize(9);
-				doc.text('SKU', 11, currentY);
-				doc.text('Descripción', 32, currentY);
-				doc.text('Cant.', 110, currentY, { align: 'right' });
-				doc.text('Precio Unit.', 135, currentY, { align: 'right' });
-				doc.text('Desc.%', 160, currentY, { align: 'right' });
-				doc.text('Total', 195, currentY, { align: 'right' });
-				currentY += 5;
-				doc.setFont('helvetica', 'normal');
-				doc.setFontSize(8);
+		function getLineHeightMm() {
+			return (doc.getFontSize() * doc.getLineHeightFactor()) / doc.internal.scaleFactor;
+		}
+
+		function drawTableHeader() {
+			doc.setFillColor(240, 240, 240);
+			doc.rect(10, currentY - 4, 190, 6, 'F');
+			doc.setFont('helvetica', 'bold');
+			doc.setFontSize(9);
+			doc.text('Foto', 11, currentY);
+			doc.text('SKU', 30, currentY);
+			doc.text('Descripción', 48, currentY);
+			doc.text('Cant.', 110, currentY, { align: 'right' });
+			doc.text('Precio Unit.', 135, currentY, { align: 'right' });
+			doc.text('Desc.%', 160, currentY, { align: 'right' });
+			doc.text('Total', 195, currentY, { align: 'right' });
+			currentY += 5;
+			doc.setFont('helvetica', 'normal');
+			doc.setFontSize(8);
+		}
+
+		function drawItemDetailBlock(detailText: string) {
+			const detailLineHeight = getLineHeightMm();
+			const detailLines = doc.splitTextToSize(detailText.trim(), 188);
+
+			currentY += 2;
+			doc.setFontSize(7);
+			doc.setTextColor(70, 70, 70);
+
+			for (const line of detailLines) {
+				if (currentY + detailLineHeight > 270) {
+					doc.addPage();
+					currentY = 20;
+					doc.setFontSize(7);
+					doc.setTextColor(70, 70, 70);
+				}
+				doc.text(line, 11, currentY);
+				currentY += detailLineHeight;
 			}
 
-			// Dibujar contenido de la fila
-			doc.text(skuLines, 11, currentY);
-			doc.text(descLines, 32, currentY);
-			doc.text(String(item.quantity), 110, currentY + 2, { align: 'right' });
-			doc.text(`$${item.price.toFixed(2)}`, 135, currentY + 2, { align: 'right' });
-			doc.text(`${item.discount.toFixed(1)}%`, 160, currentY + 2, { align: 'right' });
-			doc.text(`$${total.toFixed(2)}`, 195, currentY + 2, { align: 'right' });
-			
-			currentY += rowHeight + 1;
-			
-			// Línea divisoria entre productos (azul suave)
+			currentY += 2;
+			doc.setFontSize(8);
+			doc.setTextColor(0, 0, 0);
+		}
+
+		// Filas de productos con mejor manejo de texto
+		for (const item of quotationItems) {
+			const total = lineTotal(item);
+			const lineHeight = getLineHeightMm();
+
+			const skuLines = doc.splitTextToSize(item.sku || '-', 16);
+			const descLines = doc.splitTextToSize(item.description || '', DESC_WIDTH);
+			const textLineCount = Math.max(skuLines.length, descLines.length);
+			const textBlockHeight = textLineCount * lineHeight;
+			const hasImage = Boolean(item.imageUrl && imageCache.get(item.imageUrl));
+			const imageBlockHeight = hasImage ? IMAGE_SIZE : 0;
+			const contentHeight = Math.max(textBlockHeight, imageBlockHeight);
+			const rowHeight = contentHeight + ROW_GAP;
+
+			if (currentY + rowHeight + 2 > 270) {
+				doc.addPage();
+				currentY = 20;
+				drawTableHeader();
+			}
+
+			const rowTop = currentY;
+
+			if (hasImage) {
+				const loadedImage = imageCache.get(item.imageUrl!);
+				if (loadedImage) {
+					doc.addImage(
+						loadedImage.dataUrl,
+						loadedImage.format,
+						IMAGE_X,
+						rowTop,
+						IMAGE_SIZE,
+						IMAGE_SIZE
+					);
+				}
+			}
+
+			const textY = rowTop + 1;
+			doc.text(skuLines, SKU_X, textY);
+			doc.text(descLines, DESC_X, textY);
+			doc.text(String(item.quantity), 110, textY, { align: 'right' });
+			doc.text(`$${item.price.toFixed(2)}`, 135, textY, { align: 'right' });
+			doc.text(`${item.discount.toFixed(1)}%`, 160, textY, { align: 'right' });
+			doc.text(`$${total.toFixed(2)}`, 195, textY, { align: 'right' });
+
+			currentY = rowTop + rowHeight;
+
+			if (item.includeDetail && item.detailDescription?.trim()) {
+				drawItemDetailBlock(item.detailDescription);
+			}
+
 			doc.setDrawColor(200, 210, 230);
 			doc.setLineWidth(0.1);
 			doc.line(10, currentY, 200, currentY);
-			currentY += 1;
+			currentY += ROW_GAP;
 		}
 
 		// Totales
@@ -622,15 +744,11 @@
 		doc.line(120, currentY, 200, currentY);
 		currentY += 6;
 		
-		const subtotal = quotationSubtotal();
 		const genDiscount = generalDiscountAmount();
-		const total = quotationTotal();
+		const { totalConIva, subtotalSinIva, iva } = quotationTaxBreakdown();
 
 		doc.setFontSize(9);
-		doc.text('Subtotal:', 155, currentY, { align: 'right' });
-		doc.text(`$${subtotal.toFixed(2)} MXN`, 195, currentY, { align: 'right' });
-		currentY += 5;
-		
+
 		if (genDiscount > 0) {
 			doc.setTextColor(redColor[0], redColor[1], redColor[2]);
 			doc.text(`Descuento general (${generalDiscount || 0}%):`, 155, currentY, { align: 'right' });
@@ -650,12 +768,26 @@
 			doc.text(`$${installationCost.toFixed(2)} MXN`, 195, currentY, { align: 'right' });
 			currentY += 5;
 		}
+
+		currentY += 2;
+		doc.setDrawColor(200, 210, 230);
+		doc.setLineWidth(0.1);
+		doc.line(120, currentY, 200, currentY);
+		currentY += 5;
+
+		doc.text('Subtotal (sin IVA):', 155, currentY, { align: 'right' });
+		doc.text(`$${subtotalSinIva.toFixed(2)} MXN`, 195, currentY, { align: 'right' });
+		currentY += 5;
+
+		doc.text('IVA (16%):', 155, currentY, { align: 'right' });
+		doc.text(`$${iva.toFixed(2)} MXN`, 195, currentY, { align: 'right' });
+		currentY += 5;
 		
 		doc.setFont('helvetica', 'bold');
 		doc.setFontSize(11);
 		doc.setTextColor(blueColor[0], blueColor[1], blueColor[2]);
 		doc.text('Total:', 155, currentY, { align: 'right' });
-		doc.text(`$${total.toFixed(2)} MXN`, 195, currentY, { align: 'right' });
+		doc.text(`$${totalConIva.toFixed(2)} MXN`, 195, currentY, { align: 'right' });
 		doc.setTextColor(0, 0, 0);
 		doc.setFont('helvetica', 'normal');
 		currentY += 8;
@@ -917,14 +1049,25 @@
 			<!-- Detalle de cotización -->
 			<div class="lg:col-span-3">
 				<div class="bg-white rounded-lg shadow-md p-6">
-					<div class="flex justify-between items-center mb-4">
+					<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
 						<h3 class="text-lg font-semibold">Productos en la Cotización</h3>
-						<button
-							onclick={resetQuotation}
-							class="text-sm text-red-600 hover:text-red-700 underline"
-						>
-							Limpiar todo
-						</button>
+						<div class="flex flex-wrap items-center gap-4">
+							<label class="flex items-center gap-2 text-sm text-gray-700">
+								<input
+									type="checkbox"
+									class="rounded border-gray-300"
+									bind:checked={includeAllDetails}
+									onchange={toggleIncludeAllDetails}
+								/>
+								Incluir descripciones detalladas en el PDF
+							</label>
+							<button
+								onclick={resetQuotation}
+								class="text-sm text-red-600 hover:text-red-700 underline"
+							>
+								Limpiar todo
+							</button>
+						</div>
 					</div>
 
 					{#if quotationItems.length === 0}
@@ -938,6 +1081,7 @@
 							<table class="min-w-full text-sm border">
 								<thead class="bg-gray-100">
 									<tr>
+										<th class="px-3 py-2 text-center border w-16">Foto</th>
 										<th class="px-3 py-2 text-left border">SKU</th>
 										<th class="px-3 py-2 text-left border">Descripción</th>
 										<th class="px-3 py-2 text-right border w-24">Cantidad</th>
@@ -950,12 +1094,22 @@
 								<tbody>
 									{#each quotationItems as item, index}
 										<tr class="border-t">
+											<td class="px-3 py-2 border align-middle text-center w-16">
+												{#if item.imageUrl}
+													<img
+														src={item.imageUrl}
+														alt=""
+														class="h-12 w-12 object-contain mx-auto rounded border border-gray-200 bg-white"
+													/>
+												{/if}
+											</td>
 											<td class="px-3 py-2 border align-top">{item.sku}</td>
 											<td class="px-3 py-2 border align-top">
 												<textarea
 													rows="2"
 													class="w-full border rounded-md px-2 py-1 text-sm"
 													bind:value={item.description}
+													placeholder="Nombre del artículo"
 												></textarea>
 											</td>
 											<td class="px-3 py-2 border align-top">
@@ -1000,6 +1154,50 @@
 												</button>
 											</td>
 										</tr>
+										<tr class="border-t bg-gray-50">
+											<td colspan="8" class="px-3 py-3 border">
+												<label class="flex items-center gap-2 text-sm text-gray-700 mb-2">
+													<input
+														type="checkbox"
+														class="rounded border-gray-300"
+														checked={item.includeDetail}
+														onchange={(e) => toggleItemDetail(index, e.currentTarget.checked)}
+													/>
+													Incluir descripción detallada en el PDF
+												</label>
+												{#if item.includeDetail}
+													<textarea
+														rows="4"
+														class="w-full border rounded-md px-3 py-2 text-sm"
+														bind:value={item.detailDescription}
+														placeholder="Características, especificaciones técnicas, accesorios incluidos..."
+													></textarea>
+													<div class="flex flex-wrap gap-2 mt-2">
+														{#if item.catalogDetail}
+															<button
+																type="button"
+																onclick={() => fillDetailFromCatalog(index)}
+																class="text-xs px-3 py-1.5 bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200"
+															>
+																Usar descripción del catálogo
+															</button>
+														{/if}
+														{#if item.detailDescription?.trim()}
+															<button
+																type="button"
+																onclick={() => {
+																	item.detailDescription = '';
+																	quotationItems = [...quotationItems];
+																}}
+																class="text-xs px-3 py-1.5 bg-gray-100 text-gray-600 rounded-md hover:bg-gray-200"
+															>
+																Limpiar descripción
+															</button>
+														{/if}
+													</div>
+												{/if}
+											</td>
+										</tr>
 									{/each}
 								</tbody>
 							</table>
@@ -1022,10 +1220,6 @@
 
 								<div class="bg-gray-50 rounded-lg p-4 min-w-[280px]">
 									<div class="space-y-2">
-										<div class="flex justify-between text-sm">
-											<span class="font-medium">Subtotal:</span>
-											<span class="font-semibold">${quotationSubtotal().toFixed(2)}</span>
-										</div>
 										{#if generalDiscount > 0}
 											<div class="flex justify-between text-sm text-red-600">
 												<span class="font-medium">Descuento ({generalDiscount}%):</span>
@@ -1044,9 +1238,19 @@
 												<span class="font-semibold">${installationCost.toFixed(2)}</span>
 											</div>
 										{/if}
+										<div class="border-t border-gray-300 pt-2 space-y-2">
+											<div class="flex justify-between text-sm">
+												<span class="font-medium">Subtotal (sin IVA):</span>
+												<span class="font-semibold">${taxBreakdown.subtotalSinIva.toFixed(2)}</span>
+											</div>
+											<div class="flex justify-between text-sm">
+												<span class="font-medium">IVA (16%):</span>
+												<span class="font-semibold">${taxBreakdown.iva.toFixed(2)}</span>
+											</div>
+										</div>
 										<div class="flex justify-between text-lg font-bold border-t pt-2">
 											<span>Total:</span>
-											<span class="text-blue-600">${quotationTotal().toFixed(2)} MXN</span>
+											<span class="text-blue-600">${taxBreakdown.totalConIva.toFixed(2)} MXN</span>
 										</div>
 									</div>
 								</div>
