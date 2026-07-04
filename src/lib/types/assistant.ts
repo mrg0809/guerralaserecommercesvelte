@@ -47,6 +47,7 @@ export interface QuoteDraft {
 	installation_amount?: number;
 	notes?: string;
 	validity_days?: number;
+	prices_exclude_iva?: boolean;
 }
 
 export interface KnowledgeSource {

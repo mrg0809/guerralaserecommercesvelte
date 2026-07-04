@@ -16,6 +16,7 @@ export function quoteDraftToPdfOptions(draft: QuoteDraft): QuotationPdfOptions {
 		shippingCost: parsePrice(quote.shipping_amount),
 		installationCost: parsePrice(quote.installation_amount),
 		fullCustomerBlock: false,
+		pricesExcludeIva: quote.prices_exclude_iva ?? false,
 		items: quote.lines.map((line) => ({
 			sku: line.sku,
 			description: line.description,

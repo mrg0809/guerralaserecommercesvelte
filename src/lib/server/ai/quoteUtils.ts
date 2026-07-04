@@ -32,6 +32,7 @@ export function normalizeQuoteDraft(draft: QuoteDraft): QuoteDraft {
 				? parsePrice(draft.installation_amount)
 				: undefined,
 		validity_days: draft.validity_days ?? 7,
+		prices_exclude_iva: draft.prices_exclude_iva ?? false,
 		lines: (draft.lines ?? []).map(normalizeQuoteLine)
 	};
 }

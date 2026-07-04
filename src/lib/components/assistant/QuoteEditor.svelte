@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { QuoteDraft, QuoteLine, CatalogProductHit } from '$lib/types/assistant';
 	import { calculateQuoteTotals } from '$lib/assistantQuoteUtils';
+	import { displayQuotationAmount } from '$lib/utils/quotationTax';
 	import { aiFetch } from '$lib/assistantApi';
 
 	let {
@@ -22,6 +23,14 @@
 	function lineTotal(line: QuoteLine) {
 		const discount = line.discount_percent ?? 0;
 		return line.quantity * line.unit_price * (1 - discount / 100);
+	}
+
+	function displayUnitPrice(line: QuoteLine) {
+		return displayQuotationAmount(line.unit_price, draft.prices_exclude_iva ?? false);
+	}
+
+	function displayLineTotal(line: QuoteLine) {
+		return displayQuotationAmount(lineTotal(line), draft.prices_exclude_iva ?? false);
 	}
 
 	function addLine() {
@@ -157,6 +166,15 @@
 						: undefined)}
 			/>
 		</label>
+		<label class="flex items-center gap-2 text-xs text-[var(--as-text-muted)] self-end pb-1">
+			<input
+				type="checkbox"
+				class="rounded"
+				checked={draft.prices_exclude_iva ?? false}
+				onchange={(e) => (draft.prices_exclude_iva = e.currentTarget.checked)}
+			/>
+			Precios sin IVA
+		</label>
 	</div>
 
 	<div class="mb-3 relative">
@@ -216,9 +234,13 @@
 					<th style="width:52px">Foto</th>
 					<th>Descripción</th>
 					<th style="width:70px">Cant.</th>
-					<th style="width:90px">Precio</th>
+					<th style="width:90px">
+						Precio{draft.prices_exclude_iva ? ' s/IVA' : ''}
+					</th>
 					<th style="width:60px">Desc%</th>
-					<th style="width:70px">Total</th>
+					<th style="width:70px">
+						Total{draft.prices_exclude_iva ? ' s/IVA' : ''}
+					</th>
 					<th style="width:40px"></th>
 				</tr>
 			</thead>
@@ -254,6 +276,11 @@
 								oninput={(e) =>
 									updateLine(line.id, { unit_price: Number(e.currentTarget.value) || 0 })}
 							/>
+							{#if draft.prices_exclude_iva}
+								<p class="text-[10px] text-[var(--as-text-muted)] mt-1">
+									s/IVA: ${displayUnitPrice(line).toFixed(2)}
+								</p>
+							{/if}
 						</td>
 						<td>
 							<input
@@ -265,7 +292,7 @@
 									updateLine(line.id, { discount_percent: Number(e.currentTarget.value) || 0 })}
 							/>
 						</td>
-						<td class="text-right text-sm whitespace-nowrap">${lineTotal(line).toFixed(2)}</td>
+						<td class="text-right text-sm whitespace-nowrap">${displayLineTotal(line).toFixed(2)}</td>
 						<td>
 							<button
 								type="button"
