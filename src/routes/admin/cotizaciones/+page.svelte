@@ -4,7 +4,7 @@
 	import CustomerSearch from '$lib/components/customers/CustomerSearch.svelte';
 	import { getPrimaryProductImageUrl, buildCatalogDetail } from '$lib/utils/productMedia';
 	import { loadImageForPdf } from '$lib/utils/pdfImages';
-	import { calculateQuotationTaxBreakdown } from '$lib/utils/quotationTax';
+	import { calculateQuotationTaxBreakdown, displayQuotationAmount } from '$lib/utils/quotationTax';
 	import type { Database } from '$lib/types/database.types';
 
 	type Customer = Database['public']['Tables']['customers']['Row'];
@@ -50,6 +50,7 @@
 	let notes = $state('');
 	let shippingCost = $state(0);
 	let installationCost = $state(0);
+	let pricesExcludeIva = $state(false);
 
 	// Función para cargar datos de cliente existente
 	function handleCustomerSelect(customer: Customer) {
@@ -264,6 +265,14 @@
 		return total + shippingCost + installationCost;
 	}
 
+	function displayItemUnitPrice(item: QuotationItem): number {
+		return displayQuotationAmount(item.price, pricesExcludeIva);
+	}
+
+	function displayItemLineTotal(item: QuotationItem): number {
+		return displayQuotationAmount(lineTotal(item), pricesExcludeIva);
+	}
+
 	function quotationTaxBreakdown() {
 		return calculateQuotationTaxBreakdown(quotationTotal());
 	}
@@ -286,6 +295,7 @@
 		notes = '';
 		shippingCost = 0;
 		installationCost = 0;
+		pricesExcludeIva = false;
 		savedQuotationId = null;
 	}
 
@@ -610,9 +620,9 @@
 		doc.text('SKU', 30, currentY);
 		doc.text('Descripción', 48, currentY);
 		doc.text('Cant.', 110, currentY, { align: 'right' });
-		doc.text('Precio Unit.', 135, currentY, { align: 'right' });
+		doc.text(`Precio Unit.${pricesExcludeIva ? ' s/IVA' : ''}`, 135, currentY, { align: 'right' });
 		doc.text('Desc.%', 160, currentY, { align: 'right' });
-		doc.text('Total', 195, currentY, { align: 'right' });
+		doc.text(`Total${pricesExcludeIva ? ' s/IVA' : ''}`, 195, currentY, { align: 'right' });
 		currentY += 5;
 		
 		doc.setFont('helvetica', 'normal');
@@ -649,9 +659,9 @@
 			doc.text('SKU', 30, currentY);
 			doc.text('Descripción', 48, currentY);
 			doc.text('Cant.', 110, currentY, { align: 'right' });
-			doc.text('Precio Unit.', 135, currentY, { align: 'right' });
+			doc.text(`Precio Unit.${pricesExcludeIva ? ' s/IVA' : ''}`, 135, currentY, { align: 'right' });
 			doc.text('Desc.%', 160, currentY, { align: 'right' });
-			doc.text('Total', 195, currentY, { align: 'right' });
+			doc.text(`Total${pricesExcludeIva ? ' s/IVA' : ''}`, 195, currentY, { align: 'right' });
 			currentY += 5;
 			doc.setFont('helvetica', 'normal');
 			doc.setFontSize(8);
@@ -684,6 +694,8 @@
 		// Filas de productos con mejor manejo de texto
 		for (const item of quotationItems) {
 			const total = lineTotal(item);
+			const displayUnitPrice = displayItemUnitPrice(item);
+			const displayTotal = displayItemLineTotal(item);
 			const lineHeight = getLineHeightMm();
 
 			const skuLines = doc.splitTextToSize(item.sku || '-', 16);
@@ -721,9 +733,9 @@
 			doc.text(skuLines, SKU_X, textY);
 			doc.text(descLines, DESC_X, textY);
 			doc.text(String(item.quantity), 110, textY, { align: 'right' });
-			doc.text(`$${item.price.toFixed(2)}`, 135, textY, { align: 'right' });
+			doc.text(`$${displayUnitPrice.toFixed(2)}`, 135, textY, { align: 'right' });
 			doc.text(`${item.discount.toFixed(1)}%`, 160, textY, { align: 'right' });
-			doc.text(`$${total.toFixed(2)}`, 195, textY, { align: 'right' });
+			doc.text(`$${displayTotal.toFixed(2)}`, 195, textY, { align: 'right' });
 
 			currentY = rowTop + rowHeight;
 
@@ -1002,6 +1014,19 @@
 					placeholder="Información adicional..."
 				></textarea>
 			</div>
+			<div class="mt-4 pt-4 border-t">
+				<label class="flex items-center gap-2 text-sm text-gray-700">
+					<input
+						type="checkbox"
+						class="rounded border-gray-300"
+						bind:checked={pricesExcludeIva}
+					/>
+					Mostrar precios de artículos sin IVA (precio ÷ 1.16)
+				</label>
+				<p class="text-xs text-gray-500 mt-1">
+					Activa esta opción cuando el cliente pida ver el precio unitario y total de cada artículo antes de impuestos.
+				</p>
+			</div>
 		</div>
 
 		<!-- Contenido principal: búsqueda y detalle -->
@@ -1085,9 +1110,13 @@
 										<th class="px-3 py-2 text-left border">SKU</th>
 										<th class="px-3 py-2 text-left border">Descripción</th>
 										<th class="px-3 py-2 text-right border w-24">Cantidad</th>
-										<th class="px-3 py-2 text-right border w-28">Precio Unit.</th>
+										<th class="px-3 py-2 text-right border w-28">
+											Precio Unit.{pricesExcludeIva ? ' (s/IVA)' : ''}
+										</th>
 										<th class="px-3 py-2 text-right border w-24">Desc. %</th>
-										<th class="px-3 py-2 text-right border w-28">Total</th>
+										<th class="px-3 py-2 text-right border w-28">
+											Total{pricesExcludeIva ? ' (s/IVA)' : ''}
+										</th>
 										<th class="px-3 py-2 text-center border w-16">Quitar</th>
 									</tr>
 								</thead>
@@ -1130,6 +1159,11 @@
 													value={item.price}
 													onchange={(e) => updateItemPrice(index, e.currentTarget.value)}
 												/>
+												{#if pricesExcludeIva}
+													<p class="text-xs text-gray-500 text-right mt-1">
+														s/IVA: ${displayItemUnitPrice(item).toFixed(2)}
+													</p>
+												{/if}
 											</td>
 											<td class="px-3 py-2 border align-top">
 												<input
@@ -1143,7 +1177,7 @@
 												/>
 											</td>
 											<td class="px-3 py-2 border align-top text-right font-medium">
-												${lineTotal(item).toFixed(2)}
+												${displayItemLineTotal(item).toFixed(2)}
 											</td>
 											<td class="px-3 py-2 border align-top text-center">
 												<button
