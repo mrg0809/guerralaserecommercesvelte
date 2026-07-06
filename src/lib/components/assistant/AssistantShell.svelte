@@ -1,7 +1,9 @@
 <script lang="ts">
+	import { page } from '$app/stores';
 	import type { AiChatMessage, AiChatSession, QuoteDraft } from '$lib/types/assistant';
 	import { aiFetch } from '$lib/assistantApi';
 	import { hapticImpact } from '$lib/mobile/nativeApp';
+	import { getSavedQuotation, saveQuoteDraft, quotationToQuoteDraft } from '$lib/services/quotationApi';
 	import ChannelChips from './ChannelChips.svelte';
 	import QuoteEditor from './QuoteEditor.svelte';
 	import AssistantAdminNav from './AssistantAdminNav.svelte';
@@ -33,6 +35,8 @@
 	let quoteDraft = $state<QuoteDraft | null>(null);
 	let whatsappText = $state('');
 	let searchQuery = $state('');
+	let savedQuotationId = $state<string | null>(null);
+	let savingQuotation = $state(false);
 	let fileInput: HTMLInputElement;
 
 	$effect(() => {
@@ -44,6 +48,25 @@
 			if (stored) teamMemberId = stored;
 		}
 	});
+
+	$effect(() => {
+		const editId = $page.url.searchParams.get('edit');
+		if (editId && editId !== savedQuotationId && $page.url.searchParams.get('mode') === 'quote') {
+			loadSavedQuotation(editId);
+		}
+	});
+
+	async function loadSavedQuotation(id: string) {
+		try {
+			const quotation = await getSavedQuotation(id);
+			quoteDraft = quotationToQuoteDraft(quotation);
+			savedQuotationId = id;
+			sessionType = 'quotation';
+		} catch (error) {
+			console.error(error);
+			alert('No se pudo cargar la cotización');
+		}
+	}
 
 	async function loadChannels() {
 		const res = await aiFetch('/api/ai/channels');
@@ -88,6 +111,7 @@
 		messages = [];
 		quoteDraft = null;
 		whatsappText = '';
+		savedQuotationId = null;
 		input = '';
 		sidebarOpen = false;
 	}
@@ -219,6 +243,27 @@
 			a.click();
 		} else {
 			alert(data.error || 'No se pudo generar el PDF');
+		}
+	}
+
+	async function saveQuote(draft: QuoteDraft) {
+		if (!draft.client_name?.trim()) {
+			alert('Indica el nombre del cliente antes de guardar.');
+			return;
+		}
+		if (!draft.lines.length) {
+			alert('Agrega al menos un artículo a la cotización.');
+			return;
+		}
+		savingQuotation = true;
+		try {
+			const saved = await saveQuoteDraft(draft, 'ai_assistant', savedQuotationId ?? undefined);
+			savedQuotationId = saved.id;
+			alert(`Cotización guardada: ${saved.quotation_number}`);
+		} catch (error) {
+			alert(error instanceof Error ? error.message : 'Error al guardar');
+		} finally {
+			savingQuotation = false;
 		}
 	}
 
@@ -403,7 +448,13 @@
 					{/if}
 
 					{#if quoteDraft}
-						<QuoteEditor bind:draft={quoteDraft} onconfirm={confirmQuote} />
+						<QuoteEditor
+							bind:draft={quoteDraft}
+							onconfirm={confirmQuote}
+							onsave={saveQuote}
+							saving={savingQuotation}
+							savedId={savedQuotationId}
+						/>
 					{/if}
 				</div>
 			</div>

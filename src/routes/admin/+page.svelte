@@ -188,6 +188,17 @@
 			</a>
 
 			<a
+				href="/admin/cotizaciones/historial"
+				class="flex items-center gap-4 p-4 border-2 border-gray-200 rounded-lg hover:border-purple-500 hover:bg-purple-50 transition"
+			>
+				<div class="text-3xl">📋</div>
+				<div>
+					<h3 class="font-bold text-lg">Cotizaciones guardadas</h3>
+					<p class="text-gray-600 text-sm">Ver y editar cotizaciones manuales e IA</p>
+				</div>
+			</a>
+
+			<a
 				href="/admin/cotizaciones"
 				class="flex items-center gap-4 p-4 border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition"
 			>

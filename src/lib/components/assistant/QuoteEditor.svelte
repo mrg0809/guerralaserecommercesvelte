@@ -6,10 +6,16 @@
 
 	let {
 		draft = $bindable(),
-		onconfirm
+		onconfirm,
+		onsave,
+		saving = false,
+		savedId = null
 	}: {
 		draft: QuoteDraft;
 		onconfirm?: (draft: QuoteDraft) => void;
+		onsave?: (draft: QuoteDraft) => void | Promise<void>;
+		saving?: boolean;
+		savedId?: string | null;
 	} = $props();
 
 	let catalogQuery = $state('');
@@ -360,5 +366,21 @@
 		<button type="button" class="assistant-chip active" onclick={() => onconfirm?.(draft)}>
 			📋 Generar texto WhatsApp
 		</button>
+		{#if onsave}
+			<button
+				type="button"
+				class="assistant-chip"
+				disabled={saving || !draft.lines.length}
+				onclick={() => onsave?.(draft)}
+			>
+				{#if saving}
+					⏳ Guardando...
+				{:else if savedId}
+					💾 Actualizar guardada
+				{:else}
+					💾 Guardar cotización
+				{/if}
+			</button>
+		{/if}
 	</div>
 </div>

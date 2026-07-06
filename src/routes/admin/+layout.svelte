@@ -123,6 +123,12 @@
 					permission: 'view_admin_panel',
 					items: [
 						{
+							href: '/admin/cotizaciones/historial',
+							label: 'Guardadas',
+							icon: '📋',
+							permission: 'view_quotations'
+						},
+						{
 							href: '/admin/asistente',
 							label: 'Asistente IA',
 							icon: '🤖',

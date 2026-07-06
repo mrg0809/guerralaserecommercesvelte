@@ -6,6 +6,7 @@ import { PUBLIC_SUPABASE_URL } from '$env/static/public';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { generateEmbedding, normalizeProductText } from '$lib/utils/embeddings';
 import { buildQuotationPdf, type QuotationPdfItem } from '$lib/server/quotationPdfBuilder';
+import { saveQuotation } from '$lib/server/quotations/persistence';
 import {
 	fetchProductCatalogExtras,
 	fetchProductIdForVariant
@@ -401,11 +402,42 @@ Ahora procesa el siguiente mensaje:
     const pdfName = `cotizacion-chat-${Date.now()}.pdf`;
     
     console.log(`[LOG] PDF generado en memoria: ${pdfName}`);
+
+    let savedQuotation: { id: string; quotation_number: string } | null = null;
+    try {
+        const saved = await saveQuotation(supabase, {
+            source: 'ai_chat',
+            customer_name: parsedResult.cliente || 'Cliente Chat',
+            shipping_cost: parsedResult.envio ?? 0,
+            installation_cost: parsedResult.instalacion ?? 0,
+            validity_days: 15,
+            notes: 'Cotización generada por chat IA.',
+            items: productosEncontrados.map((item) => ({
+                product_id: item.product_id ?? null,
+                variant_id: item.variant_id ?? null,
+                sku: item.sku,
+                description: item.description,
+                quantity: item.quantity,
+                unit_price: item.price,
+                line_discount_percentage: item.discount ?? 0,
+                image_url: item.imageUrl,
+                include_detail: item.includeDetail ?? false,
+                detail_description: item.detailDescription
+            }))
+        });
+        savedQuotation = { id: saved.id, quotation_number: saved.quotation_number };
+        console.log(`[LOG] Cotización guardada: ${saved.quotation_number}`);
+    } catch (saveError) {
+        console.error('[LOG] No se pudo guardar la cotización en BD:', saveError);
+    }
+
     return json({ 
         success: true, 
         pdfData: pdfBase64,
         pdfName: pdfName,
-        downloadUrl: `data:application/pdf;base64,${pdfBase64}`
+        downloadUrl: `data:application/pdf;base64,${pdfBase64}`,
+        quotationId: savedQuotation?.id ?? null,
+        quotationNumber: savedQuotation?.quotation_number ?? null
     });
 
   } catch (error: any) {
