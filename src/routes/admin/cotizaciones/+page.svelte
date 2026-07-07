@@ -1,10 +1,18 @@
 <script lang="ts">
 	import { supabase } from '$lib/supabaseClient';
+	import { page } from '$app/stores';
 	import jsPDF from 'jspdf';
 	import CustomerSearch from '$lib/components/customers/CustomerSearch.svelte';
 	import { getPrimaryProductImageUrl, buildCatalogDetail } from '$lib/utils/productMedia';
 	import { loadImageForPdf } from '$lib/utils/pdfImages';
 	import { calculateQuotationTaxBreakdown, displayQuotationAmount } from '$lib/utils/quotationTax';
+	import {
+		adminFormToQuotationInput,
+		getSavedQuotation,
+		saveQuotationInput,
+		savedQuotationToAdminForm
+	} from '$lib/services/quotationApi';
+	import type { QuotationSource } from '$lib/types/savedQuotation';
 	import type { Database } from '$lib/types/database.types';
 
 	type Customer = Database['public']['Tables']['customers']['Row'];
@@ -15,6 +23,10 @@
 	let saving = $state(false);
 	let sendingEmail = $state(false);
 	let savedQuotationId = $state<string | null>(null);
+	let quotationNumber = $state<string | null>(null);
+	let quotationSource = $state<QuotationSource>('manual');
+	let loadingQuotation = $state(false);
+	let loadedEditId = $state<string | null>(null);
 
 	// Estado para cotizaciones
 	type QuotationItem = {
@@ -86,6 +98,46 @@
 	$effect(() => {
 		loadProducts();
 	});
+
+	$effect(() => {
+		const editId = $page.url.searchParams.get('edit');
+		if (editId && editId !== loadedEditId) {
+			loadQuotationForEdit(editId);
+		}
+	});
+
+	async function loadQuotationForEdit(id: string) {
+		loadingQuotation = true;
+		try {
+			const quotation = await getSavedQuotation(id);
+			const form = savedQuotationToAdminForm(quotation);
+			savedQuotationId = form.id;
+			quotationNumber = form.quotationNumber;
+			quotationSource = (form.source as QuotationSource) ?? 'manual';
+			selectedCustomerId = form.selectedCustomerId;
+			customerName = form.customerName;
+			customerCompany = form.customerCompany;
+			customerRfc = form.customerRfc;
+			customerEmail = form.customerEmail;
+			customerPhone = form.customerPhone;
+			customerAddress = form.customerAddress;
+			generalDiscount = form.generalDiscount;
+			shippingCost = form.shippingCost;
+			installationCost = form.installationCost;
+			pricesExcludeIva = form.pricesExcludeIva;
+			includeAllDetails = form.includeAllDetails;
+			quotationValidityDays = form.quotationValidityDays;
+			paymentTerms = form.paymentTerms;
+			notes = form.notes;
+			quotationItems = form.items;
+			loadedEditId = id;
+		} catch (error) {
+			console.error('Error cargando cotización:', error);
+			alert('No se pudo cargar la cotización');
+		} finally {
+			loadingQuotation = false;
+		}
+	}
 
 	async function loadProducts() {
 		loading = true;
@@ -312,100 +364,34 @@
 
 		saving = true;
 		try {
-			// Opción A: Usar función de base de datos (más confiable con concurrencia)
-			const { data: quotationNumber, error: numberError } = await supabase
-				.rpc('generate_quotation_number');
+			const input = adminFormToQuotationInput({
+				id: savedQuotationId,
+				source: quotationSource,
+				selectedCustomerId,
+				customerName,
+				customerCompany,
+				customerRfc,
+				customerEmail,
+				customerPhone,
+				customerAddress,
+				generalDiscount,
+				shippingCost,
+				installationCost,
+				pricesExcludeIva,
+				includeAllDetails,
+				quotationValidityDays,
+				paymentTerms,
+				notes,
+				items: quotationItems
+			});
 
-			// Opción B: Si la función no existe, generar manualmente
-			let finalQuotationNumber = quotationNumber;
-			
-			if (numberError || !quotationNumber) {
-				console.log('Generando número manualmente...');
-				const year = new Date().getFullYear();
-				
-				const { data: lastQuotation } = await supabase
-					.from('quotations')
-					.select('quotation_number')
-					.like('quotation_number', `COT-${year}-%`)
-					.order('quotation_number', { ascending: false })
-					.limit(1)
-					.single();
-
-				let nextNumber = 1;
-				if (lastQuotation?.quotation_number) {
-					const lastNumberStr = lastQuotation.quotation_number.split('-')[2];
-					nextNumber = parseInt(lastNumberStr) + 1;
-				}
-
-				finalQuotationNumber = `COT-${year}-${String(nextNumber).padStart(4, '0')}`;
-			}
-
-			// Calcular totales
-			const subtotal = quotationSubtotal();
-			const generalDiscountAmt = generalDiscountAmount();
-			const total = quotationTotal();
-
-			// Insertar cotización
-			const { data: quotation, error: quotationError } = await supabase
-				.from('quotations')
-				.insert({
-					quotation_number: finalQuotationNumber as any,
-					customer_id: selectedCustomerId || null,
-					customer_name: customerName,
-					customer_company: customerCompany || null,
-					customer_rfc: customerRfc || null,
-					customer_email: customerEmail || null,
-					customer_phone: customerPhone || null,
-					customer_address: customerAddress || null,
-					subtotal: subtotal,
-					general_discount_percentage: generalDiscount,
-					discount_amount: generalDiscountAmt,
-					shipping_cost: shippingCost || 0,
-					installation_cost: installationCost || 0,
-					total_amount: total,
-					validity_days: quotationValidityDays,
-					payment_terms: paymentTerms,
-					notes: notes || null,
-					status: 'draft'
-				})
-				.select()
-				.single();
-
-			if (quotationError) {
-				console.error('Error guardando cotización:', quotationError);
-				alert('Error guardando cotización');
-				return;
-			}
-
-			// Insertar items
-			const items = quotationItems.map(item => ({
-				quotation_id: quotation.id,
-				product_id: item.isVariant ? null : item.productId,
-				variant_id: item.isVariant ? item.variantId : null,
-				sku: item.sku,
-				description: item.description,
-				quantity: item.quantity,
-				unit_price: item.price,
-				line_discount_percentage: item.discount,
-				total_price: lineTotal(item)
-			}));
-
-			const { error: itemsError } = await supabase
-				.from('quotation_items')
-				.insert(items);
-
-			if (itemsError) {
-				console.error('Error guardando items:', itemsError);
-				alert('Error guardando items de la cotización');
-				return;
-			}
-
+			const quotation = await saveQuotationInput(input);
 			savedQuotationId = quotation.id;
-			alert(`✅ Cotización guardada exitosamente.\nNúmero: ${finalQuotationNumber}`);
-
+			quotationNumber = quotation.quotation_number;
+			alert(`✅ Cotización guardada exitosamente.\nNúmero: ${quotation.quotation_number}`);
 		} catch (error) {
 			console.error('Error guardando cotización:', error);
-			alert('Error guardando cotización');
+			alert(error instanceof Error ? error.message : 'Error guardando cotización');
 		} finally {
 			saving = false;
 		}
@@ -860,14 +846,38 @@
 
 <div class="min-h-screen bg-gray-50">
 	<div class="container mx-auto px-4 py-6 max-w-7xl">
-		<div class="mb-6 flex items-center justify-between">
+		<div class="mb-6 flex flex-wrap items-center justify-between gap-4">
 			<div>
-				<h1 class="text-3xl font-bold">Nueva Cotización</h1>
-				<p class="text-gray-600 mt-1">Crea cotizaciones profesionales para tus clientes</p>
+				<h1 class="text-3xl font-bold">
+					{#if savedQuotationId}
+						Editar Cotización {quotationNumber ? `#${quotationNumber}` : ''}
+					{:else}
+						Nueva Cotización
+					{/if}
+				</h1>
+				<p class="text-gray-600 mt-1">
+					{#if loadingQuotation}
+						Cargando cotización...
+					{:else if savedQuotationId}
+						Modifica y guarda los cambios · Origen: {quotationSource === 'manual' ? 'Manual' : quotationSource === 'ai_assistant' ? 'Asistente IA' : 'Chat IA'}
+					{:else}
+						Crea cotizaciones profesionales para tus clientes
+					{/if}
+				</p>
 			</div>
-			<a href="/admin" class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">
-				← Volver al Dashboard
-			</a>
+			<div class="flex flex-wrap gap-2">
+				<a href="/admin/cotizaciones/historial" class="px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
+					📋 Ver guardadas
+				</a>
+				{#if savedQuotationId}
+					<a href="/admin/cotizaciones" class="px-4 py-2 bg-purple-50 border border-purple-200 text-purple-700 rounded-lg hover:bg-purple-100">
+						+ Nueva
+					</a>
+				{/if}
+				<a href="/admin" class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">
+					← Dashboard
+				</a>
+			</div>
 		</div>
 
 		<!-- Datos del cliente -->
@@ -1310,7 +1320,7 @@
 						{#if saving}
 							⏳ Guardando...
 						{:else if savedQuotationId}
-							✅ Guardada
+							💾 Actualizar Cotización
 						{:else}
 							💾 Guardar Cotización
 						{/if}
