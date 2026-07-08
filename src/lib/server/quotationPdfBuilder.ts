@@ -1,7 +1,12 @@
 import { jsPDF } from 'jspdf';
 import { addQuotationLogoToPdf } from '$lib/server/quotationLogo';
 import { loadImageForPdf } from '$lib/utils/pdfImages';
+import type { QuotationExtraCostMode } from '$lib/types/quotationExtraCost';
 import { displayQuotationAmount, buildQuotationTotalLines, calculateQuotationSummary } from '$lib/utils/quotationTax';
+import {
+	drawQuotationTableHeader,
+	QUOTATION_PDF_COL
+} from '$lib/utils/quotationPdfTableHeader';
 
 export interface QuotationPdfItem {
 	sku?: string;
@@ -26,6 +31,8 @@ export interface QuotationPdfOptions {
 	notes?: string;
 	shippingCost?: number;
 	installationCost?: number;
+	shippingMode?: QuotationExtraCostMode;
+	installationMode?: QuotationExtraCostMode;
 	generalDiscountPercent?: number;
 	items: QuotationPdfItem[];
 	fullCustomerBlock?: boolean;
@@ -54,6 +61,8 @@ export async function buildQuotationPdf(options: QuotationPdfOptions): Promise<j
 		notes = '',
 		shippingCost = 0,
 		installationCost = 0,
+		shippingMode,
+		installationMode,
 		generalDiscountPercent = 0,
 		items,
 		fullCustomerBlock = false,
@@ -143,20 +152,7 @@ export async function buildQuotationPdf(options: QuotationPdfOptions): Promise<j
 	}
 
 	function drawTableHeader() {
-		doc.setFillColor(240, 240, 240);
-		doc.rect(10, currentY - 4, 190, 6, 'F');
-		doc.setFont('helvetica', 'bold');
-		doc.setFontSize(9);
-		doc.text('Foto', 11, currentY);
-		doc.text('SKU', 30, currentY);
-		doc.text('Descripción', 48, currentY);
-		doc.text('Cant.', 110, currentY, { align: 'right' });
-		doc.text(`Precio Unit.${pricesExcludeIva ? ' s/IVA' : ''}`, 135, currentY, { align: 'right' });
-		doc.text('Desc.%', 160, currentY, { align: 'right' });
-		doc.text(`Total${pricesExcludeIva ? ' s/IVA' : ''}`, 195, currentY, { align: 'right' });
-		currentY += 5;
-		doc.setFont('helvetica', 'normal');
-		doc.setFontSize(8);
+		currentY = drawQuotationTableHeader(doc, currentY, pricesExcludeIva);
 	}
 
 	function drawItemDetailBlock(detailText: string) {
@@ -235,10 +231,10 @@ export async function buildQuotationPdf(options: QuotationPdfOptions): Promise<j
 		const textY = rowTop + 1;
 		doc.text(skuLines, SKU_X, textY);
 		doc.text(descLines, DESC_X, textY);
-		doc.text(String(item.quantity), 110, textY, { align: 'right' });
-		doc.text(`$${displayUnitPrice.toFixed(2)}`, 135, textY, { align: 'right' });
-		doc.text(`${(item.discount ?? 0).toFixed(1)}%`, 160, textY, { align: 'right' });
-		doc.text(`$${displayTotal.toFixed(2)}`, 195, textY, { align: 'right' });
+		doc.text(String(item.quantity), QUOTATION_PDF_COL.cant, textY, { align: 'right' });
+		doc.text(`$${displayUnitPrice.toFixed(2)}`, QUOTATION_PDF_COL.price, textY, { align: 'right' });
+		doc.text(`${(item.discount ?? 0).toFixed(1)}%`, QUOTATION_PDF_COL.discount, textY, { align: 'right' });
+		doc.text(`$${displayTotal.toFixed(2)}`, QUOTATION_PDF_COL.total, textY, { align: 'right' });
 
 		currentY = rowTop + rowHeight;
 
@@ -259,7 +255,9 @@ export async function buildQuotationPdf(options: QuotationPdfOptions): Promise<j
 		itemsSubtotalConIva: subtotal,
 		generalDiscountAmount,
 		shippingCost,
-		installationCost
+		installationCost,
+		shippingMode,
+		installationMode
 	});
 	const totalLines = buildQuotationTotalLines(pricesExcludeIva, summary, {
 		generalDiscountPercent,

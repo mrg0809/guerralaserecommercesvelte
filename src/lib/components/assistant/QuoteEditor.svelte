@@ -2,6 +2,8 @@
 	import type { QuoteDraft, QuoteLine, CatalogProductHit } from '$lib/types/assistant';
 	import { calculateQuoteTotals } from '$lib/assistantQuoteUtils';
 	import { displayQuotationAmount, buildQuotationTotalLines, calculateQuotationSummary } from '$lib/utils/quotationTax';
+	import { QUOTATION_EXTRA_COST_MODE_LABELS } from '$lib/types/quotationExtraCost';
+	import type { QuotationExtraCostMode } from '$lib/types/quotationExtraCost';
 	import { aiFetch } from '$lib/assistantApi';
 
 	let {
@@ -29,7 +31,9 @@
 		calculateQuotationSummary({
 			itemsSubtotalConIva: totals.subtotal,
 			shippingCost: totals.shipping,
-			installationCost: totals.installation
+			installationCost: totals.installation,
+			shippingMode: draft.shipping_mode ?? 'na',
+			installationMode: draft.installation_mode ?? 'na'
 		})
 	);
 	const totalLines = $derived(
@@ -161,26 +165,54 @@
 			/>
 		</label>
 		<label class="flex flex-col gap-1 text-xs text-[var(--as-text-muted)]">
-			Envío $
-			<input
-				type="number"
-				class="assistant-select w-24"
-				value={draft.shipping_amount ?? ''}
-				oninput={(e) =>
-					(draft.shipping_amount = e.currentTarget.value ? Number(e.currentTarget.value) : undefined)}
-			/>
+			Envío
+			<select
+				class="assistant-select w-36"
+				value={draft.shipping_mode ?? 'na'}
+				onchange={(e) =>
+					(draft.shipping_mode = e.currentTarget.value as QuotationExtraCostMode)}
+			>
+				{#each Object.entries(QUOTATION_EXTRA_COST_MODE_LABELS) as [value, text]}
+					<option value={value}>{text}</option>
+				{/each}
+			</select>
+			{#if (draft.shipping_mode ?? 'na') === 'cost'}
+				<input
+					type="number"
+					class="assistant-select w-36 mt-1"
+					value={draft.shipping_amount ?? ''}
+					oninput={(e) =>
+						(draft.shipping_amount = e.currentTarget.value
+							? Number(e.currentTarget.value)
+							: undefined)}
+					placeholder="0.00"
+				/>
+			{/if}
 		</label>
 		<label class="flex flex-col gap-1 text-xs text-[var(--as-text-muted)]">
-			Instalación $
-			<input
-				type="number"
-				class="assistant-select w-24"
-				value={draft.installation_amount ?? ''}
-				oninput={(e) =>
-					(draft.installation_amount = e.currentTarget.value
-						? Number(e.currentTarget.value)
-						: undefined)}
-			/>
+			Instalación
+			<select
+				class="assistant-select w-36"
+				value={draft.installation_mode ?? 'na'}
+				onchange={(e) =>
+					(draft.installation_mode = e.currentTarget.value as QuotationExtraCostMode)}
+			>
+				{#each Object.entries(QUOTATION_EXTRA_COST_MODE_LABELS) as [value, text]}
+					<option value={value}>{text}</option>
+				{/each}
+			</select>
+			{#if (draft.installation_mode ?? 'na') === 'cost'}
+				<input
+					type="number"
+					class="assistant-select w-36 mt-1"
+					value={draft.installation_amount ?? ''}
+					oninput={(e) =>
+						(draft.installation_amount = e.currentTarget.value
+							? Number(e.currentTarget.value)
+							: undefined)}
+					placeholder="0.00"
+				/>
+			{/if}
 		</label>
 		<label class="flex items-center gap-2 text-xs text-[var(--as-text-muted)] self-end pb-1">
 			<input
@@ -249,13 +281,21 @@
 				<tr>
 					<th style="width:52px">Foto</th>
 					<th>Descripción</th>
-					<th style="width:70px">Cant.</th>
-					<th style="width:90px">
-						Precio{draft.prices_exclude_iva ? ' s/IVA' : ''}
+					<th class="col-narrow text-right">Cant.</th>
+					<th class="col-price text-right">
+						{#if draft.prices_exclude_iva}
+							Precio Unit.<br /><span class="header-sub">s/IVA</span>
+						{:else}
+							Precio Unit.
+						{/if}
 					</th>
-					<th style="width:60px">Desc%</th>
-					<th style="width:70px">
-						Total{draft.prices_exclude_iva ? ' s/IVA' : ''}
+					<th class="col-narrow text-right">Desc.%</th>
+					<th class="col-price text-right">
+						{#if draft.prices_exclude_iva}
+							Total<br /><span class="header-sub">s/IVA</span>
+						{:else}
+							Total
+						{/if}
 					</th>
 					<th style="width:40px"></th>
 				</tr>

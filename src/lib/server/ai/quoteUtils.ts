@@ -1,4 +1,5 @@
 import type { QuoteDraft, QuoteLine } from '$lib/types/assistant';
+import { normalizeExtraCostMode } from '$lib/types/quotationExtraCost';
 
 export function parsePrice(value: unknown): number {
 	if (value === null || value === undefined || value === '') return 0;
@@ -33,6 +34,11 @@ export function normalizeQuoteDraft(draft: QuoteDraft): QuoteDraft {
 				: undefined,
 		validity_days: draft.validity_days ?? 7,
 		prices_exclude_iva: draft.prices_exclude_iva ?? false,
+		shipping_mode: normalizeExtraCostMode(draft.shipping_mode, parsePrice(draft.shipping_amount)),
+		installation_mode: normalizeExtraCostMode(
+			draft.installation_mode,
+			parsePrice(draft.installation_amount)
+		),
 		lines: (draft.lines ?? []).map(normalizeQuoteLine)
 	};
 }

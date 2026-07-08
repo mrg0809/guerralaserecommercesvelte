@@ -1,5 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { QuotationInput, QuotationItemInput, SavedQuotation } from '$lib/types/savedQuotation';
+import { extraCostBillableAmount, normalizeExtraCostMode } from '$lib/types/quotationExtraCost';
+import type { QuotationExtraCostMode } from '$lib/types/quotationExtraCost';
+import type { QuotationInput, QuotationItemInput, QuotationSource, SavedQuotation } from '$lib/types/savedQuotation';
 
 function lineTotal(item: QuotationItemInput): number {
 	const subtotal = item.quantity * item.unit_price;
@@ -11,8 +13,13 @@ export function calculateQuotationTotals(input: QuotationInput) {
 	const itemsSubtotal = input.items.reduce((sum, item) => sum + lineTotal(item), 0);
 	const generalDiscountPct = input.general_discount_percentage ?? 0;
 	const discountAmount = generalDiscountPct ? (itemsSubtotal * generalDiscountPct) / 100 : 0;
-	const shipping = input.shipping_cost ?? 0;
-	const installation = input.installation_cost ?? 0;
+	const shippingMode = normalizeExtraCostMode(input.shipping_mode, input.shipping_cost ?? 0);
+	const installationMode = normalizeExtraCostMode(
+		input.installation_mode,
+		input.installation_cost ?? 0
+	);
+	const shipping = extraCostBillableAmount(shippingMode, input.shipping_cost ?? 0);
+	const installation = extraCostBillableAmount(installationMode, input.installation_cost ?? 0);
 	const total = itemsSubtotal - discountAmount + shipping + installation;
 
 	return {
@@ -51,6 +58,11 @@ export async function generateQuotationNumber(supabase: SupabaseClient): Promise
 
 function buildQuotationRow(input: QuotationInput, quotationNumber: string) {
 	const totals = calculateQuotationTotals(input);
+	const shippingMode = normalizeExtraCostMode(input.shipping_mode, input.shipping_cost ?? 0);
+	const installationMode = normalizeExtraCostMode(
+		input.installation_mode,
+		input.installation_cost ?? 0
+	);
 	return {
 		quotation_number: quotationNumber,
 		source: input.source ?? 'manual',
@@ -66,6 +78,8 @@ function buildQuotationRow(input: QuotationInput, quotationNumber: string) {
 		discount_amount: totals.discount_amount,
 		shipping_cost: input.shipping_cost ?? 0,
 		installation_cost: input.installation_cost ?? 0,
+		shipping_mode: shippingMode,
+		installation_mode: installationMode,
 		total_amount: totals.total_amount,
 		prices_exclude_iva: input.prices_exclude_iva ?? false,
 		include_all_details: input.include_all_details ?? false,
@@ -210,6 +224,14 @@ export async function getQuotationById(
 		general_discount_percentage: Number(header.general_discount_percentage ?? 0),
 		shipping_cost: Number(header.shipping_cost ?? 0),
 		installation_cost: Number(header.installation_cost ?? 0),
+		shipping_mode: normalizeExtraCostMode(
+			header.shipping_mode as QuotationExtraCostMode | string | null,
+			Number(header.shipping_cost ?? 0)
+		),
+		installation_mode: normalizeExtraCostMode(
+			header.installation_mode as QuotationExtraCostMode | string | null,
+			Number(header.installation_cost ?? 0)
+		),
 		prices_exclude_iva: Boolean(header.prices_exclude_iva),
 		include_all_details: Boolean(header.include_all_details),
 		validity_days: Number(header.validity_days ?? 15),
