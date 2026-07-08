@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { QuoteDraft, QuoteLine, CatalogProductHit } from '$lib/types/assistant';
 	import { calculateQuoteTotals } from '$lib/assistantQuoteUtils';
-	import { displayQuotationAmount } from '$lib/utils/quotationTax';
+	import { displayQuotationAmount, buildQuotationTotalLines, calculateQuotationSummary } from '$lib/utils/quotationTax';
 	import { aiFetch } from '$lib/assistantApi';
 
 	let {
@@ -25,6 +25,16 @@
 	let searchTimer: ReturnType<typeof setTimeout> | undefined;
 
 	const totals = $derived(calculateQuoteTotals(draft));
+	const summary = $derived(
+		calculateQuotationSummary({
+			itemsSubtotalConIva: totals.subtotal,
+			shippingCost: totals.shipping,
+			installationCost: totals.installation
+		})
+	);
+	const totalLines = $derived(
+		buildQuotationTotalLines(draft.prices_exclude_iva ?? false, summary)
+	);
 
 	function lineTotal(line: QuoteLine) {
 		const discount = line.discount_percent ?? 0;
@@ -347,18 +357,18 @@
 
 	<div class="flex flex-wrap gap-2 mt-3 items-center justify-between">
 		<button type="button" class="assistant-chip" onclick={addLine}>+ Línea manual</button>
-		<div class="text-sm space-y-1 text-right">
-			{#if totals.shipping > 0}
-				<div class="text-[var(--as-text-muted)]">Envío: ${totals.shipping.toFixed(2)}</div>
-			{/if}
-			{#if totals.installation > 0}
-				<div class="text-[var(--as-text-muted)]">Instalación: ${totals.installation.toFixed(2)}</div>
-			{/if}
-			<div class="text-[var(--as-text-muted)]">Subtotal (sin IVA): ${totals.subtotalSinIva.toFixed(2)}</div>
-			<div class="text-[var(--as-text-muted)]">IVA (16%): ${totals.iva.toFixed(2)}</div>
-			<div>
-				Total: <strong class="text-[var(--as-accent)]">${totals.total.toFixed(2)} MXN</strong>
-			</div>
+		<div class="text-sm space-y-1 text-right min-w-[220px]">
+			{#each totalLines as line}
+				{#if line.separatorBefore}
+					<div class="border-t border-[var(--as-border)] pt-1"></div>
+				{/if}
+				<div
+					class="flex justify-between gap-4 {line.bold ? 'font-semibold' : 'text-[var(--as-text-muted)]'} {line.red ? 'text-red-500' : ''}"
+				>
+					<span>{line.label}</span>
+					<span class={line.bold ? 'text-[var(--as-accent)]' : ''}>{line.value}</span>
+				</div>
+			{/each}
 		</div>
 	</div>
 

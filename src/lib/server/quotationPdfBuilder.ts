@@ -1,7 +1,7 @@
 import { jsPDF } from 'jspdf';
 import { addQuotationLogoToPdf } from '$lib/server/quotationLogo';
 import { loadImageForPdf } from '$lib/utils/pdfImages';
-import { calculateQuotationTaxBreakdown, displayQuotationAmount } from '$lib/utils/quotationTax';
+import { displayQuotationAmount, buildQuotationTotalLines, calculateQuotationSummary } from '$lib/utils/quotationTax';
 
 export interface QuotationPdfItem {
 	sku?: string;
@@ -255,9 +255,16 @@ export async function buildQuotationPdf(options: QuotationPdfOptions): Promise<j
 	const subtotal = itemsSubtotal(items);
 	const generalDiscountAmount =
 		generalDiscountPercent > 0 ? (subtotal * generalDiscountPercent) / 100 : 0;
-	const totalConIva =
-		subtotal - generalDiscountAmount + (shippingCost || 0) + (installationCost || 0);
-	const { subtotalSinIva, iva } = calculateQuotationTaxBreakdown(totalConIva);
+	const summary = calculateQuotationSummary({
+		itemsSubtotalConIva: subtotal,
+		generalDiscountAmount,
+		shippingCost,
+		installationCost
+	});
+	const totalLines = buildQuotationTotalLines(pricesExcludeIva, summary, {
+		generalDiscountPercent,
+		generalDiscountAmount
+	});
 
 	currentY += 3;
 	doc.setDrawColor(blueColor[0], blueColor[1], blueColor[2]);
@@ -265,51 +272,41 @@ export async function buildQuotationPdf(options: QuotationPdfOptions): Promise<j
 	doc.line(120, currentY, 200, currentY);
 	currentY += 6;
 
-	doc.setFontSize(9);
-	doc.setFont('helvetica', 'normal');
-	doc.setTextColor(0, 0, 0);
+	for (const line of totalLines) {
+		if (line.separatorBefore) {
+			currentY += 2;
+			doc.setDrawColor(200, 210, 230);
+			doc.setLineWidth(0.1);
+			doc.line(120, currentY, 200, currentY);
+			currentY += 5;
+		}
 
-	if (generalDiscountAmount > 0) {
-		doc.setTextColor(redColor[0], redColor[1], redColor[2]);
-		doc.text(`Descuento general (${generalDiscountPercent}%):`, 155, currentY, { align: 'right' });
-		doc.text(`-$${generalDiscountAmount.toFixed(2)} MXN`, 195, currentY, { align: 'right' });
+		if (line.red) {
+			doc.setTextColor(redColor[0], redColor[1], redColor[2]);
+		} else {
+			doc.setTextColor(0, 0, 0);
+		}
+
+		if (line.bold) {
+			doc.setFont('helvetica', 'bold');
+			doc.setFontSize(11);
+			doc.setTextColor(blueColor[0], blueColor[1], blueColor[2]);
+		} else {
+			doc.setFont('helvetica', 'normal');
+			doc.setFontSize(9);
+		}
+
+		const pdfValue = line.value.startsWith('$') && !line.value.includes('MXN')
+			? `${line.value} MXN`
+			: line.value;
+
+		doc.text(line.label, 155, currentY, { align: 'right' });
+		doc.text(pdfValue, 195, currentY, { align: 'right' });
+		currentY += line.bold ? 8 : 5;
+
 		doc.setTextColor(0, 0, 0);
-		currentY += 5;
+		doc.setFont('helvetica', 'normal');
 	}
-
-	if (shippingCost > 0) {
-		doc.text('Envío:', 155, currentY, { align: 'right' });
-		doc.text(`$${shippingCost.toFixed(2)} MXN`, 195, currentY, { align: 'right' });
-		currentY += 5;
-	}
-
-	if (installationCost > 0) {
-		doc.text('Instalación:', 155, currentY, { align: 'right' });
-		doc.text(`$${installationCost.toFixed(2)} MXN`, 195, currentY, { align: 'right' });
-		currentY += 5;
-	}
-
-	currentY += 2;
-	doc.setDrawColor(200, 210, 230);
-	doc.setLineWidth(0.1);
-	doc.line(120, currentY, 200, currentY);
-	currentY += 5;
-
-	doc.text('Subtotal (sin IVA):', 155, currentY, { align: 'right' });
-	doc.text(`$${subtotalSinIva.toFixed(2)} MXN`, 195, currentY, { align: 'right' });
-	currentY += 5;
-	doc.text('IVA (16%):', 155, currentY, { align: 'right' });
-	doc.text(`$${iva.toFixed(2)} MXN`, 195, currentY, { align: 'right' });
-	currentY += 5;
-
-	doc.setFont('helvetica', 'bold');
-	doc.setFontSize(11);
-	doc.setTextColor(blueColor[0], blueColor[1], blueColor[2]);
-	doc.text('Total:', 155, currentY, { align: 'right' });
-	doc.text(`$${totalConIva.toFixed(2)} MXN`, 195, currentY, { align: 'right' });
-	doc.setTextColor(0, 0, 0);
-	doc.setFont('helvetica', 'normal');
-	currentY += 8;
 
 	if (notes?.trim()) {
 		doc.setFontSize(9);
