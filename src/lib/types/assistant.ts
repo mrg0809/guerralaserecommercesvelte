@@ -1,3 +1,5 @@
+import type { QuotationExtraCostMode } from '$lib/types/quotationExtraCost';
+
 export type AiKnowledgeChannel =
 	| 'chillers'
 	| 'guias_lineales'
@@ -45,6 +47,8 @@ export interface QuoteDraft {
 	lines: QuoteLine[];
 	shipping_amount?: number;
 	installation_amount?: number;
+	shipping_mode?: QuotationExtraCostMode;
+	installation_mode?: QuotationExtraCostMode;
 	notes?: string;
 	validity_days?: number;
 	prices_exclude_iva?: boolean;

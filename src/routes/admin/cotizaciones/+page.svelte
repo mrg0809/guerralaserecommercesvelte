@@ -3,9 +3,20 @@
 	import { page } from '$app/stores';
 	import jsPDF from 'jspdf';
 	import CustomerSearch from '$lib/components/customers/CustomerSearch.svelte';
+	import ExtraCostField from '$lib/components/quotations/ExtraCostField.svelte';
 	import { getPrimaryProductImageUrl, buildCatalogDetail } from '$lib/utils/productMedia';
 	import { loadImageForPdf } from '$lib/utils/pdfImages';
-	import { calculateQuotationTaxBreakdown, displayQuotationAmount } from '$lib/utils/quotationTax';
+	import {
+		buildQuotationTotalLines,
+		calculateQuotationSummary,
+		displayQuotationAmount
+	} from '$lib/utils/quotationTax';
+	import {
+		drawQuotationTableHeader,
+		QUOTATION_PDF_COL
+	} from '$lib/utils/quotationPdfTableHeader';
+	import { extraCostBillableAmount } from '$lib/types/quotationExtraCost';
+	import type { QuotationExtraCostMode } from '$lib/types/quotationExtraCost';
 	import {
 		adminFormToQuotationInput,
 		getSavedQuotation,
@@ -62,6 +73,8 @@
 	let notes = $state('');
 	let shippingCost = $state(0);
 	let installationCost = $state(0);
+	let shippingMode = $state<QuotationExtraCostMode>('na');
+	let installationMode = $state<QuotationExtraCostMode>('na');
 	let pricesExcludeIva = $state(false);
 
 	// Función para cargar datos de cliente existente
@@ -124,6 +137,8 @@
 			generalDiscount = form.generalDiscount;
 			shippingCost = form.shippingCost;
 			installationCost = form.installationCost;
+			shippingMode = form.shippingMode;
+			installationMode = form.installationMode;
 			pricesExcludeIva = form.pricesExcludeIva;
 			includeAllDetails = form.includeAllDetails;
 			quotationValidityDays = form.quotationValidityDays;
@@ -314,7 +329,11 @@
 	function quotationTotal(): number {
 		const subtotal = quotationSubtotal();
 		const total = subtotal - generalDiscountAmount();
-		return total + shippingCost + installationCost;
+		return (
+			total +
+			extraCostBillableAmount(shippingMode, shippingCost) +
+			extraCostBillableAmount(installationMode, installationCost)
+		);
 	}
 
 	function displayItemUnitPrice(item: QuotationItem): number {
@@ -325,11 +344,24 @@
 		return displayQuotationAmount(lineTotal(item), pricesExcludeIva);
 	}
 
-	function quotationTaxBreakdown() {
-		return calculateQuotationTaxBreakdown(quotationTotal());
+	function quotationSummary() {
+		return calculateQuotationSummary({
+			itemsSubtotalConIva: quotationSubtotal(),
+			generalDiscountAmount: generalDiscountAmount(),
+			shippingCost,
+			installationCost,
+			shippingMode,
+			installationMode
+		});
 	}
 
-	const taxBreakdown = $derived.by(() => quotationTaxBreakdown());
+	const summary = $derived.by(() => quotationSummary());
+	const totalLines = $derived.by(() =>
+		buildQuotationTotalLines(pricesExcludeIva, summary, {
+			generalDiscountPercent: generalDiscount,
+			generalDiscountAmount: generalDiscountAmount()
+		})
+	);
 
 	function resetQuotation() {
 		quotationItems = [];
@@ -347,6 +379,8 @@
 		notes = '';
 		shippingCost = 0;
 		installationCost = 0;
+		shippingMode = 'na';
+		installationMode = 'na';
 		pricesExcludeIva = false;
 		savedQuotationId = null;
 	}
@@ -377,6 +411,8 @@
 				generalDiscount,
 				shippingCost,
 				installationCost,
+				shippingMode,
+				installationMode,
 				pricesExcludeIva,
 				includeAllDetails,
 				quotationValidityDays,
@@ -598,21 +634,7 @@
 		currentY += 5;
 
 		// Encabezados de tabla con fondo
-		doc.setFillColor(240, 240, 240);
-		doc.rect(10, currentY - 4, 190, 6, 'F');
-		doc.setFontSize(9);
-		doc.setFont('helvetica', 'bold');
-		doc.text('Foto', 11, currentY);
-		doc.text('SKU', 30, currentY);
-		doc.text('Descripción', 48, currentY);
-		doc.text('Cant.', 110, currentY, { align: 'right' });
-		doc.text(`Precio Unit.${pricesExcludeIva ? ' s/IVA' : ''}`, 135, currentY, { align: 'right' });
-		doc.text('Desc.%', 160, currentY, { align: 'right' });
-		doc.text(`Total${pricesExcludeIva ? ' s/IVA' : ''}`, 195, currentY, { align: 'right' });
-		currentY += 5;
-		
-		doc.setFont('helvetica', 'normal');
-		doc.setFontSize(8);
+		currentY = drawQuotationTableHeader(doc, currentY, pricesExcludeIva);
 
 		const imageCache = new Map<string, { dataUrl: string; format: 'PNG' | 'JPEG' }>();
 		await Promise.all(
@@ -637,20 +659,7 @@
 		}
 
 		function drawTableHeader() {
-			doc.setFillColor(240, 240, 240);
-			doc.rect(10, currentY - 4, 190, 6, 'F');
-			doc.setFont('helvetica', 'bold');
-			doc.setFontSize(9);
-			doc.text('Foto', 11, currentY);
-			doc.text('SKU', 30, currentY);
-			doc.text('Descripción', 48, currentY);
-			doc.text('Cant.', 110, currentY, { align: 'right' });
-			doc.text(`Precio Unit.${pricesExcludeIva ? ' s/IVA' : ''}`, 135, currentY, { align: 'right' });
-			doc.text('Desc.%', 160, currentY, { align: 'right' });
-			doc.text(`Total${pricesExcludeIva ? ' s/IVA' : ''}`, 195, currentY, { align: 'right' });
-			currentY += 5;
-			doc.setFont('helvetica', 'normal');
-			doc.setFontSize(8);
+			currentY = drawQuotationTableHeader(doc, currentY, pricesExcludeIva);
 		}
 
 		function drawItemDetailBlock(detailText: string) {
@@ -718,10 +727,10 @@
 			const textY = rowTop + 1;
 			doc.text(skuLines, SKU_X, textY);
 			doc.text(descLines, DESC_X, textY);
-			doc.text(String(item.quantity), 110, textY, { align: 'right' });
-			doc.text(`$${displayUnitPrice.toFixed(2)}`, 135, textY, { align: 'right' });
-			doc.text(`${item.discount.toFixed(1)}%`, 160, textY, { align: 'right' });
-			doc.text(`$${displayTotal.toFixed(2)}`, 195, textY, { align: 'right' });
+			doc.text(String(item.quantity), QUOTATION_PDF_COL.cant, textY, { align: 'right' });
+			doc.text(`$${displayUnitPrice.toFixed(2)}`, QUOTATION_PDF_COL.price, textY, { align: 'right' });
+			doc.text(`${item.discount.toFixed(1)}%`, QUOTATION_PDF_COL.discount, textY, { align: 'right' });
+			doc.text(`$${displayTotal.toFixed(2)}`, QUOTATION_PDF_COL.total, textY, { align: 'right' });
 
 			currentY = rowTop + rowHeight;
 
@@ -743,52 +752,66 @@
 		currentY += 6;
 		
 		const genDiscount = generalDiscountAmount();
-		const { totalConIva, subtotalSinIva, iva } = quotationTaxBreakdown();
+		const summary = calculateQuotationSummary({
+			itemsSubtotalConIva: quotationSubtotal(),
+			generalDiscountAmount: genDiscount,
+			shippingCost,
+			installationCost,
+			shippingMode,
+			installationMode
+		});
+		const totalLines = buildQuotationTotalLines(pricesExcludeIva, summary, {
+			generalDiscountPercent: generalDiscount,
+			generalDiscountAmount: genDiscount
+		});
 
 		doc.setFontSize(9);
 
-		if (genDiscount > 0) {
-			doc.setTextColor(redColor[0], redColor[1], redColor[2]);
-			doc.text(`Descuento general (${generalDiscount || 0}%):`, 155, currentY, { align: 'right' });
-			doc.text(`-$${genDiscount.toFixed(2)} MXN`, 195, currentY, { align: 'right' });
+		for (const line of totalLines) {
+			if (line.separatorBefore) {
+				currentY += 2;
+				doc.setDrawColor(200, 210, 230);
+				doc.setLineWidth(0.1);
+				doc.line(120, currentY, 200, currentY);
+				currentY += 5;
+			}
+
+			if (line.section) {
+				doc.setFont('helvetica', 'bold');
+				doc.setFontSize(8);
+				doc.setTextColor(80, 80, 80);
+				doc.text(line.label, 120, currentY);
+				doc.setTextColor(0, 0, 0);
+				currentY += 5;
+				continue;
+			}
+
+			if (line.red) {
+				doc.setTextColor(redColor[0], redColor[1], redColor[2]);
+			} else {
+				doc.setTextColor(0, 0, 0);
+			}
+
+			if (line.bold) {
+				doc.setFont('helvetica', 'bold');
+				doc.setFontSize(11);
+				doc.setTextColor(blueColor[0], blueColor[1], blueColor[2]);
+			} else {
+				doc.setFont('helvetica', 'normal');
+				doc.setFontSize(9);
+			}
+
+			const pdfValue = line.value.startsWith('$') && !line.value.includes('MXN')
+				? `${line.value} MXN`
+				: line.value;
+
+			doc.text(line.label, 155, currentY, { align: 'right' });
+			doc.text(pdfValue, 195, currentY, { align: 'right' });
+			currentY += line.bold ? 8 : 5;
+
 			doc.setTextColor(0, 0, 0);
-			currentY += 5;
+			doc.setFont('helvetica', 'normal');
 		}
-		
-		if (shippingCost > 0) {
-			doc.text('Envío:', 155, currentY, { align: 'right' });
-			doc.text(`$${shippingCost.toFixed(2)} MXN`, 195, currentY, { align: 'right' });
-			currentY += 5;
-		}
-		
-		if (installationCost > 0) {
-			doc.text('Instalación:', 155, currentY, { align: 'right' });
-			doc.text(`$${installationCost.toFixed(2)} MXN`, 195, currentY, { align: 'right' });
-			currentY += 5;
-		}
-
-		currentY += 2;
-		doc.setDrawColor(200, 210, 230);
-		doc.setLineWidth(0.1);
-		doc.line(120, currentY, 200, currentY);
-		currentY += 5;
-
-		doc.text('Subtotal (sin IVA):', 155, currentY, { align: 'right' });
-		doc.text(`$${subtotalSinIva.toFixed(2)} MXN`, 195, currentY, { align: 'right' });
-		currentY += 5;
-
-		doc.text('IVA (16%):', 155, currentY, { align: 'right' });
-		doc.text(`$${iva.toFixed(2)} MXN`, 195, currentY, { align: 'right' });
-		currentY += 5;
-		
-		doc.setFont('helvetica', 'bold');
-		doc.setFontSize(11);
-		doc.setTextColor(blueColor[0], blueColor[1], blueColor[2]);
-		doc.text('Total:', 155, currentY, { align: 'right' });
-		doc.text(`$${totalConIva.toFixed(2)} MXN`, 195, currentY, { align: 'right' });
-		doc.setTextColor(0, 0, 0);
-		doc.setFont('helvetica', 'normal');
-		currentY += 8;
 
 		// Notas
 		if (notes) {
@@ -992,28 +1015,8 @@
 						placeholder="Ej: Contado, Crédito 30 días"
 					/>
 				</div>
-				<div>
-					<label class="block text-sm font-medium text-gray-700 mb-1">Costo de envío (opcional)</label>
-					<input
-						type="number"
-						step="0.01"
-						min="0"
-						class="w-full border rounded-md px-3 py-2"
-						bind:value={shippingCost}
-						placeholder="0.00"
-					/>
-				</div>
-				<div>
-					<label class="block text-sm font-medium text-gray-700 mb-1">Costo de instalación (opcional)</label>
-					<input
-						type="number"
-						step="0.01"
-						min="0"
-						class="w-full border rounded-md px-3 py-2"
-						bind:value={installationCost}
-						placeholder="0.00"
-					/>
-				</div>
+				<ExtraCostField label="Envío" bind:mode={shippingMode} bind:amount={shippingCost} />
+				<ExtraCostField label="Instalación" bind:mode={installationMode} bind:amount={installationCost} />
 			</div>
 			<div class="mt-4">
 				<label class="block text-sm font-medium text-gray-700 mb-1">Notas adicionales</label>
@@ -1119,13 +1122,21 @@
 										<th class="px-3 py-2 text-center border w-16">Foto</th>
 										<th class="px-3 py-2 text-left border">SKU</th>
 										<th class="px-3 py-2 text-left border">Descripción</th>
-										<th class="px-3 py-2 text-right border w-24">Cantidad</th>
-										<th class="px-3 py-2 text-right border w-28">
-											Precio Unit.{pricesExcludeIva ? ' (s/IVA)' : ''}
+										<th class="px-3 py-2 text-right border w-20 whitespace-normal leading-tight align-bottom">Cant.</th>
+										<th class="px-3 py-2 text-right border w-32 whitespace-normal leading-tight align-bottom">
+											{#if pricesExcludeIva}
+												Precio Unit.<br /><span class="text-xs font-normal">s/IVA</span>
+											{:else}
+												Precio Unit.
+											{/if}
 										</th>
-										<th class="px-3 py-2 text-right border w-24">Desc. %</th>
-										<th class="px-3 py-2 text-right border w-28">
-											Total{pricesExcludeIva ? ' (s/IVA)' : ''}
+										<th class="px-3 py-2 text-right border w-20 whitespace-normal leading-tight align-bottom">Desc. %</th>
+										<th class="px-3 py-2 text-right border w-32 whitespace-normal leading-tight align-bottom">
+											{#if pricesExcludeIva}
+												Total<br /><span class="text-xs font-normal">s/IVA</span>
+											{:else}
+												Total
+											{/if}
 										</th>
 										<th class="px-3 py-2 text-center border w-16">Quitar</th>
 									</tr>
@@ -1264,38 +1275,21 @@
 
 								<div class="bg-gray-50 rounded-lg p-4 min-w-[280px]">
 									<div class="space-y-2">
-										{#if generalDiscount > 0}
-											<div class="flex justify-between text-sm text-red-600">
-												<span class="font-medium">Descuento ({generalDiscount}%):</span>
-												<span class="font-semibold">-${generalDiscountAmount().toFixed(2)}</span>
-											</div>
-										{/if}
-										{#if shippingCost > 0}
-											<div class="flex justify-between text-sm">
-												<span class="font-medium">Envío:</span>
-												<span class="font-semibold">${shippingCost.toFixed(2)}</span>
-											</div>
-										{/if}
-										{#if installationCost > 0}
-											<div class="flex justify-between text-sm">
-												<span class="font-medium">Instalación:</span>
-												<span class="font-semibold">${installationCost.toFixed(2)}</span>
-											</div>
-										{/if}
-										<div class="border-t border-gray-300 pt-2 space-y-2">
-											<div class="flex justify-between text-sm">
-												<span class="font-medium">Subtotal (sin IVA):</span>
-												<span class="font-semibold">${taxBreakdown.subtotalSinIva.toFixed(2)}</span>
-											</div>
-											<div class="flex justify-between text-sm">
-												<span class="font-medium">IVA (16%):</span>
-												<span class="font-semibold">${taxBreakdown.iva.toFixed(2)}</span>
-											</div>
-										</div>
-										<div class="flex justify-between text-lg font-bold border-t pt-2">
-											<span>Total:</span>
-											<span class="text-blue-600">${taxBreakdown.totalConIva.toFixed(2)} MXN</span>
-										</div>
+										{#each totalLines as line}
+											{#if line.separatorBefore}
+												<div class="border-t border-gray-300 pt-2"></div>
+											{/if}
+											{#if line.section}
+												<div class="text-xs font-semibold text-gray-500 pt-1">{line.label}</div>
+											{:else}
+												<div
+													class="flex justify-between {line.bold ? 'text-lg font-bold border-t pt-2' : 'text-sm'} {line.red ? 'text-red-600' : ''}"
+												>
+													<span class={line.bold ? '' : 'font-medium'}>{line.label}</span>
+													<span class={line.bold ? 'text-blue-600' : 'font-semibold'}>{line.value}</span>
+												</div>
+											{/if}
+										{/each}
 									</div>
 								</div>
 							</div>

@@ -1,3 +1,5 @@
+import type { QuotationExtraCostMode } from '$lib/types/quotationExtraCost';
+
 export type QuotationSource = 'manual' | 'ai_assistant' | 'ai_chat';
 
 export interface QuotationItemInput {
@@ -28,6 +30,8 @@ export interface QuotationInput {
 	general_discount_percentage?: number;
 	shipping_cost?: number;
 	installation_cost?: number;
+	shipping_mode?: QuotationExtraCostMode;
+	installation_mode?: QuotationExtraCostMode;
 	prices_exclude_iva?: boolean;
 	include_all_details?: boolean;
 	validity_days?: number;

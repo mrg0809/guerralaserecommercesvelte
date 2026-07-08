@@ -31,5 +31,11 @@ export function calculateQuoteTotals(draft: QuoteDraft) {
 }
 
 export function emptyQuoteDraft(): QuoteDraft {
-	return { lines: [], validity_days: 7, prices_exclude_iva: false };
+	return {
+		lines: [],
+		validity_days: 7,
+		prices_exclude_iva: false,
+		shipping_mode: 'na',
+		installation_mode: 'na'
+	};
 }

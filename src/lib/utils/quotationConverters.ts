@@ -1,4 +1,6 @@
 import type { QuoteDraft } from '$lib/types/assistant';
+import type { QuotationExtraCostMode } from '$lib/types/quotationExtraCost';
+import { normalizeExtraCostMode } from '$lib/types/quotationExtraCost';
 import type { QuotationInput, QuotationSource, SavedQuotation } from '$lib/types/savedQuotation';
 
 export type AdminQuotationItem = {
@@ -43,6 +45,9 @@ export function quoteDraftToQuotationInput(
 		})),
 		shipping_cost: draft.shipping_amount ?? 0,
 		installation_cost: draft.installation_amount ?? 0,
+		shipping_mode: draft.shipping_mode ?? normalizeExtraCostMode(undefined, draft.shipping_amount ?? 0),
+		installation_mode:
+			draft.installation_mode ?? normalizeExtraCostMode(undefined, draft.installation_amount ?? 0),
 		prices_exclude_iva: draft.prices_exclude_iva ?? false,
 		include_all_details: includeAll,
 		validity_days: draft.validity_days ?? 7,
@@ -63,6 +68,8 @@ export function adminFormToQuotationInput(form: {
 	generalDiscount: number;
 	shippingCost: number;
 	installationCost: number;
+	shippingMode: QuotationExtraCostMode;
+	installationMode: QuotationExtraCostMode;
 	pricesExcludeIva: boolean;
 	includeAllDetails: boolean;
 	quotationValidityDays: number;
@@ -83,6 +90,8 @@ export function adminFormToQuotationInput(form: {
 		general_discount_percentage: form.generalDiscount,
 		shipping_cost: form.shippingCost,
 		installation_cost: form.installationCost,
+		shipping_mode: form.shippingMode,
+		installation_mode: form.installationMode,
 		prices_exclude_iva: form.pricesExcludeIva,
 		include_all_details: form.includeAllDetails,
 		validity_days: form.quotationValidityDays,
@@ -119,6 +128,14 @@ export function savedQuotationToAdminForm(quotation: SavedQuotation) {
 		generalDiscount: quotation.general_discount_percentage ?? 0,
 		shippingCost: quotation.shipping_cost ?? 0,
 		installationCost: quotation.installation_cost ?? 0,
+		shippingMode: normalizeExtraCostMode(
+			quotation.shipping_mode,
+			quotation.shipping_cost ?? 0
+		),
+		installationMode: normalizeExtraCostMode(
+			quotation.installation_mode,
+			quotation.installation_cost ?? 0
+		),
 		pricesExcludeIva: quotation.prices_exclude_iva ?? false,
 		includeAllDetails: quotation.include_all_details ?? false,
 		quotationValidityDays: quotation.validity_days ?? 15,
@@ -147,6 +164,14 @@ export function quotationToQuoteDraft(quotation: SavedQuotation): QuoteDraft {
 		client_id: quotation.customer_id ?? undefined,
 		shipping_amount: quotation.shipping_cost,
 		installation_amount: quotation.installation_cost,
+		shipping_mode: normalizeExtraCostMode(
+			quotation.shipping_mode,
+			quotation.shipping_cost ?? 0
+		),
+		installation_mode: normalizeExtraCostMode(
+			quotation.installation_mode,
+			quotation.installation_cost ?? 0
+		),
 		notes: quotation.notes ?? undefined,
 		validity_days: quotation.validity_days,
 		prices_exclude_iva: quotation.prices_exclude_iva,
