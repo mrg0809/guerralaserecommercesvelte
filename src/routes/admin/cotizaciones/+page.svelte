@@ -776,6 +776,16 @@
 				currentY += 5;
 			}
 
+			if (line.section) {
+				doc.setFont('helvetica', 'bold');
+				doc.setFontSize(8);
+				doc.setTextColor(80, 80, 80);
+				doc.text(line.label, 120, currentY);
+				doc.setTextColor(0, 0, 0);
+				currentY += 5;
+				continue;
+			}
+
 			if (line.red) {
 				doc.setTextColor(redColor[0], redColor[1], redColor[2]);
 			} else {
@@ -1269,12 +1279,16 @@
 											{#if line.separatorBefore}
 												<div class="border-t border-gray-300 pt-2"></div>
 											{/if}
-											<div
-												class="flex justify-between {line.bold ? 'text-lg font-bold border-t pt-2' : 'text-sm'} {line.red ? 'text-red-600' : ''}"
-											>
-												<span class={line.bold ? '' : 'font-medium'}>{line.label}</span>
-												<span class={line.bold ? 'text-blue-600' : 'font-semibold'}>{line.value}</span>
-											</div>
+											{#if line.section}
+												<div class="text-xs font-semibold text-gray-500 pt-1">{line.label}</div>
+											{:else}
+												<div
+													class="flex justify-between {line.bold ? 'text-lg font-bold border-t pt-2' : 'text-sm'} {line.red ? 'text-red-600' : ''}"
+												>
+													<span class={line.bold ? '' : 'font-medium'}>{line.label}</span>
+													<span class={line.bold ? 'text-blue-600' : 'font-semibold'}>{line.value}</span>
+												</div>
+											{/if}
 										{/each}
 									</div>
 								</div>

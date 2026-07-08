@@ -402,12 +402,16 @@
 				{#if line.separatorBefore}
 					<div class="border-t border-[var(--as-border)] pt-1"></div>
 				{/if}
-				<div
-					class="flex justify-between gap-4 {line.bold ? 'font-semibold' : 'text-[var(--as-text-muted)]'} {line.red ? 'text-red-500' : ''}"
-				>
-					<span>{line.label}</span>
-					<span class={line.bold ? 'text-[var(--as-accent)]' : ''}>{line.value}</span>
-				</div>
+				{#if line.section}
+					<div class="text-xs font-semibold text-[var(--as-text-muted)] pt-1 text-left">{line.label}</div>
+				{:else}
+					<div
+						class="flex justify-between gap-4 {line.bold ? 'font-semibold' : 'text-[var(--as-text-muted)]'} {line.red ? 'text-red-500' : ''}"
+					>
+						<span>{line.label}</span>
+						<span class={line.bold ? 'text-[var(--as-accent)]' : ''}>{line.value}</span>
+					</div>
+				{/if}
 			{/each}
 		</div>
 	</div>

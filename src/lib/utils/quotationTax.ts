@@ -72,6 +72,7 @@ export type QuotationTotalLine = {
 	bold?: boolean;
 	red?: boolean;
 	separatorBefore?: boolean;
+	section?: boolean;
 };
 
 export function buildQuotationTotalLines(
@@ -92,19 +93,53 @@ export function buildQuotationTotalLines(
 	}
 
 	if (pricesExcludeIva) {
+		const productsTax = calculateQuotationTaxBreakdown(summary.productsSubtotalConIva);
 		lines.push(
 			{
-				label: 'Envío:',
-				value: formatExtraCostLabel(summary.shippingCost, summary.shippingMode)
+				label: 'Subtotal (sin IVA):',
+				value: `$${productsTax.subtotalSinIva.toFixed(2)}`,
+				separatorBefore: discount > 0
 			},
+			{ label: 'IVA (16%):', value: `$${productsTax.iva.toFixed(2)}` },
 			{
-				label: 'Instalación:',
-				value: formatExtraCostLabel(summary.installationCost, summary.installationMode)
-			},
-			{ label: 'Subtotal (sin IVA):', value: `$${summary.subtotalSinIva.toFixed(2)}`, separatorBefore: true },
-			{ label: 'IVA (16%):', value: `$${summary.iva.toFixed(2)}` },
-			{ label: 'Total:', value: `$${summary.total.toFixed(2)} MXN`, bold: true }
+				label: 'Total:',
+				value: `$${productsTax.totalConIva.toFixed(2)} MXN`,
+				bold: true
+			}
 		);
+
+		const showAdditional =
+			summary.shippingMode !== 'na' || summary.installationMode !== 'na';
+		if (showAdditional) {
+			lines.push({
+				label: 'Costos adicionales (con IVA):',
+				value: '',
+				separatorBefore: true,
+				section: true
+			});
+			if (summary.shippingMode !== 'na') {
+				lines.push({
+					label: 'Envío:',
+					value: formatExtraCostLabel(summary.shippingCost, summary.shippingMode)
+				});
+			}
+			if (summary.installationMode !== 'na') {
+				lines.push({
+					label: 'Instalación:',
+					value: formatExtraCostLabel(summary.installationCost, summary.installationMode)
+				});
+			}
+			const extrasBillable =
+				extraCostBillableAmount(summary.shippingMode, summary.shippingCost) +
+				extraCostBillableAmount(summary.installationMode, summary.installationCost);
+			if (extrasBillable > 0) {
+				lines.push({
+					label: 'Total general:',
+					value: `$${summary.total.toFixed(2)} MXN`,
+					bold: true
+				});
+			}
+		}
 	} else {
 		lines.push(
 			{ label: 'Subtotal con IVA:', value: `$${summary.productsSubtotalConIva.toFixed(2)}` },

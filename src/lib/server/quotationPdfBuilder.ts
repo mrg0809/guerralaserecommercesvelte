@@ -279,6 +279,16 @@ export async function buildQuotationPdf(options: QuotationPdfOptions): Promise<j
 			currentY += 5;
 		}
 
+		if (line.section) {
+			doc.setFont('helvetica', 'bold');
+			doc.setFontSize(8);
+			doc.setTextColor(80, 80, 80);
+			doc.text(line.label, 120, currentY);
+			doc.setTextColor(0, 0, 0);
+			currentY += 5;
+			continue;
+		}
+
 		if (line.red) {
 			doc.setTextColor(redColor[0], redColor[1], redColor[2]);
 		} else {
