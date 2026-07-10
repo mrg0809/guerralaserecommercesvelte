@@ -86,6 +86,27 @@
 	let salesHistory = $state<SaleHistoryItem[]>([]);
 	let historyLoading = $state(false);
 	let historyCancelingSaleId = $state<string | null>(null);
+	let historyReprintingSaleId = $state<string | null>(null);
+
+	type TicketPdfLine = {
+		displayName: string;
+		sku: string | null;
+		quantity: number;
+		unitPrice: number;
+		lineTotal: number;
+	};
+
+	type TicketPdfData = {
+		saleNumber: string;
+		dateText: string;
+		paymentMethod: 'cash' | 'card' | 'transfer' | string;
+		paymentMethodLabel: string;
+		amountPaid: number;
+		change: number;
+		customerName: string | null;
+		items: TicketPdfLine[];
+		subtotal: number;
+	};
 
 	let isFullscreen = $state(false);
 
@@ -384,17 +405,25 @@
 		showTicket = false;
 	}
 
-	function buildTicketPdfData() {
+	function paymentMethodLabelOf(method: string | null | undefined) {
+		if (method === 'cash') return 'Efectivo';
+		if (method === 'card') return 'Tarjeta';
+		if (method === 'transfer') return 'Transferencia';
+		return method || '—';
+	}
+
+	function buildTicketPdfData(): TicketPdfData {
 		const saleNumber = lastSaleNumber ?? 'PV-XXXX';
 		const now = new Date();
 
 		return {
 			saleNumber,
 			dateText: now.toLocaleString('es-MX'),
-			paymentMethodLabel:
-				paymentMethod === 'cash' ? 'Efectivo' : paymentMethod === 'card' ? 'Tarjeta' : 'Transferencia',
+			paymentMethod,
+			paymentMethodLabel: paymentMethodLabelOf(paymentMethod),
 			amountPaid,
 			change: computedChange,
+			customerName: customerName?.trim() || null,
 			items: cartItems.map((it) => ({
 				displayName: it.variantName ? `${it.productName} - ${it.variantName}` : it.productName,
 				sku: it.sku,
@@ -403,6 +432,57 @@
 				lineTotal: it.quantity * it.unitPrice
 			})),
 			subtotal
+		};
+	}
+
+	async function loadTicketPdfDataFromSale(saleId: string): Promise<TicketPdfData> {
+		const { data, error } = await supabaseAny
+			.from('pos_sales')
+			.select(
+				'id, sale_number, payment_method, amount_paid, change_amount, subtotal_amount, total_amount, customer_name, created_at, pos_sale_items(product_name, variant_name, sku, quantity, unit_price, line_total)'
+			)
+			.eq('id', saleId)
+			.single();
+
+		if (error) throw error;
+		if (!data) throw new Error('No se encontró la venta.');
+
+		const items = (data.pos_sale_items ?? []).map(
+			(it: {
+				product_name: string;
+				variant_name: string | null;
+				sku: string | null;
+				quantity: number;
+				unit_price: number;
+				line_total: number;
+			}) => ({
+				displayName: it.variant_name ? `${it.product_name} - ${it.variant_name}` : it.product_name,
+				sku: it.sku,
+				quantity: it.quantity,
+				unitPrice: Number(it.unit_price) || 0,
+				lineTotal:
+					Number(it.line_total) ||
+					(Number(it.quantity) || 0) * (Number(it.unit_price) || 0)
+			})
+		);
+
+		if (items.length === 0) {
+			throw new Error('La venta no tiene artículos para reimprimir.');
+		}
+
+		const method = data.payment_method || 'cash';
+		return {
+			saleNumber: data.sale_number,
+			dateText: data.created_at
+				? new Date(data.created_at).toLocaleString('es-MX')
+				: new Date().toLocaleString('es-MX'),
+			paymentMethod: method,
+			paymentMethodLabel: paymentMethodLabelOf(method),
+			amountPaid: Number(data.amount_paid) || 0,
+			change: Number(data.change_amount) || 0,
+			customerName: data.customer_name?.trim() || null,
+			items,
+			subtotal: Number(data.total_amount ?? data.subtotal_amount) || 0
 		};
 	}
 
@@ -422,11 +502,11 @@
 		return dataUrl;
 	}
 
-	async function generateTicketPdf() {
-		const data = buildTicketPdfData();
+	async function generateTicketPdf(data: TicketPdfData = buildTicketPdfData()) {
 		const logo = await loadLogoDataUrl();
 		const logoW = 60;
 		const ticketWidthMm = 80;
+		const isCash = data.paymentMethod === 'cash';
 
 		// Doc temporal solo para medir logo y wrap de nombres (la altura real se calcula después).
 		const measureDoc = new jsPDF({ unit: 'mm', format: [ticketWidthMm, 200] });
@@ -444,8 +524,8 @@
 		contentY += 4; // folio
 		contentY += 4; // fecha
 		contentY += 4; // pago
-		if (customerName?.trim()) {
-			const customerLines = measureDoc.splitTextToSize(`Cliente: ${customerName.trim()}`, 64);
+		if (data.customerName?.trim()) {
+			const customerLines = measureDoc.splitTextToSize(`Cliente: ${data.customerName.trim()}`, 64);
 			contentY += customerLines.length * 4;
 		}
 		contentY += 5; // separador
@@ -460,7 +540,7 @@
 		contentY += 2; // separador
 		contentY += 4; // subtotal
 		contentY += 5; // total
-		contentY += paymentMethod === 'cash' ? 8 : 4; // recibido/cambio o monto
+		contentY += isCash ? 8 : 4; // recibido/cambio o monto
 		contentY += 6; // espacio antes del footer
 		contentY += 20; // gracias + url + whatsapp + margen inferior
 
@@ -489,8 +569,8 @@
 		doc.text(`Pago: ${data.paymentMethodLabel}`, 8, y);
 		y += 4;
 
-		if (customerName?.trim()) {
-			const customerLines = doc.splitTextToSize(`Cliente: ${customerName.trim()}`, 64);
+		if (data.customerName?.trim()) {
+			const customerLines = doc.splitTextToSize(`Cliente: ${data.customerName.trim()}`, 64);
 			doc.text(customerLines, 8, y);
 			y += customerLines.length * 4;
 		}
@@ -532,13 +612,13 @@
 		doc.text(`Total: ${formatMoney(data.subtotal)}`, 74, y, { align: 'right' });
 		y += 4;
 
-		if (paymentMethod === 'cash') {
-			doc.text(`Recibido: ${formatMoney(amountPaid)}`, 8, y);
+		if (isCash) {
+			doc.text(`Recibido: ${formatMoney(data.amountPaid)}`, 8, y);
 			y += 4;
 			doc.text(`Cambio: ${formatMoney(data.change)}`, 8, y);
 			y += 4;
 		} else {
-			doc.text(`Monto: ${formatMoney(amountPaid)}`, 8, y);
+			doc.text(`Monto: ${formatMoney(data.amountPaid)}`, 8, y);
 			y += 4;
 		}
 
@@ -558,6 +638,15 @@
 		return doc;
 	}
 
+	async function openTicketPdf(doc: jsPDF) {
+		const blob = doc.output('blob');
+		const url = URL.createObjectURL(blob);
+		const win = window.open(url, '_blank');
+		if (!win) {
+			alert('Por favor permite popups para imprimir.');
+		}
+	}
+
 	async function downloadTicketPdf() {
 		const doc = await generateTicketPdf();
 		doc.save(`ticket-${lastSaleNumber ?? 'PV'}.pdf`);
@@ -565,12 +654,20 @@
 
 	async function printTicketPdf() {
 		const doc = await generateTicketPdf();
-		const blob = doc.output('blob');
-		const url = URL.createObjectURL(blob);
-		const win = window.open(url, '_blank');
-		if (!win) {
-			alert('Por favor permite popups para imprimir.');
-			return;
+		await openTicketPdf(doc);
+	}
+
+	async function reprintSaleTicket(sale: SaleHistoryItem) {
+		if (!sale?.id) return;
+		historyReprintingSaleId = sale.id;
+		try {
+			const data = await loadTicketPdfDataFromSale(sale.id);
+			const doc = await generateTicketPdf(data);
+			await openTicketPdf(doc);
+		} catch (e: any) {
+			alert(e?.message || 'Error al reimprimir el ticket');
+		} finally {
+			historyReprintingSaleId = null;
 		}
 	}
 
@@ -1080,7 +1177,7 @@
 												<th class="text-left px-3 py-2">Cliente</th>
 												<th class="text-right px-3 py-2 w-28">Total</th>
 												<th class="text-left px-3 py-2">Estado</th>
-												<th class="text-center px-3 py-2 w-28">Acción</th>
+												<th class="text-center px-3 py-2 w-44">Acción</th>
 											</tr>
 										</thead>
 										<tbody>
@@ -1107,19 +1204,27 @@
 															{sale.status === 'cancelled' ? 'Cancelada' : 'Pagada'}
 														</span>
 													</td>
-													<td class="px-3 py-2 text-center">
-														{#if sale.status !== 'cancelled'}
+													<td class="px-3 py-2">
+														<div class="flex flex-wrap items-center justify-center gap-1.5">
 															<button
 																type="button"
-																class="px-3 py-1.5 rounded-md border border-red-200 text-red-700 hover:bg-red-50 text-xs disabled:opacity-50"
-																disabled={historyCancelingSaleId === sale.id}
-																onclick={() => cancelSaleWithPrompt(sale)}
+																class="px-3 py-1.5 rounded-md border border-gray-200 text-gray-700 hover:bg-gray-50 text-xs disabled:opacity-50"
+																disabled={historyReprintingSaleId === sale.id}
+																onclick={() => reprintSaleTicket(sale)}
 															>
-																{#if historyCancelingSaleId === sale.id}Cancelando...{:else}Cancelar{/if}
+																{#if historyReprintingSaleId === sale.id}Abriendo...{:else}Reimprimir{/if}
 															</button>
-														{:else}
-															<span class="text-xs text-gray-400">-</span>
-														{/if}
+															{#if sale.status !== 'cancelled'}
+																<button
+																	type="button"
+																	class="px-3 py-1.5 rounded-md border border-red-200 text-red-700 hover:bg-red-50 text-xs disabled:opacity-50"
+																	disabled={historyCancelingSaleId === sale.id}
+																	onclick={() => cancelSaleWithPrompt(sale)}
+																>
+																	{#if historyCancelingSaleId === sale.id}Cancelando...{:else}Cancelar{/if}
+																</button>
+															{/if}
+														</div>
 													</td>
 												</tr>
 											{/each}
