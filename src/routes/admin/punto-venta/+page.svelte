@@ -424,21 +424,50 @@
 
 	async function generateTicketPdf() {
 		const data = buildTicketPdfData();
-
-		// Altura aproximada: header + items (5-6mm cada una) + footer
-		// Reservamos espacio fijo para: subtotal/total + recibido/cambio + footer (datos de contacto).
-		// Si el pie se encima, subimos este valor para que el ticket sea más largo.
-		const reservedFooterMm = 90;
-		const heightMm = Math.max(140, 45 + data.items.length * 6 + reservedFooterMm);
-		const doc = new jsPDF({ unit: 'mm', format: [80, heightMm] });
-
-		// Encabezado con logo
 		const logo = await loadLogoDataUrl();
-		const logoW = 60; // mantenemos ancho fijo y calculamos alto por aspecto
-		const imgProps = (doc as any).getImageProperties ? (doc as any).getImageProperties(logo) : null;
+		const logoW = 60;
+		const ticketWidthMm = 80;
+
+		// Doc temporal solo para medir logo y wrap de nombres (la altura real se calcula después).
+		const measureDoc = new jsPDF({ unit: 'mm', format: [ticketWidthMm, 200] });
+		const imgProps = (measureDoc as any).getImageProperties
+			? (measureDoc as any).getImageProperties(logo)
+			: null;
 		const logoH =
 			imgProps?.width && imgProps?.height ? (logoW * imgProps.height) / imgProps.width : 12;
-		doc.addImage(logo, 'PNG', (80 - logoW) / 2, 2, logoW, logoH);
+
+		measureDoc.setFont('helvetica', 'normal');
+		measureDoc.setFontSize(8);
+
+		let contentY = 2 + logoH + 4; // título marca
+		contentY += 4; // TICKET DE VENTA
+		contentY += 4; // folio
+		contentY += 4; // fecha
+		contentY += 4; // pago
+		if (customerName?.trim()) {
+			const customerLines = measureDoc.splitTextToSize(`Cliente: ${customerName.trim()}`, 64);
+			contentY += customerLines.length * 4;
+		}
+		contentY += 5; // separador
+
+		for (const line of data.items) {
+			const nameLines = measureDoc.splitTextToSize(line.displayName, 64);
+			contentY += nameLines.length * 4;
+			if (line.sku) contentY += 3.5;
+			contentY += 5;
+		}
+
+		contentY += 2; // separador
+		contentY += 4; // subtotal
+		contentY += 5; // total
+		contentY += paymentMethod === 'cash' ? 8 : 4; // recibido/cambio o monto
+		contentY += 6; // espacio antes del footer
+		contentY += 20; // gracias + url + whatsapp + margen inferior
+
+		const heightMm = Math.max(120, Math.ceil(contentY));
+		const doc = new jsPDF({ unit: 'mm', format: [ticketWidthMm, heightMm] });
+
+		doc.addImage(logo, 'PNG', (ticketWidthMm - logoW) / 2, 2, logoW, logoH);
 
 		let y = 2 + logoH + 4;
 		doc.setFont('helvetica', 'bold');
@@ -461,8 +490,9 @@
 		y += 4;
 
 		if (customerName?.trim()) {
-			doc.text(`Cliente: ${customerName.trim()}`, 8, y);
-			y += 4;
+			const customerLines = doc.splitTextToSize(`Cliente: ${customerName.trim()}`, 64);
+			doc.text(customerLines, 8, y);
+			y += customerLines.length * 4;
 		}
 
 		y += 2;
@@ -488,9 +518,6 @@
 			doc.text(`${line.quantity} x ${formatMoney(line.unitPrice)}`, 8, y);
 			doc.text(`${formatMoney(line.lineTotal)}`, 74, y, { align: 'right' });
 			y += 5;
-
-			// Evita que se salga el contenido y deja espacio para el área reservada del footer.
-			if (y > heightMm - reservedFooterMm) break;
 		}
 
 		y += 2;
@@ -515,19 +542,18 @@
 			y += 4;
 		}
 
-		// Footer fijo al final para evitar que se corte al variar la altura del logo o líneas.
-		const footerDividerY = heightMm - 28;
-		const footerTextY = footerDividerY + 6;
+		y += 4;
 		doc.setDrawColor(180, 180, 180);
-		doc.line(6, footerDividerY, 74, footerDividerY);
+		doc.line(6, y, 74, y);
+		y += 6;
 
 		doc.setFont('helvetica', 'bold');
 		doc.setFontSize(8);
-		doc.text('Gracias por su preferencia', 40, footerTextY, { align: 'center' });
+		doc.text('Gracias por su preferencia', 40, y, { align: 'center' });
 
 		doc.setFont('helvetica', 'normal');
-		doc.text('https://guerralaser.com', 40, footerTextY + 4, { align: 'center' });
-		doc.text('WhatsApp 3320152372', 40, footerTextY + 8, { align: 'center' });
+		doc.text('https://guerralaser.com', 40, y + 4, { align: 'center' });
+		doc.text('WhatsApp 3320152372', 40, y + 8, { align: 'center' });
 
 		return doc;
 	}
