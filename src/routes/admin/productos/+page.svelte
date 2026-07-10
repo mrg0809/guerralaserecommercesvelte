@@ -1508,43 +1508,70 @@
 		}
 	}
 
+	function buildVariantPayload(v: VariantForm, productId: string) {
+		const attributes = {
+			color: v.color?.trim() || undefined,
+			color_hex: v.color_hex?.trim() || undefined,
+			grosor: v.grosor?.trim() || undefined,
+			tamano: v.tamano?.trim() || undefined
+		};
+		const hasAttributes = Object.values(attributes).some(Boolean);
+		return {
+			product_id: productId,
+			name: v.name,
+			sku: v.sku,
+			price: v.price,
+			stock_quantity: v.stock_quantity,
+			is_active: v.is_active,
+			attributes: hasAttributes ? attributes : null
+		};
+	}
+
 	async function saveProductVariants(productId: string) {
 		console.log('🔍 saveProductVariants iniciado');
 		try {
-			// Reemplaza todas las variantes actuales por las definidas en la UI
-			const deletePromise = supabase.from('product_variants').delete().eq('product_id', productId);
-			await Promise.race([deletePromise, new Promise((_, reject) => {
-				setTimeout(() => reject(new Error('Timeout eliminando variantes')), 5000);
-			})]);
+			// Actualizar/insertar por id en lugar de delete+insert:
+			// el delete falla si hay FKs (order_items, quotation_items) y el insert
+			// posterior choca con product_variants_sku_key (23505).
+			const { data: existing, error: existingError } = await supabase
+				.from('product_variants')
+				.select('id')
+				.eq('product_id', productId);
 
-			if (variants.length === 0) {
-				console.log('🔍 No hay variantes que guardar');
-				return;
+			if (existingError) throw existingError;
+
+			const existingIds = new Set((existing || []).map((row) => row.id));
+			const keptIds = new Set(variants.map((v) => v.id).filter(Boolean) as string[]);
+
+			const toDelete = [...existingIds].filter((id) => !keptIds.has(id));
+			if (toDelete.length > 0) {
+				const { error: deleteError } = await supabase
+					.from('product_variants')
+					.delete()
+					.in('id', toDelete);
+				if (deleteError) {
+					throw new Error(
+						`No se pudieron eliminar variantes referenciadas en pedidos/cotizaciones: ${deleteError.message}`
+					);
+				}
 			}
 
-			const inserts = variants.map(v => {
-				const attributes = {
-					color: v.color?.trim() || undefined,
-					color_hex: v.color_hex?.trim() || undefined,
-					grosor: v.grosor?.trim() || undefined,
-					tamano: v.tamano?.trim() || undefined
-				};
-				const hasAttributes = Object.values(attributes).some(Boolean);
-				return {
-					product_id: productId,
-					name: v.name,
-					sku: v.sku,
-					price: v.price,
-					stock_quantity: v.stock_quantity,
-					is_active: v.is_active,
-					attributes: hasAttributes ? attributes : null
-				};
-			});
+			for (const v of variants) {
+				const payload = buildVariantPayload(v, productId);
+				if (v.id && existingIds.has(v.id)) {
+					const { error: updateError } = await supabase
+						.from('product_variants')
+						.update(payload)
+						.eq('id', v.id);
+					if (updateError) throw updateError;
+				} else {
+					const { error: insertError } = await supabase
+						.from('product_variants')
+						.insert(payload);
+					if (insertError) throw insertError;
+				}
+			}
 
-			const insertPromise = supabase.from('product_variants').insert(inserts);
-			await Promise.race([insertPromise, new Promise((_, reject) => {
-				setTimeout(() => reject(new Error('Timeout insertando variantes')), 5000);
-			})]);
 			console.log('✅ Variantes guardadas');
 		} catch (error) {
 			console.error('❌ Error en saveProductVariants:', error);
