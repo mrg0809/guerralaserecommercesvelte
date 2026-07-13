@@ -15,6 +15,8 @@
 		drawQuotationTableHeader,
 		QUOTATION_PDF_COL
 	} from '$lib/utils/quotationPdfTableHeader';
+	import { QUOTATION_COMPANY, drawQuotationCompanyHeader } from '$lib/utils/quotationCompanyInfo';
+	import { drawPdfLineWithEmoji, drawPdfTextBlock, wrapPdfText } from '$lib/utils/pdfEmojiText';
 	import { extraCostBillableAmount } from '$lib/types/quotationExtraCost';
 	import type { QuotationExtraCostMode } from '$lib/types/quotationExtraCost';
 	import {
@@ -567,29 +569,9 @@
 		}
 
 		// Encabezado - Título y datos de la empresa
-		doc.setFontSize(16);
-		doc.setFont('helvetica', 'bold');
-		doc.setTextColor(redColor[0], redColor[1], redColor[2]);
-		doc.text('COTIZACIÓN', 200, 15, { align: 'right' });
-		
-		doc.setFontSize(9);
-		doc.setFont('helvetica', 'normal');
-		doc.setTextColor(0, 0, 0);
-		const today = new Date();
-		doc.text(`Fecha: ${today.toLocaleDateString('es-MX')}`, 200, 22, { align: 'right' });
-		doc.text(`Vigencia: ${quotationValidityDays || 15} días`, 200, 27, { align: 'right' });
-		
-		// Datos de contacto de la empresa
-		doc.setFontSize(8);
-		doc.setTextColor(80, 80, 80);
-		doc.text('Guerra Laser México', 200, 35, { align: 'right' });
-		doc.text('Tel: 33 2015 2372', 200, 39, { align: 'right' });
-		doc.text('Cel: 33 3475 8653 | 33 1864 0008', 200, 43, { align: 'right' });
-		doc.text('contacto@guerralaser.com', 200, 47, { align: 'right' });
-		doc.text('Av. Las Torres 5301, Col. Glorias del Colli', 200, 51, { align: 'right' });
-		doc.text('Zapopan, Jalisco CP 45010', 200, 55, { align: 'right' });
+		drawQuotationCompanyHeader(doc, quotationValidityDays || 15);
 
-		currentY = Math.max(currentY, 62);
+		currentY = Math.max(currentY, 66);
 
 		// Línea divisoria superior
 		doc.setDrawColor(blueColor[0], blueColor[1], blueColor[2]);
@@ -662,25 +644,17 @@
 			currentY = drawQuotationTableHeader(doc, currentY, pricesExcludeIva);
 		}
 
-		function drawItemDetailBlock(detailText: string) {
-			const detailLineHeight = getLineHeightMm();
-			const detailLines = doc.splitTextToSize(detailText.trim(), 188);
-
+		async function drawItemDetailBlock(detailText: string) {
 			currentY += 2;
 			doc.setFontSize(7);
 			doc.setTextColor(70, 70, 70);
-
-			for (const line of detailLines) {
-				if (currentY + detailLineHeight > 270) {
-					doc.addPage();
-					currentY = 20;
+			currentY = await drawPdfTextBlock(doc, detailText, 11, currentY, 188, {
+				pageBottom: 270,
+				onNewPage: () => {
 					doc.setFontSize(7);
 					doc.setTextColor(70, 70, 70);
 				}
-				doc.text(line, 11, currentY);
-				currentY += detailLineHeight;
-			}
-
+			});
 			currentY += 2;
 			doc.setFontSize(8);
 			doc.setTextColor(0, 0, 0);
@@ -694,7 +668,7 @@
 			const lineHeight = getLineHeightMm();
 
 			const skuLines = doc.splitTextToSize(item.sku || '-', 16);
-			const descLines = doc.splitTextToSize(item.description || '', DESC_WIDTH);
+			const descLines = await wrapPdfText(doc, item.description || '', DESC_WIDTH);
 			const textLineCount = Math.max(skuLines.length, descLines.length);
 			const textBlockHeight = textLineCount * lineHeight;
 			const hasImage = Boolean(item.imageUrl && imageCache.get(item.imageUrl));
@@ -726,7 +700,9 @@
 
 			const textY = rowTop + 1;
 			doc.text(skuLines, SKU_X, textY);
-			doc.text(descLines, DESC_X, textY);
+			for (let i = 0; i < descLines.length; i++) {
+				await drawPdfLineWithEmoji(doc, descLines[i], DESC_X, textY + i * lineHeight);
+			}
 			doc.text(String(item.quantity), QUOTATION_PDF_COL.cant, textY, { align: 'right' });
 			doc.text(`$${displayUnitPrice.toFixed(2)}`, QUOTATION_PDF_COL.price, textY, { align: 'right' });
 			doc.text(`${item.discount.toFixed(1)}%`, QUOTATION_PDF_COL.discount, textY, { align: 'right' });
@@ -820,9 +796,8 @@
 			doc.text('Notas:', 10, currentY);
 			doc.setFont('helvetica', 'normal');
 			doc.setFontSize(8);
-			const splitNotes = doc.splitTextToSize(notes, 180);
-			doc.text(splitNotes, 10, currentY + 4);
-			currentY += (splitNotes.length * 4) + 6;
+			currentY = await drawPdfTextBlock(doc, notes, 10, currentY + 4, 180, { pageBottom: 270 });
+			currentY += 2;
 		}
 
 		// Pie de página
@@ -857,7 +832,7 @@
 		doc.setFontSize(7);
 		doc.setTextColor(100, 100, 100);
 		doc.text('Esta cotización tiene una vigencia de ' + (quotationValidityDays || 15) + ' días naturales a partir de la fecha de emisión.', 105, currentY, { align: 'center' });
-		doc.text('Gracias por su preferencia - Guerra Laser México', 105, currentY + 4, { align: 'center' });
+		doc.text(QUOTATION_COMPANY.thanksLine, 105, currentY + 4, { align: 'center' });
 
 		return doc;
 	}
