@@ -50,6 +50,10 @@ function emojiSizeMm(doc: jsPDF): number {
 	return (doc.getFontSize() * doc.getLineHeightFactor()) / doc.internal.scaleFactor;
 }
 
+export function getPdfLineHeightMm(doc: jsPDF, multiplier = 1.08): number {
+	return emojiSizeMm(doc) * multiplier;
+}
+
 function measureTokenWidth(doc: jsPDF, token: Segment, emojiSize: number): number {
 	if (token.kind === 'emoji') return emojiSize;
 	return doc.getTextWidth(token.value);
@@ -98,31 +102,41 @@ async function getTwemojiDataUrl(emoji: string): Promise<string | null> {
 }
 
 export async function wrapPdfText(doc: jsPDF, text: string, maxWidthMm: number): Promise<string[]> {
-	const normalized = text ?? '';
-	if (!textContainsEmoji(normalized)) {
-		return doc.splitTextToSize(normalized, maxWidthMm);
-	}
-
-	const tokens = tokenizeForWrap(normalized);
-	const emojiSize = emojiSizeMm(doc);
+	const normalized = (text ?? '').replace(/\r\n/g, '\n');
+	const paragraphs = normalized.split('\n');
 	const lines: string[] = [];
-	let currentTokens: Segment[] = [];
-	let currentWidth = 0;
 
-	for (const token of tokens) {
-		const tokenWidth = measureTokenWidth(doc, token, emojiSize);
-		if (currentWidth + tokenWidth > maxWidthMm && currentTokens.length > 0) {
-			lines.push(tokensToString(currentTokens));
-			currentTokens = [token];
-			currentWidth = tokenWidth;
-		} else {
-			currentTokens.push(token);
-			currentWidth += tokenWidth;
+	for (const paragraph of paragraphs) {
+		if (!paragraph.trim()) {
+			lines.push('');
+			continue;
 		}
-	}
 
-	if (currentTokens.length) {
-		lines.push(tokensToString(currentTokens));
+		if (!textContainsEmoji(paragraph)) {
+			lines.push(...doc.splitTextToSize(paragraph, maxWidthMm));
+			continue;
+		}
+
+		const tokens = tokenizeForWrap(paragraph);
+		const emojiSize = emojiSizeMm(doc);
+		let currentTokens: Segment[] = [];
+		let currentWidth = 0;
+
+		for (const token of tokens) {
+			const tokenWidth = measureTokenWidth(doc, token, emojiSize);
+			if (currentWidth + tokenWidth > maxWidthMm && currentTokens.length > 0) {
+				lines.push(tokensToString(currentTokens));
+				currentTokens = [token];
+				currentWidth = tokenWidth;
+			} else {
+				currentTokens.push(token);
+				currentWidth += tokenWidth;
+			}
+		}
+
+		if (currentTokens.length) {
+			lines.push(tokensToString(currentTokens));
+		}
 	}
 
 	return lines.length ? lines : [''];
@@ -165,11 +179,14 @@ export async function drawPdfTextBlock(
 	maxWidthMm: number,
 	opts?: {
 		pageBottom?: number;
+		pageTop?: number;
+		lineHeightMultiplier?: number;
 		onNewPage?: () => void;
 	}
 ): Promise<number> {
-	const lineHeight = emojiSizeMm(doc);
+	const lineHeight = getPdfLineHeightMm(doc, opts?.lineHeightMultiplier ?? 1.08);
 	const pageBottom = opts?.pageBottom ?? 270;
+	const pageTop = opts?.pageTop ?? 20;
 	const lines = await wrapPdfText(doc, text.trim(), maxWidthMm);
 	let currentY = y;
 
@@ -177,7 +194,7 @@ export async function drawPdfTextBlock(
 		if (currentY + lineHeight > pageBottom) {
 			doc.addPage();
 			opts?.onNewPage?.();
-			currentY = 20;
+			currentY = pageTop;
 		}
 		await drawPdfLineWithEmoji(doc, line, x, currentY);
 		currentY += lineHeight;

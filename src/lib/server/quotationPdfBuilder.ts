@@ -3,12 +3,10 @@ import { addQuotationLogoToPdf } from '$lib/server/quotationLogo';
 import { loadImageForPdf } from '$lib/utils/pdfImages';
 import type { QuotationExtraCostMode } from '$lib/types/quotationExtraCost';
 import { displayQuotationAmount, buildQuotationTotalLines, calculateQuotationSummary } from '$lib/utils/quotationTax';
-import {
-	drawQuotationTableHeader,
-	QUOTATION_PDF_COL
-} from '$lib/utils/quotationPdfTableHeader';
+import { drawQuotationTableHeader } from '$lib/utils/quotationPdfTableHeader';
 import { QUOTATION_COMPANY, drawQuotationCompanyHeader } from '$lib/utils/quotationCompanyInfo';
-import { drawPdfLineWithEmoji, drawPdfTextBlock, wrapPdfText } from '$lib/utils/pdfEmojiText';
+import { drawPdfTextBlock } from '$lib/utils/pdfEmojiText';
+import { drawQuotationTableItemRow } from '$lib/utils/quotationPdfTableRow';
 
 export interface QuotationPdfItem {
 	sku?: string;
@@ -123,35 +121,8 @@ export async function buildQuotationPdf(options: QuotationPdfOptions): Promise<j
 	doc.line(10, currentY, 200, currentY);
 	currentY += 5;
 
-	const IMAGE_SIZE = 16;
-	const IMAGE_X = 11;
-	const SKU_X = 30;
-	const DESC_X = 48;
-	const DESC_WIDTH = 58;
-	const ROW_GAP = 3;
-
-	function getLineHeightMm() {
-		return (doc.getFontSize() * doc.getLineHeightFactor()) / doc.internal.scaleFactor;
-	}
-
 	function drawTableHeader() {
 		currentY = drawQuotationTableHeader(doc, currentY, pricesExcludeIva);
-	}
-
-	async function drawItemDetailBlock(detailText: string) {
-		currentY += 2;
-		doc.setFontSize(7);
-		doc.setTextColor(70, 70, 70);
-		currentY = await drawPdfTextBlock(doc, detailText, 11, currentY, 188, {
-			pageBottom: 270,
-			onNewPage: () => {
-				doc.setFontSize(7);
-				doc.setTextColor(70, 70, 70);
-			}
-		});
-		currentY += 2;
-		doc.setFontSize(8);
-		doc.setTextColor(0, 0, 0);
 	}
 
 	drawTableHeader();
@@ -167,62 +138,32 @@ export async function buildQuotationPdf(options: QuotationPdfOptions): Promise<j
 			})
 	);
 
+	const rowContext = {
+		getCurrentY: () => currentY,
+		setCurrentY: (y: number) => {
+			currentY = y;
+		},
+		drawTableHeader,
+		imageCache
+	};
+
 	for (const item of items) {
 		const total = lineTotal(item);
-		const displayUnitPrice = displayQuotationAmount(item.price, pricesExcludeIva);
-		const displayTotal = displayQuotationAmount(total, pricesExcludeIva);
-		const lineHeight = getLineHeightMm();
-		const skuLines = doc.splitTextToSize(item.sku || '-', 16);
-		const descLines = await wrapPdfText(doc, item.description || '', DESC_WIDTH);
-		const textLineCount = Math.max(skuLines.length, descLines.length);
-		const textBlockHeight = textLineCount * lineHeight;
-		const hasImage = Boolean(item.imageUrl && imageCache.get(item.imageUrl));
-		const imageBlockHeight = hasImage ? IMAGE_SIZE : 0;
-		const contentHeight = Math.max(textBlockHeight, imageBlockHeight);
-		const rowHeight = contentHeight + ROW_GAP;
-
-		if (currentY + rowHeight + 2 > 270) {
-			doc.addPage();
-			currentY = 20;
-			drawTableHeader();
-		}
-
-		const rowTop = currentY;
-
-		if (hasImage && item.imageUrl) {
-			const loadedImage = imageCache.get(item.imageUrl);
-			if (loadedImage) {
-				doc.addImage(
-					loadedImage.dataUrl,
-					loadedImage.format,
-					IMAGE_X,
-					rowTop,
-					IMAGE_SIZE,
-					IMAGE_SIZE
-				);
-			}
-		}
-
-		const textY = rowTop + 1;
-		doc.text(skuLines, SKU_X, textY);
-		for (let i = 0; i < descLines.length; i++) {
-			await drawPdfLineWithEmoji(doc, descLines[i], DESC_X, textY + i * lineHeight);
-		}
-		doc.text(String(item.quantity), QUOTATION_PDF_COL.cant, textY, { align: 'right' });
-		doc.text(`$${displayUnitPrice.toFixed(2)}`, QUOTATION_PDF_COL.price, textY, { align: 'right' });
-		doc.text(`${(item.discount ?? 0).toFixed(1)}%`, QUOTATION_PDF_COL.discount, textY, { align: 'right' });
-		doc.text(`$${displayTotal.toFixed(2)}`, QUOTATION_PDF_COL.total, textY, { align: 'right' });
-
-		currentY = rowTop + rowHeight;
-
-		if (item.includeDetail && item.detailDescription?.trim()) {
-			drawItemDetailBlock(item.detailDescription);
-		}
-
-		doc.setDrawColor(200, 210, 230);
-		doc.setLineWidth(0.1);
-		doc.line(10, currentY, 200, currentY);
-		currentY += ROW_GAP;
+		await drawQuotationTableItemRow(
+			doc,
+			{
+				sku: item.sku,
+				description: item.description,
+				quantity: item.quantity,
+				unitPriceDisplay: displayQuotationAmount(item.price, pricesExcludeIva),
+				discount: item.discount ?? 0,
+				lineTotalDisplay: displayQuotationAmount(total, pricesExcludeIva),
+				imageUrl: item.imageUrl,
+				includeDetail: item.includeDetail,
+				detailDescription: item.detailDescription
+			},
+			rowContext
+		);
 	}
 
 	const subtotal = itemsSubtotal(items);
@@ -299,7 +240,11 @@ export async function buildQuotationPdf(options: QuotationPdfOptions): Promise<j
 		doc.text('Notas:', 10, currentY);
 		doc.setFont('helvetica', 'normal');
 		doc.setFontSize(8);
-		currentY = await drawPdfTextBlock(doc, notes, 10, currentY + 4, 180, { pageBottom: 270 });
+		currentY = await drawPdfTextBlock(doc, notes, 10, currentY + 4, 180, {
+			pageBottom: 270,
+			pageTop: 20,
+			lineHeightMultiplier: 1.12
+		});
 		currentY += 2;
 	}
 
