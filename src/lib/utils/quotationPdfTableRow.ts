@@ -1,9 +1,16 @@
 import type { jsPDF } from 'jspdf';
 import { QUOTATION_PDF_COL } from '$lib/utils/quotationPdfTableHeader';
-import { drawPdfLineWithEmoji, drawPdfTextBlock, getPdfLineHeightMm, wrapPdfText } from '$lib/utils/pdfEmojiText';
+import {
+	drawPdfLineWithEmoji,
+	drawPdfTextBlock,
+	getPdfLineHeightMm,
+	wrapPdfText
+} from '$lib/utils/pdfEmojiText';
+import {
+	getQuotationPdfContentBottom,
+	QUOTATION_PDF_MARGIN_TOP
+} from '$lib/utils/quotationPdfLayout';
 
-const PAGE_BOTTOM = 270;
-const PAGE_TOP = 20;
 const ROW_GAP = 3;
 const IMAGE_SIZE = 16;
 const IMAGE_X = 11;
@@ -30,10 +37,22 @@ export type DrawQuotationTableRowContext = {
 	imageCache: Map<string, { dataUrl: string; format: 'PNG' | 'JPEG' }>;
 };
 
+function pageBottom(doc: jsPDF): number {
+	return getQuotationPdfContentBottom(doc);
+}
+
+function lineStep(doc: jsPDF): number {
+	return getPdfLineHeightMm(doc, 1.2);
+}
+
 function startNewTablePage(doc: jsPDF, drawTableHeader: () => void): number {
 	doc.addPage();
 	drawTableHeader();
-	return PAGE_TOP;
+	return QUOTATION_PDF_MARGIN_TOP;
+}
+
+function needsNewPage(y: number, needed: number, doc: jsPDF): boolean {
+	return y + needed > pageBottom(doc);
 }
 
 export async function drawQuotationTableItemRow(
@@ -42,7 +61,7 @@ export async function drawQuotationTableItemRow(
 	context: DrawQuotationTableRowContext
 ): Promise<void> {
 	let currentY = context.getCurrentY();
-	const lineHeight = getPdfLineHeightMm(doc, 1.12);
+	const step = lineStep(doc);
 
 	doc.setFontSize(8);
 	doc.setFont('helvetica', 'normal');
@@ -50,56 +69,60 @@ export async function drawQuotationTableItemRow(
 
 	const descLines = await wrapPdfText(doc, item.description || '', DESC_WIDTH);
 	const skuLines = doc.splitTextToSize(item.sku || '-', 16);
+	const skuHeight = skuLines.length * step;
+	const rowMinHeight = Math.max(item.imageUrl ? IMAGE_SIZE : 0, skuHeight, step);
 
-	if (currentY + lineHeight > PAGE_BOTTOM) {
+	if (needsNewPage(currentY, rowMinHeight, doc)) {
 		currentY = startNewTablePage(doc, context.drawTableHeader);
 	}
-
-	const rowTop = currentY;
-	const textY = rowTop + 1;
 
 	if (item.imageUrl) {
 		const loadedImage = context.imageCache.get(item.imageUrl);
 		if (loadedImage) {
+			const imageY = context.getCurrentY();
+			if (needsNewPage(imageY, IMAGE_SIZE, doc)) {
+				context.setCurrentY(startNewTablePage(doc, context.drawTableHeader));
+			}
 			doc.addImage(
 				loadedImage.dataUrl,
 				loadedImage.format,
 				IMAGE_X,
-				rowTop,
+				context.getCurrentY(),
 				IMAGE_SIZE,
 				IMAGE_SIZE
 			);
 		}
 	}
 
-	doc.text(skuLines, SKU_X, textY);
-	doc.text(String(item.quantity), QUOTATION_PDF_COL.cant, textY, { align: 'right' });
-	doc.text(`$${item.unitPriceDisplay.toFixed(2)}`, QUOTATION_PDF_COL.price, textY, { align: 'right' });
-	doc.text(`${item.discount.toFixed(1)}%`, QUOTATION_PDF_COL.discount, textY, { align: 'right' });
-	doc.text(`$${item.lineTotalDisplay.toFixed(2)}`, QUOTATION_PDF_COL.total, textY, { align: 'right' });
+	const drawY = context.getCurrentY() + 1;
+	doc.text(skuLines, SKU_X, drawY);
+	doc.text(String(item.quantity), QUOTATION_PDF_COL.cant, drawY, { align: 'right' });
+	doc.text(`$${item.unitPriceDisplay.toFixed(2)}`, QUOTATION_PDF_COL.price, drawY, { align: 'right' });
+	doc.text(`${item.discount.toFixed(1)}%`, QUOTATION_PDF_COL.discount, drawY, { align: 'right' });
+	doc.text(`$${item.lineTotalDisplay.toFixed(2)}`, QUOTATION_PDF_COL.total, drawY, { align: 'right' });
 
-	let y = textY;
+	let y = drawY;
 	for (const line of descLines) {
-		if (y + lineHeight > PAGE_BOTTOM) {
+		if (needsNewPage(y, step, doc)) {
 			y = startNewTablePage(doc, context.drawTableHeader) + 1;
 		}
 		await drawPdfLineWithEmoji(doc, line, DESC_X, y);
-		y += lineHeight;
+		y += step;
 	}
 
 	currentY = y + ROW_GAP;
 
 	if (item.includeDetail && item.detailDescription?.trim()) {
-		if (currentY + lineHeight > PAGE_BOTTOM) {
+		if (needsNewPage(currentY, step, doc)) {
 			currentY = startNewTablePage(doc, context.drawTableHeader);
 		}
 		currentY += 2;
 		doc.setFontSize(7);
 		doc.setTextColor(70, 70, 70);
 		currentY = await drawPdfTextBlock(doc, item.detailDescription, 11, currentY, 188, {
-			pageBottom: PAGE_BOTTOM,
-			pageTop: PAGE_TOP,
-			lineHeightMultiplier: 1.12,
+			pageBottom: pageBottom(doc),
+			pageTop: QUOTATION_PDF_MARGIN_TOP,
+			lineHeightMultiplier: 1.2,
 			onNewPage: () => {
 				context.drawTableHeader();
 				doc.setFontSize(7);
@@ -111,7 +134,7 @@ export async function drawQuotationTableItemRow(
 		doc.setTextColor(0, 0, 0);
 	}
 
-	if (currentY + ROW_GAP > PAGE_BOTTOM) {
+	if (needsNewPage(currentY, ROW_GAP, doc)) {
 		currentY = startNewTablePage(doc, context.drawTableHeader);
 	}
 

@@ -181,11 +181,14 @@ export async function drawPdfTextBlock(
 		pageBottom?: number;
 		pageTop?: number;
 		lineHeightMultiplier?: number;
+		reservedBottomMm?: number;
 		onNewPage?: () => void;
 	}
 ): Promise<number> {
-	const lineHeight = getPdfLineHeightMm(doc, opts?.lineHeightMultiplier ?? 1.08);
-	const pageBottom = opts?.pageBottom ?? 270;
+	const lineHeight = getPdfLineHeightMm(doc, opts?.lineHeightMultiplier ?? 1.15);
+	const defaultBottom = doc.internal.pageSize.getHeight() - 15;
+	const pageBottom =
+		(opts?.pageBottom ?? defaultBottom) - (opts?.reservedBottomMm ?? 0);
 	const pageTop = opts?.pageTop ?? 20;
 	const lines = await wrapPdfText(doc, text.trim(), maxWidthMm);
 	let currentY = y;
