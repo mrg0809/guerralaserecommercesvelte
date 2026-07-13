@@ -1,6 +1,7 @@
 import type { jsPDF } from 'jspdf';
 
 export const QUOTATION_COMPANY = {
+	headerName: 'Luis Enrique Guerra Zavala',
 	name: 'Guerra Laser',
 	rfc: 'GUZL6309303D7',
 	phone: 'Tel: 33 2015 2372',
@@ -26,7 +27,7 @@ export function drawQuotationCompanyHeader(doc: jsPDF, validityDays: number): vo
 
 	doc.setFontSize(8);
 	doc.setTextColor(80, 80, 80);
-	doc.text(QUOTATION_COMPANY.name, 200, 35, { align: 'right' });
+	doc.text(QUOTATION_COMPANY.headerName, 200, 35, { align: 'right' });
 	doc.text(`RFC: ${QUOTATION_COMPANY.rfc}`, 200, 39, { align: 'right' });
 	doc.text(QUOTATION_COMPANY.phone, 200, 43, { align: 'right' });
 	doc.text(QUOTATION_COMPANY.mobile, 200, 47, { align: 'right' });
