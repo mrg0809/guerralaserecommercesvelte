@@ -182,7 +182,7 @@ export async function drawPdfTextBlock(
 		pageTop?: number;
 		lineHeightMultiplier?: number;
 		reservedBottomMm?: number;
-		onNewPage?: () => void;
+		onNewPage?: () => number | void;
 	}
 ): Promise<number> {
 	const lineHeight = getPdfLineHeightMm(doc, opts?.lineHeightMultiplier ?? 1.15);
@@ -196,8 +196,8 @@ export async function drawPdfTextBlock(
 	for (const line of lines) {
 		if (currentY + lineHeight > pageBottom) {
 			doc.addPage();
-			opts?.onNewPage?.();
-			currentY = pageTop;
+			const resumeY = opts?.onNewPage?.();
+			currentY = typeof resumeY === 'number' ? resumeY : pageTop;
 		}
 		await drawPdfLineWithEmoji(doc, line, x, currentY);
 		currentY += lineHeight;

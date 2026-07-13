@@ -17,6 +17,8 @@ const IMAGE_X = 11;
 const SKU_X = 30;
 const DESC_X = 48;
 const DESC_WIDTH = 58;
+const DETAIL_X = 30;
+const DETAIL_WIDTH = 170;
 
 export type QuotationPdfTableRowItem = {
 	sku?: string;
@@ -45,14 +47,23 @@ function lineStep(doc: jsPDF): number {
 	return getPdfLineHeightMm(doc, 1.2);
 }
 
-function startNewTablePage(doc: jsPDF, drawTableHeader: () => void): number {
+/** Nueva página de tabla: resetea Y arriba y redibuja encabezados. */
+function startNewTablePage(doc: jsPDF, context: DrawQuotationTableRowContext): number {
 	doc.addPage();
-	drawTableHeader();
-	return QUOTATION_PDF_MARGIN_TOP;
+	context.setCurrentY(QUOTATION_PDF_MARGIN_TOP);
+	context.drawTableHeader();
+	return context.getCurrentY();
 }
 
 function needsNewPage(y: number, needed: number, doc: jsPDF): boolean {
 	return y + needed > pageBottom(doc);
+}
+
+function hasLoadedImage(
+	item: QuotationPdfTableRowItem,
+	cache: Map<string, { dataUrl: string; format: 'PNG' | 'JPEG' }>
+): boolean {
+	return Boolean(item.imageUrl && cache.get(item.imageUrl));
 }
 
 export async function drawQuotationTableItemRow(
@@ -60,7 +71,6 @@ export async function drawQuotationTableItemRow(
 	item: QuotationPdfTableRowItem,
 	context: DrawQuotationTableRowContext
 ): Promise<void> {
-	let currentY = context.getCurrentY();
 	const step = lineStep(doc);
 
 	doc.setFontSize(8);
@@ -70,31 +80,28 @@ export async function drawQuotationTableItemRow(
 	const descLines = await wrapPdfText(doc, item.description || '', DESC_WIDTH);
 	const skuLines = doc.splitTextToSize(item.sku || '-', 16);
 	const skuHeight = skuLines.length * step;
-	const rowMinHeight = Math.max(item.imageUrl ? IMAGE_SIZE : 0, skuHeight, step);
+	const hasImage = hasLoadedImage(item, context.imageCache);
+	const rowMinHeight = Math.max(hasImage ? IMAGE_SIZE : 0, skuHeight, step);
 
-	if (needsNewPage(currentY, rowMinHeight, doc)) {
-		currentY = startNewTablePage(doc, context.drawTableHeader);
+	if (needsNewPage(context.getCurrentY(), rowMinHeight, doc)) {
+		startNewTablePage(doc, context);
 	}
 
-	if (item.imageUrl) {
-		const loadedImage = context.imageCache.get(item.imageUrl);
-		if (loadedImage) {
-			const imageY = context.getCurrentY();
-			if (needsNewPage(imageY, IMAGE_SIZE, doc)) {
-				context.setCurrentY(startNewTablePage(doc, context.drawTableHeader));
-			}
-			doc.addImage(
-				loadedImage.dataUrl,
-				loadedImage.format,
-				IMAGE_X,
-				context.getCurrentY(),
-				IMAGE_SIZE,
-				IMAGE_SIZE
-			);
-		}
+	const rowTop = context.getCurrentY();
+	const drawY = rowTop + 1;
+
+	if (hasImage && item.imageUrl) {
+		const loadedImage = context.imageCache.get(item.imageUrl)!;
+		doc.addImage(
+			loadedImage.dataUrl,
+			loadedImage.format,
+			IMAGE_X,
+			rowTop,
+			IMAGE_SIZE,
+			IMAGE_SIZE
+		);
 	}
 
-	const drawY = context.getCurrentY() + 1;
 	doc.text(skuLines, SKU_X, drawY);
 	doc.text(String(item.quantity), QUOTATION_PDF_COL.cant, drawY, { align: 'right' });
 	doc.text(`$${item.unitPriceDisplay.toFixed(2)}`, QUOTATION_PDF_COL.price, drawY, { align: 'right' });
@@ -104,29 +111,32 @@ export async function drawQuotationTableItemRow(
 	let y = drawY;
 	for (const line of descLines) {
 		if (needsNewPage(y, step, doc)) {
-			y = startNewTablePage(doc, context.drawTableHeader) + 1;
+			y = startNewTablePage(doc, context) + 1;
 		}
 		await drawPdfLineWithEmoji(doc, line, DESC_X, y);
 		y += step;
 	}
 
-	currentY = y + ROW_GAP;
+	const imageBottom = hasImage ? rowTop + IMAGE_SIZE : rowTop;
+	let currentY = Math.max(y, imageBottom) + ROW_GAP;
 
 	if (item.includeDetail && item.detailDescription?.trim()) {
 		if (needsNewPage(currentY, step, doc)) {
-			currentY = startNewTablePage(doc, context.drawTableHeader);
+			currentY = startNewTablePage(doc, context) + 1;
+		} else {
+			currentY += 2;
 		}
-		currentY += 2;
+
 		doc.setFontSize(7);
 		doc.setTextColor(70, 70, 70);
-		currentY = await drawPdfTextBlock(doc, item.detailDescription, 11, currentY, 188, {
+		currentY = await drawPdfTextBlock(doc, item.detailDescription, DETAIL_X, currentY, DETAIL_WIDTH, {
 			pageBottom: pageBottom(doc),
 			pageTop: QUOTATION_PDF_MARGIN_TOP,
 			lineHeightMultiplier: 1.2,
 			onNewPage: () => {
+				context.setCurrentY(QUOTATION_PDF_MARGIN_TOP);
 				context.drawTableHeader();
-				doc.setFontSize(7);
-				doc.setTextColor(70, 70, 70);
+				return context.getCurrentY() + 1;
 			}
 		});
 		currentY += 2;
@@ -135,7 +145,7 @@ export async function drawQuotationTableItemRow(
 	}
 
 	if (needsNewPage(currentY, ROW_GAP, doc)) {
-		currentY = startNewTablePage(doc, context.drawTableHeader);
+		currentY = startNewTablePage(doc, context);
 	}
 
 	doc.setDrawColor(200, 210, 230);
