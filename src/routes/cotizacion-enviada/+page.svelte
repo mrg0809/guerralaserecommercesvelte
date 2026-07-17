@@ -1,5 +1,7 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
+	import { trackEvent } from '$lib/gtag';
 
 	let quotationId = $state('');
 	let loading = $state(true);
@@ -30,17 +32,18 @@
 			}
 		})();
 	});
+
+	onMount(() => {
+		trackEvent('conversion', {
+			send_to: 'AW-950721855/tzouCM3EmIAcEL-6q8UD',
+			value: 1.0,
+			currency: 'MXN'
+		});
+	});
 </script>
 
 <svelte:head>
 	<title>Cotización Enviada - Guerra Láser</title>
-	<script>
-		gtag('event', 'conversion', {
-			'send_to': 'AW-950721855/tzouCM3EmIAcEL-6q8UD',
-			'value': 1.0,
-			'currency': 'MXN'
-		});
-	</script>
 </svelte:head>
 
 <div class="min-h-screen bg-gradient-to-b from-blue-50 to-white flex items-center justify-center px-4 py-8">

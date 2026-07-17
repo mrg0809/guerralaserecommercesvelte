@@ -1,7 +1,7 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import { formatPrice, getDisplayPrice } from '$lib/utils';
-	import { getImageKitUrlWithTransform, IMAGEKIT_TRANSFORMS, getSiteLogoUrl } from '$lib/storage';
+	import { getImageKitUrlWithTransform, IMAGEKIT_TRANSFORMS } from '$lib/storage';
 	import HeroBanner from '$lib/components/HeroBanner.svelte';
 	import VideoEmbedFacade from '$lib/components/VideoEmbedFacade.svelte';
 	import type { Product, Category, ProductMedia, Promotion, TestimonialVideo } from '$lib/types';
@@ -22,6 +22,8 @@
 	let productsCarouselRef = $state<HTMLDivElement | null>(null);
 	let canScrollLeft = $state(false);
 	let canScrollRight = $state(false);
+	let promoMarqueeExpanded = $state(false);
+	let promoMarqueeActive = $state(false);
 
 	function checkScrollButtons() {
 		if (productsCarouselRef) {
@@ -32,6 +34,12 @@
 		}
 	}
 
+	function checkScrollButtonsDeferred() {
+		requestAnimationFrame(() => {
+			requestAnimationFrame(checkScrollButtons);
+		});
+	}
+
 	function scrollProducts(direction: 'left' | 'right') {
 		if (productsCarouselRef) {
 			const scrollAmount = productsCarouselRef.clientWidth * 0.8;
@@ -39,18 +47,51 @@
 				left: direction === 'left' ? -scrollAmount : scrollAmount,
 				behavior: 'smooth'
 			});
-			setTimeout(checkScrollButtons, 300);
+			setTimeout(checkScrollButtonsDeferred, 300);
 		}
 	}
 
-	onMount(() => {
-		setTimeout(checkScrollButtons, 100);
+	onMount(async () => {
+		await tick();
+
+		const productsSection = document.getElementById('productos-destacados');
+		let carouselObserver: IntersectionObserver | undefined;
+		if (productsSection) {
+			carouselObserver = new IntersectionObserver(
+				(entries) => {
+					if (entries[0]?.isIntersecting) {
+						checkScrollButtonsDeferred();
+					}
+				},
+				{ rootMargin: '100px' }
+			);
+			carouselObserver.observe(productsSection);
+		}
 
 		if (testimonialVideos.length > 0) {
 			startVideoCarousel();
 		}
 
+		const expandMarquee = () => {
+			promoMarqueeExpanded = true;
+		};
+		if ('requestIdleCallback' in window) {
+			requestIdleCallback(expandMarquee, { timeout: 4000 });
+		} else {
+			setTimeout(expandMarquee, 2000);
+		}
+
+		const activateMarquee = () => {
+			promoMarqueeActive = true;
+		};
+		if (document.readyState === 'complete') {
+			activateMarquee();
+		} else {
+			window.addEventListener('load', activateMarquee, { once: true });
+		}
+
 		return () => {
+			carouselObserver?.disconnect();
 			if (videoAutoplayInterval) {
 				clearInterval(videoAutoplayInterval);
 			}
@@ -60,6 +101,14 @@
 	function getLoopPromotions(): Promotion[] {
 		if (promotions.length === 0) return [];
 		return [...promotions, ...promotions];
+	}
+
+	function getVisiblePromotions(): Promotion[] {
+		if (promotions.length === 0) return [];
+		if (promoMarqueeExpanded) {
+			return getLoopPromotions();
+		}
+		return promotions.slice(0, Math.min(4, promotions.length));
 	}
 
 	function startVideoCarousel() {
@@ -113,6 +162,9 @@
 		name="description"
 		content="Tienda en línea de máquinas láser de alta precisión, refacciones y accesorios."
 	/>
+	{#if data.lcpImageUrl}
+		<link rel="preload" as="image" href={data.lcpImageUrl} fetchpriority="high" />
+	{/if}
 </svelte:head>
 
 <HeroBanner config={data.heroBanner} />
@@ -128,9 +180,10 @@
 			<div class="promo-marquee" aria-label="Carrusel de promociones">
 				<div
 					class="promo-track"
+					class:promo-track--active={promoMarqueeActive}
 					style="--promo-duration: {Math.max(promotions.length * 4, 16)}s;"
 				>
-					{#each getLoopPromotions() as promotion, index (`${promotion.id}-${index}`)}
+					{#each getVisiblePromotions() as promotion, index (`${promotion.id}-${index}`)}
 						{#if promotion.link_url}
 							<a
 								href={promotion.link_url}
@@ -141,8 +194,7 @@
 									src={getImageKitUrlWithTransform(promotion.image_url, IMAGEKIT_TRANSFORMS.promotion)}
 									alt={promotion.title}
 									class="w-full h-full object-contain"
-									loading={index === 0 ? 'eager' : 'lazy'}
-									fetchpriority={index === 0 ? 'high' : undefined}
+									loading="lazy"
 									decoding="async"
 								/>
 							</a>
@@ -152,8 +204,7 @@
 									src={getImageKitUrlWithTransform(promotion.image_url, IMAGEKIT_TRANSFORMS.promotion)}
 									alt={promotion.title}
 									class="w-full h-full object-contain"
-									loading={index === 0 ? 'eager' : 'lazy'}
-									fetchpriority={index === 0 ? 'high' : undefined}
+									loading="lazy"
 									decoding="async"
 								/>
 							</div>
@@ -225,7 +276,7 @@
 				<!-- Carrusel de Productos -->
 				<div
 					bind:this={productsCarouselRef}
-					onscroll={checkScrollButtons}
+					onscroll={checkScrollButtonsDeferred}
 					class="flex gap-6 overflow-x-auto scrollbar-hide scroll-smooth pb-4"
 					style="scroll-snap-type: x mandatory;"
 				>
@@ -504,7 +555,12 @@
 		gap: 1rem;
 		width: max-content;
 		animation: promo-scroll var(--promo-duration) linear infinite;
+		animation-play-state: paused;
 		will-change: transform;
+	}
+
+	.promo-track--active {
+		animation-play-state: running;
 	}
 
 	.promo-track:hover {

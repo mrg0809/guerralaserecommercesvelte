@@ -1,39 +1,79 @@
 /**
  * Google Analytics (gtag.js) utility functions
- * Safe client-side tracking with gtag verification
+ * Carga diferida con cola de eventos hasta que el script esté listo
  */
 
-/**
- * Verifica si gtag está disponible en el cliente
- */
+const GA_MEASUREMENT_ID = 'G-EG2D20MZJ8';
+const AW_CONVERSION_ID = 'AW-950721855';
+
+let gaInitialized = false;
+const eventQueue: Array<() => void> = [];
+
+function flushEventQueue() {
+	for (const send of eventQueue) {
+		send();
+	}
+	eventQueue.length = 0;
+}
+
 function isGtagAvailable(): boolean {
 	if (typeof window === 'undefined') return false;
 	return typeof (window as any).gtag === 'function';
 }
 
+function queueOrRun(send: () => void) {
+	if (isGtagAvailable()) {
+		send();
+		return;
+	}
+	eventQueue.push(send);
+}
+
+/**
+ * Carga gtag.js de forma diferida (llamar desde onMount del layout)
+ */
+export function loadGoogleAnalytics(): void {
+	if (typeof window === 'undefined' || gaInitialized) return;
+	gaInitialized = true;
+
+	const w = window as any;
+	w.dataLayer = w.dataLayer || [];
+	function gtag(...args: unknown[]) {
+		w.dataLayer.push(args);
+	}
+	w.gtag = gtag;
+	gtag('js', new Date());
+
+	const script = document.createElement('script');
+	script.async = true;
+	script.src = `https://www.googletagmanager.com/gtag/js?id=${GA_MEASUREMENT_ID}`;
+	script.onload = () => {
+		gtag('config', GA_MEASUREMENT_ID);
+		gtag('config', AW_CONVERSION_ID);
+		flushEventQueue();
+	};
+	document.head.appendChild(script);
+}
+
 /**
  * Dispara un evento de page_view para rastrear cambios de URL (SPA)
- * @param path - Ruta de la página
- * @param title - Título de la página (opcional)
  */
 export function trackPageView(path: string, title?: string) {
-	if (!isGtagAvailable()) return;
-
-	(window as any).gtag('event', 'page_view', {
-		page_path: path,
-		page_title: title || document.title
+	queueOrRun(() => {
+		(window as any).gtag('event', 'page_view', {
+			page_path: path,
+			page_title: title || document.title
+		});
 	});
 }
 
 /**
  * Dispara un evento personalizado
- * @param eventName - Nombre del evento
- * @param eventData - Datos adicionales del evento
  */
-export function trackEvent(eventName: string, eventData?: Record<string, any>) {
-	if (!isGtagAvailable()) return;
-
-	(window as any).gtag('event', eventName, eventData || {});
+export function trackEvent(eventName: string, eventData?: Record<string, unknown>) {
+	queueOrRun(() => {
+		(window as any).gtag('event', eventName, eventData || {});
+	});
 }
 
 /**
@@ -48,11 +88,9 @@ export function trackWhatsAppContact(context?: string) {
 
 /**
  * Rastreo de conversión general
- * @param conversionValue - Valor de la conversión (opcional)
- * @param currency - Moneda (opcional)
  */
 export function trackConversion(eventName: string, conversionValue?: number, currency?: string) {
-	const eventData: Record<string, any> = {};
+	const eventData: Record<string, unknown> = {};
 	if (conversionValue !== undefined) {
 		eventData.value = conversionValue;
 	}

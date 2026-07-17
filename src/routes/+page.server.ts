@@ -1,5 +1,6 @@
 import type { PageServerLoad } from './$types';
 import { getHeroBannerSettings } from '$lib/server/heroBannerSettings';
+import { getHeroLcpImageUrl } from '$lib/storage';
 import { supabaseServer } from '$lib/supabaseServer';
 
 export const load: PageServerLoad = async ({ setHeaders }) => {
@@ -47,6 +48,7 @@ export const load: PageServerLoad = async ({ setHeaders }) => {
 
 	return {
 		heroBanner,
+		lcpImageUrl: getHeroLcpImageUrl(heroBanner),
 		promotions: promotionsResult.data || [],
 		categories: categoriesResult.data || [],
 		featuredProducts,

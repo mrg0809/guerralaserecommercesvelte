@@ -45,6 +45,7 @@ export const PUT: RequestHandler = async ({ request }) => {
 			desktop_url: String(payload?.desktop_url || '').trim(),
 			mobile_media_type: payload?.mobile_media_type === 'video' ? 'video' : 'image',
 			mobile_url: String(payload?.mobile_url || payload?.mobile_image_url || '').trim(),
+			mobile_poster_url: String(payload?.mobile_poster_url || '').trim(),
 			title: String(payload?.title || '').trim(),
 			subtitle: String(payload?.subtitle || '').trim(),
 			show_overlay_text: payload?.show_overlay_text !== false

@@ -7,13 +7,13 @@
 	import { userStore } from '$lib/stores/user';
 	import { supabase } from '$lib/supabaseClient';
 	import { getDisplayPrice } from '$lib/utils';
-	import { trackPageView, trackWhatsAppContact } from '$lib/gtag';
+	import { trackPageView, trackWhatsAppContact, loadGoogleAnalytics } from '$lib/gtag';
 	import ReauthModal from '$lib/components/ReauthModal.svelte';
 	import CookieBanner from '$lib/components/CookieBanner.svelte';
 	import LazyGoogleMap from '$lib/components/LazyGoogleMap.svelte';
 	import MetaPixel from '$lib/components/MetaPixel.svelte';
 	import { isNativeCapacitorApp } from '$lib/mobile/appShell';
-	import { getSiteLogoUrl } from '$lib/storage';
+	import { getSiteLogoUrl, SITE_LOGO_FALLBACK_URL } from '$lib/storage';
 	import type { Category } from '$lib/types';
 	import '../app.css';
 	
@@ -51,6 +51,13 @@ page.subscribe(($page) => {
 	onMount(async () => {
 		if (isNativeCapacitorApp()) {
 			isStandaloneApp = true;
+		}
+
+		const loadGa = () => loadGoogleAnalytics();
+		if ('requestIdleCallback' in window) {
+			requestIdleCallback(loadGa, { timeout: 3000 });
+		} else {
+			window.addEventListener('load', loadGa, { once: true });
 		}
 
 		// Inicializar store de usuario si hay sesión
@@ -359,7 +366,12 @@ page.subscribe(($page) => {
 							height="450"
 							class="h-16 w-auto object-contain"
 							loading="eager"
-							fetchpriority="high"
+							onerror={(e) => {
+								const img = e.currentTarget as HTMLImageElement;
+								if (img.src !== SITE_LOGO_FALLBACK_URL) {
+									img.src = SITE_LOGO_FALLBACK_URL;
+								}
+							}}
 						/>
 					</a>
 				</div>
