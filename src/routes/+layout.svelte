@@ -9,6 +9,7 @@
 	import { getDisplayPrice } from '$lib/utils';
 	import { trackPageView, trackWhatsAppContact } from '$lib/gtag';
 	import ReauthModal from '$lib/components/ReauthModal.svelte';
+	import CookieBanner from '$lib/components/CookieBanner.svelte';
 	import LazyGoogleMap from '$lib/components/LazyGoogleMap.svelte';
 	import MetaPixel from '$lib/components/MetaPixel.svelte';
 	import { isNativeCapacitorApp } from '$lib/mobile/appShell';
