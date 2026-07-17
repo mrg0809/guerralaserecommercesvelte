@@ -373,20 +373,44 @@
 				</div>
 
 				<div>
-					<label class="block text-sm font-medium text-gray-700 mb-1">Título</label>
+					<label class="flex items-center gap-3 cursor-pointer">
+						<input
+							type="checkbox"
+							bind:checked={heroBanner.show_overlay_text}
+							class="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+						/>
+						<span class="text-sm font-medium text-gray-700">
+							Mostrar título y subtítulo sobre el banner
+						</span>
+					</label>
+					<p class="text-xs text-gray-500 mt-2">
+						Desactiva esta opción para mostrar solo el video o imagen sin texto ni capa oscura encima.
+					</p>
+				</div>
+
+				<div class:opacity-60={!heroBanner.show_overlay_text}>
+					<label class="block text-sm font-medium text-gray-700 mb-1">
+						Título
+						{#if heroBanner.show_overlay_text}
+							<span class="text-red-600">*</span>
+						{/if}
+					</label>
 					<input
 						type="text"
 						bind:value={heroBanner.title}
-						class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+						disabled={!heroBanner.show_overlay_text}
+						placeholder={heroBanner.show_overlay_text ? '' : 'Opcional (accesibilidad)'}
+						class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
 					/>
 				</div>
 
-				<div>
+				<div class:opacity-60={!heroBanner.show_overlay_text}>
 					<label class="block text-sm font-medium text-gray-700 mb-1">Subtítulo</label>
 					<textarea
 						bind:value={heroBanner.subtitle}
+						disabled={!heroBanner.show_overlay_text}
 						rows="2"
-						class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+						class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
 					></textarea>
 				</div>
 

@@ -12,6 +12,7 @@ export interface HeroBannerSettings {
 	mobile_url: string;
 	title: string;
 	subtitle: string;
+	show_overlay_text: boolean;
 }
 
 export const DEFAULT_HERO_BANNER: HeroBannerSettings = {
@@ -20,7 +21,8 @@ export const DEFAULT_HERO_BANNER: HeroBannerSettings = {
 	mobile_media_type: 'image',
 	mobile_url: '',
 	title: 'ESPECIALISTAS EN VENTA DE MAQUINARIA',
-	subtitle: 'En corte de metales, corte laser co2, fibra óptica, plasma, router, etc.'
+	subtitle: 'En corte de metales, corte laser co2, fibra óptica, plasma, router, etc.',
+	show_overlay_text: true
 };
 
 export function isVideoMediaUrl(url: string): boolean {
@@ -44,8 +46,8 @@ export function validateHeroBanner(settings: HeroBannerSettings): string | null 
 		return 'El media móvil está configurado como imagen pero la URL parece ser un video';
 	}
 
-	if (!settings.title) {
-		return 'El título del banner es obligatorio';
+	if (settings.show_overlay_text && !settings.title) {
+		return 'El título del banner es obligatorio cuando se muestra el texto encima';
 	}
 
 	return null;
@@ -71,7 +73,8 @@ export function parseHeroBanner(raw: string | null | undefined): HeroBannerSetti
 			mobile_media_type: mobileMediaType,
 			mobile_url: mobileUrl,
 			title: String(parsed.title || DEFAULT_HERO_BANNER.title).trim(),
-			subtitle: String(parsed.subtitle || DEFAULT_HERO_BANNER.subtitle).trim()
+			subtitle: String(parsed.subtitle || DEFAULT_HERO_BANNER.subtitle).trim(),
+			show_overlay_text: parsed.show_overlay_text !== false
 		};
 	} catch {
 		return { ...DEFAULT_HERO_BANNER };
@@ -85,6 +88,7 @@ export function serializeHeroBanner(settings: HeroBannerSettings): string {
 		mobile_media_type: settings.mobile_media_type,
 		mobile_url: settings.mobile_url.trim(),
 		title: settings.title.trim(),
-		subtitle: settings.subtitle.trim()
+		subtitle: settings.subtitle.trim(),
+		show_overlay_text: settings.show_overlay_text
 	});
 }

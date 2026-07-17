@@ -46,7 +46,8 @@ export const PUT: RequestHandler = async ({ request }) => {
 			mobile_media_type: payload?.mobile_media_type === 'video' ? 'video' : 'image',
 			mobile_url: String(payload?.mobile_url || payload?.mobile_image_url || '').trim(),
 			title: String(payload?.title || '').trim(),
-			subtitle: String(payload?.subtitle || '').trim()
+			subtitle: String(payload?.subtitle || '').trim(),
+			show_overlay_text: payload?.show_overlay_text !== false
 		};
 
 		const validationError = validateHeroBanner(settings);

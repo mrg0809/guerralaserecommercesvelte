@@ -351,7 +351,7 @@ page.subscribe(($page) => {
 				<!-- Logo (Left) - Esquina superior izquierda -->
 				<div class="flex-shrink-0 min-w-fit">
 					<a href="/" class="flex items-center hover:opacity-90 transition-opacity">
-						<img src="/logorectangular.png" alt="Guerra Láser" width="149" height="112" class="h-16" />
+						<img src="/logorectangular.png" alt="Guerra Láser" width="600" height="450" class="h-16 w-auto object-contain" />
 					</a>
 				</div>
 
@@ -501,7 +501,7 @@ page.subscribe(($page) => {
 				<div class="absolute left-0 top-0 bottom-0 w-80 max-w-[85vw] bg-white shadow-2xl border-r border-gray-200">
 					<div class="flex items-center justify-between px-4 py-3 border-b">
 						<div class="flex items-center gap-2">
-							<img src="/logorectangular.png" alt="Guerra Láser" width="43" height="32" class="h-8" />
+							<img src="/logorectangular.png" alt="Guerra Láser" width="600" height="450" class="h-8 w-auto object-contain" />
 							<span class="font-bold">Categorías</span>
 						</div>
 						<button class="p-2 rounded hover:bg-gray-100" onclick={() => (showMobileMenu = false)} aria-label="Cerrar">
@@ -703,7 +703,7 @@ page.subscribe(($page) => {
 		<div class="container mx-auto px-4">
 			<div class="grid grid-cols-1 md:grid-cols-5 gap-8">
 				<div>
-					<img src="/logorectangular.png" alt="Guerra Láser" width="64" height="48" class="h-12 mb-4" />
+					<img src="/logorectangular.png" alt="Guerra Láser" width="600" height="450" class="h-12 w-auto object-contain mb-4" />
 					<p class="text-gray-400">Máquinas de corte y grabado láser de alta precisión</p>
 				</div>
 				<div>
@@ -868,7 +868,7 @@ page.subscribe(($page) => {
     	{#if showWA}
     		<div class="mb-3 w-80 max-w-[92vw] bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden">
     			<div class="flex items-center gap-2 px-4 py-3 bg-green-500 text-white">
-    				<img src="/logorectangular.png" alt="Guerra Láser" width="32" height="24" class="h-6 w-auto bg-white rounded-sm px-1 py-0.5" />
+    				<img src="/logorectangular.png" alt="Guerra Láser" width="600" height="450" class="h-6 w-auto object-contain bg-white rounded-sm px-1 py-0.5" />
     				<div class="font-semibold">Guerra Láser</div>
     				<button
     					class="ml-auto hover:opacity-80"

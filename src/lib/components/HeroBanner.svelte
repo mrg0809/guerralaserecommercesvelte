@@ -13,6 +13,8 @@
 
 	let { config }: Props = $props();
 
+	const bannerAlt = $derived(config.title || 'Guerra Láser');
+
 	const mobileMediaPath = $derived(
 		config.mobile_url || (config.media_type === 'image' ? config.desktop_url : '')
 	);
@@ -51,6 +53,7 @@
 			playsinline
 			preload="auto"
 			class="absolute inset-0 w-full h-full object-cover md:hidden"
+			aria-label={bannerAlt}
 		>
 			<source src={mobileVideoUrl} type="video/mp4" />
 			Tu navegador no soporta el elemento de video.
@@ -58,7 +61,7 @@
 	{:else if mobileImageUrl}
 		<img
 			src={mobileImageUrl}
-			alt={config.title}
+			alt={bannerAlt}
 			class="absolute inset-0 w-full h-full object-cover md:hidden"
 			fetchpriority="high"
 			width="800"
@@ -73,6 +76,7 @@
 			muted
 			playsinline
 			class="absolute inset-0 w-full h-full object-cover hidden md:block"
+			aria-label={bannerAlt}
 		>
 			<source src={desktopVideoUrl} type="video/mp4" />
 			Tu navegador no soporta el elemento de video.
@@ -80,21 +84,23 @@
 	{:else if config.media_type === 'image' && desktopImageUrl}
 		<img
 			src={desktopImageUrl}
-			alt={config.title}
+			alt={bannerAlt}
 			class="absolute inset-0 w-full h-full object-cover hidden md:block"
 			width="1920"
 			height="500"
 		/>
 	{/if}
 
-	<div class="absolute inset-0 bg-blue-900 bg-opacity-30"></div>
+	{#if config.show_overlay_text}
+		<div class="absolute inset-0 bg-blue-900 bg-opacity-30"></div>
 
-	<div
-		class="relative z-10 container mx-auto px-4 h-full flex flex-col items-center justify-center text-center text-white"
-	>
-		<h1 class="text-5xl md:text-6xl font-bold mb-6 drop-shadow-lg">{config.title}</h1>
-		{#if config.subtitle}
-			<p class="text-xl md:text-2xl drop-shadow-lg">{config.subtitle}</p>
-		{/if}
-	</div>
+		<div
+			class="relative z-10 container mx-auto px-4 h-full flex flex-col items-center justify-center text-center text-white"
+		>
+			<h1 class="text-5xl md:text-6xl font-bold mb-6 drop-shadow-lg">{config.title}</h1>
+			{#if config.subtitle}
+				<p class="text-xl md:text-2xl drop-shadow-lg">{config.subtitle}</p>
+			{/if}
+		</div>
+	{/if}
 </section>
