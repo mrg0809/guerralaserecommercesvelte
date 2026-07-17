@@ -316,6 +316,17 @@ npm run build
 npm run preview
 ```
 
+## 📚 Documentación
+
+La documentación técnica detallada está organizada en [`docs/`](./docs/README.md):
+
+- **Admin** — roles, usuarios, clientes
+- **Productos** — PIM, especificaciones, imágenes, bundles
+- **Envíos** — sistema multi-tipo y checkout
+- **Integraciones** — Analytics, email, Stripe
+- **Asistente IA** — chat RAG y APK móvil
+- **CRM** — plan maestro y roadmap
+
 ## 📁 Estructura del Proyecto
 
 ```
@@ -340,6 +351,7 @@ guerralaserecommercesvelte/
 │   │       └── pedidos/           # Gestión de pedidos
 │   └── app.css                    # Estilos globales
 ├── static/                        # Archivos estáticos
+├── docs/                          # Documentación técnica por secciones
 ├── .env.example                   # Ejemplo de variables de entorno
 ├── package.json
 └── README.md

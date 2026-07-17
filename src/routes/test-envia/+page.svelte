@@ -312,7 +312,7 @@
 				<li>
 					En la pestaña <strong>Network</strong>, haz click en el request <code>/api/shipping/quote</code> para ver los detalles
 				</li>
-				<li>Lee la documentación: <a href="/ENVIA_DEBUGGING_GUIDE.md" class="text-blue-600 hover:underline">ENVIA_DEBUGGING_GUIDE.md</a></li>
+				<li>Lee la documentación: <a href="https://github.com/mrg0809/guerralaserecommercesvelte/blob/main/docs/integraciones/envia-stripe-legacy.md" class="text-blue-600 hover:underline" target="_blank" rel="noopener">Envia.com + Stripe (legacy)</a></li>
 			</ol>
 		</div>
 	</div>

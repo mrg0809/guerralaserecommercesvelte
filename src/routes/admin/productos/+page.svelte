@@ -103,7 +103,7 @@
 		);
 	});
 
-	/** Misma regla que la tienda y ACRILICO_VARIANTS_GUIDE.md: spec tipo_producto = acrilico */
+	/** Misma regla que la tienda y docs/productos/variantes-acrilico.md: spec tipo_producto = acrilico */
 	const ACRYLIC_SPEC_KEY = 'tipo_producto';
 	const ACRYLIC_SPEC_VALUE = 'acrilico';
 
