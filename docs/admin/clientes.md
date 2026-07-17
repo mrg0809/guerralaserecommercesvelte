@@ -1,8 +1,325 @@
+# Módulo de Clientes
+
+Guía de instalación, configuración y solución de problemas del módulo CRM de clientes (Fase 1).
+
+## Tabla de contenidos
+
+1. [Inicio rápido](#inicio-rápido)
+2. [Fix: permisos en tabla users](#fix-permisos-en-tabla-users)
+3. [Implementación Fase 1](#implementación-fase-1)
+
+---
+
+# 🚀 INSTALACIÓN: Módulo de Clientes - FASE 1
+
+## ⚡ Inicio Rápido
+
+### Paso 1: Ejecutar Migration en Supabase
+
+**Opción A - Supabase Dashboard (MÁS FÁCIL):**
+
+1. Abre: https://supabase.com/dashboard/project/ugxuhfmjxvhglswxspiv/sql/new
+
+2. Copia TODO el contenido del archivo:
+   ```
+   database/migrations/create_customers_table.sql
+   ```
+
+3. Pégalo en el editor SQL
+
+4. Click en **"Run"** (botón verde en la esquina superior derecha)
+
+5. ✅ Deberías ver: "Success. No rows returned"
+
+---
+
+**Opción B - Script Automatizado:**
+
+```bash
+chmod +x setup-customers.sh
+./setup-customers.sh
+```
+
+---
+
+### Paso 2: Generar Tipos TypeScript
+
+```bash
+supabase gen types typescript --project-id ugxuhfmjxvhglswxspiv > src/lib/types/database.types.ts
+```
+
+**Si da error:**
+1. Asegúrate de estar logueado: `supabase login`
+2. Verifica el project ID: `supabase projects list`
+
+---
+
+### Paso 3: Verificar Instalación
+
+1. Inicia el servidor:
+   ```bash
+   npm run dev
+   ```
+
+2. Abre el navegador:
+   - **Dashboard**: http://localhost:5173/admin
+   - **Clientes**: http://localhost:5173/admin/clientes
+   - **Cotizaciones**: http://localhost:5173/admin/cotizaciones
+
+3. ✅ Si no hay errores de compilación, ¡todo está listo!
+
+---
+
+## 📋 Verificación Manual
+
+### 1. Verificar Tabla en Supabase
+
+1. Ve a: https://supabase.com/dashboard/project/ugxuhfmjxvhglswxspiv/editor
+
+2. Busca la tabla `customers` en el panel izquierdo
+
+3. Deberías ver:
+   - ✅ Tabla `customers`
+   - ✅ Columnas: id, customer_number, contact_name, email, etc.
+   - ✅ Índices creados
+   - ✅ Función `generate_customer_number()`
+
+### 2. Verificar RLS (Row Level Security)
+
+1. Ve a: https://supabase.com/dashboard/project/ugxuhfmjxvhglswxspiv/auth/policies
+
+2. Busca políticas para tabla `customers`:
+   - ✅ "Admins can do everything on customers"
+   - ✅ "Authenticated users can view customers"
+
+### 3. Probar Funcionalidad
+
+**Crear primer cliente:**
+1. Ve a: http://localhost:5173/admin/clientes
+2. Click en "➕ Nuevo Cliente"
+3. Llena los datos:
+   - Nombre: Test Cliente
+   - Email: test@test.com
+4. Click en "➕ Crear Cliente"
+5. ✅ Deberías ver el cliente en la lista con número CLI-2026-0001
+
+**Probar búsqueda:**
+1. Ve a: http://localhost:5173/admin/cotizaciones
+2. En "Datos del Cliente" verás "¿Cliente existente?"
+3. Escribe "test" en el buscador
+4. ✅ Debería aparecer "Test Cliente" en el dropdown
+5. Selecciónalo
+6. ✅ Los datos se deben autocompletar
+
+---
+
+## 🐛 Solución de Problemas
+
+### Error: "relation customers does not exist"
+
+**Causa**: No ejecutaste la migration
+
+**Solución**:
+1. Ve al **Paso 1** arriba
+2. Ejecuta la migration en Supabase Dashboard
+
+---
+
+### Error: "Property 'customers' does not exist on type..."
+
+**Causa**: Tipos TypeScript no actualizados
+
+**Solución**:
+```bash
+# 1. Asegúrate de que la tabla exista en Supabase
+# 2. Genera los tipos:
+supabase gen types typescript --project-id ugxuhfmjxvhglswxspiv > src/lib/types/database.types.ts
+
+# 3. Reinicia el servidor:
+npm run dev
+```
+
+---
+
+### Error: "permission denied for table customers"
+
+**Causa**: Tu usuario no tiene rol de admin
+
+**Solución**:
+1. Ve a: https://supabase.com/dashboard/project/ugxuhfmjxvhglswxspiv/auth/users
+2. Click en tu usuario
+3. En "Raw user meta data" agrega:
+   ```json
+   {
+     "role": "admin"
+   }
+   ```
+4. Click en "Update user"
+
+---
+
+### La búsqueda de clientes no funciona
+
+**Causa**: Índices no creados o tabla vacía
+
+**Solución**:
+1. Verifica que la tabla tenga datos
+2. Si está vacía, crea un cliente de prueba
+3. Verifica índices en SQL:
+   ```sql
+   SELECT * FROM pg_indexes WHERE tablename = 'customers';
+   ```
+
+---
+
+## ✅ Checklist de Instalación
+
+- [ ] Migration ejecutada en Supabase
+- [ ] Tabla `customers` visible en dashboard
+- [ ] Función `generate_customer_number()` creada
+- [ ] Políticas RLS activas
+- [ ] Tipos TypeScript generados
+- [ ] Sin errores de compilación
+- [ ] Página `/admin/clientes` carga correctamente
+- [ ] Puedo crear un cliente de prueba
+- [ ] Búsqueda funciona en cotizaciones
+- [ ] Datos se autocompletan al seleccionar cliente
+
+---
+
+## 📚 Documentación Completa
+
+- **Plan Maestro**: [Plan maestro CRM/Helpdesk](../crm/masterplan.md)
+- **Implementación Fase 1**: [CRM_FASE1_IMPLEMENTATION.md](CRM_FASE1_IMPLEMENTATION.md)
+
+---
+
+## 🎉 ¡Listo para Usar!
+
+Una vez completados todos los pasos:
+
+1. **Gestiona clientes**: http://localhost:5173/admin/clientes
+2. **Crea cotizaciones**: http://localhost:5173/admin/cotizaciones
+3. **Busca y selecciona** clientes existentes al crear cotizaciones
+4. Los datos se **autocompletan** automáticamente
+
+---
+
+## 🔜 Próximos Pasos
+
+Cuando estés listo para continuar:
+- **FASE 2**: Órdenes de Servicio
+- **FASE 3**: Sistema de Tickets
+- **FASE 4**: Portal de Clientes
+
+Ver [Plan maestro CRM/Helpdesk](../crm/masterplan.md) para más detalles.
+
+---
+
+**¿Necesitas ayuda?** Revisa la documentación completa o verifica cada paso del checklist.
+
+
+---
+
+
+# 🔧 FIX: Error "permission denied for table users"
+
+## Problema
+```
+Error cargando clientes: 
+{code: '42501', details: null, hint: null, message: 'permission denied for table users'}
+```
+
+## Causa
+Las políticas RLS intentan consultar `auth.users` directamente, lo cual no está permitido.
+
+---
+
+## ✅ Solución Rápida
+
+### Paso 1: Ejecutar Fix
+
+1. Abre: https://supabase.com/dashboard/project/ugxuhfmjxvhglswxspiv/sql/new
+
+2. Copia y pega el contenido de:
+   ```
+   database/migrations/fix_customers_rls.sql
+   ```
+
+3. Click en **"Run"**
+
+4. ✅ Deberías ver: "Success"
+
+---
+
+### Paso 2: Verificar
+
+1. Recarga la página: http://localhost:5173/admin/clientes
+
+2. ✅ Ahora debería cargar sin errores
+
+---
+
+## 📋 Qué hace el fix
+
+**Antes** (❌ No funcionaba):
+- Intentaba verificar rol consultando `auth.users`
+- Causaba error de permisos
+
+**Ahora** (✅ Funciona):
+- Permite todo a usuarios autenticados
+- Perfecto para desarrollo y panel de admin
+
+---
+
+## 🔐 Para Producción (Opcional)
+
+Si necesitas restringir por roles más adelante:
+
+1. Ve a: https://supabase.com/dashboard/project/ugxuhfmjxvhglswxspiv/auth/users
+
+2. Selecciona tu usuario
+
+3. En "Raw user meta data" agrega:
+   ```json
+   {
+     "role": "admin"
+   }
+   ```
+
+4. Ejecuta la parte comentada del SQL (OPCIÓN 2)
+
+---
+
+## 🧪 Prueba
+
+```bash
+# 1. Inicia el servidor
+npm run dev
+
+# 2. Ve a clientes
+# http://localhost:5173/admin/clientes
+
+# 3. Intenta crear un cliente
+# Debería funcionar sin errores
+```
+
+---
+
+**¿Sigue sin funcionar?** Verifica:
+1. Que el fix se haya ejecutado correctamente
+2. Que estés logueado en Supabase
+3. Recarga la página con Ctrl+Shift+R
+
+
+---
+
+
 # 📘 FASE 1: Implementación del Módulo de Clientes
 
 **Estado**: ✅ COMPLETADO  
 **Fecha**: Enero 2026  
-**Basado en**: [CRM_HELPDESK_MASTERPLAN.md](CRM_HELPDESK_MASTERPLAN.md)
+**Basado en**: [Plan maestro CRM/Helpdesk](../crm/masterplan.md)
 
 ---
 
@@ -428,7 +745,7 @@ supabase gen types typescript \
 ## 🔗 Referencias
 
 ### Documentación
-- [Plan Maestro CRM](CRM_HELPDESK_MASTERPLAN.md)
+- [Plan Maestro CRM](../crm/masterplan.md)
 - [Supabase Documentation](https://supabase.com/docs)
 - [SvelteKit Documentation](https://kit.svelte.dev/docs)
 
@@ -459,7 +776,7 @@ supabase gen types typescript \
 
 La **FASE 1: Módulo de Clientes** está completamente implementada y lista para usar.
 
-**Próximo paso**: [FASE 2: Órdenes de Servicio](CRM_HELPDESK_MASTERPLAN.md#fase-2)
+**Próximo paso**: [FASE 2: Órdenes de Servicio](../crm/masterplan.md#fase-2)
 
 **Versión**: 1.0  
 **Última actualización**: Enero 2026  
