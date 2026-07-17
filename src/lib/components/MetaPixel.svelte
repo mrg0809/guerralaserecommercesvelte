@@ -7,28 +7,34 @@
 	onMount(() => {
 		if (!browser) return;
 
-		// Verificar si el usuario aceptó las cookies
 		const cookiesAccepted = localStorage.getItem('cookiesAccepted');
-		
+
 		if (cookiesAccepted === 'true') {
-			loadMetaPixel();
+			scheduleMetaPixel();
 		} else {
-			// Escuchar el evento de aceptación de cookies
-			window.addEventListener('cookiesAccepted', loadMetaPixel);
+			window.addEventListener('cookiesAccepted', scheduleMetaPixel);
 		}
 
 		return () => {
-			window.removeEventListener('cookiesAccepted', loadMetaPixel);
+			window.removeEventListener('cookiesAccepted', scheduleMetaPixel);
 		};
 	});
 
-	function loadMetaPixel() {
-		if (!browser || (window as any).fbq) return; // Ya cargado
+	function scheduleMetaPixel() {
+		const run = () => loadMetaPixel();
+		if ('requestIdleCallback' in window) {
+			requestIdleCallback(run, { timeout: 5000 });
+		} else {
+			window.addEventListener('load', run, { once: true });
+		}
+	}
 
-		// Cargar el Meta Pixel
-		(function(f: any, b: any, e: string, v: string, n: any, t: any, s: any) {
+	function loadMetaPixel() {
+		if (!browser || (window as any).fbq) return;
+
+		(function (f: any, b: any, e: string, v: string, n: any, t: any, s: any) {
 			if (f.fbq) return;
-			n = f.fbq = function() {
+			n = f.fbq = function () {
 				n.callMethod ? n.callMethod.apply(n, arguments) : n.queue.push(arguments);
 			};
 			if (!f._fbq) f._fbq = n;
@@ -51,11 +57,8 @@
 			null
 		);
 
-		// Inicializar el pixel
 		(window as any).fbq('init', PIXEL_ID);
 		(window as any).fbq('track', 'PageView');
-		
-		console.log('📊 Meta Pixel inicializado:', PIXEL_ID);
 	}
 </script>
 

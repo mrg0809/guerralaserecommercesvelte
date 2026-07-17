@@ -104,7 +104,7 @@ export function getImageKitUrlWithTransform(
 }
 
 export const IMAGEKIT_TRANSFORMS = {
-	heroLcp: 'tr=w-480,h-300,fo-auto,q-75,f-auto',
+	heroLcp: 'tr=w-412,h-260,fo-auto,q-70,f-auto',
 	heroMobile: 'tr=w-800,h-500,fo-auto,q-80,f-auto',
 	heroMobileVideo: 'tr=w-480,q-60',
 	heroDesktopImage: 'tr=w-1920,h-500,fo-auto,q-80,f-auto',

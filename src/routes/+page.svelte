@@ -24,6 +24,7 @@
 	let canScrollRight = $state(false);
 	let promoMarqueeExpanded = $state(false);
 	let promoMarqueeActive = $state(false);
+	let showPromoSection = $state(false);
 
 	function checkScrollButtons() {
 		if (productsCarouselRef) {
@@ -70,6 +71,15 @@
 
 		if (testimonialVideos.length > 0) {
 			startVideoCarousel();
+		}
+
+		const activatePromos = () => {
+			showPromoSection = true;
+		};
+		if (document.readyState === 'complete') {
+			activatePromos();
+		} else {
+			window.addEventListener('load', activatePromos, { once: true });
 		}
 
 		const expandMarquee = () => {
@@ -167,10 +177,15 @@
 	{/if}
 </svelte:head>
 
-<HeroBanner config={data.heroBanner} />
+<HeroBanner config={data.heroBanner} lcpImageUrl={data.lcpImageUrl} />
 
-<!-- Sección de Promociones -->
-{#if promotions.length > 0}
+<!-- Sección de Promociones (diferida hasta load para no competir con LCP del hero) -->
+{#if !showPromoSection && promotions.length > 0}
+	<section
+		class="relative w-full py-10 md:py-14 overflow-hidden bg-gradient-to-b from-slate-100 to-white min-h-[280px] md:min-h-[360px]"
+		aria-hidden="true"
+	></section>
+{:else if showPromoSection && promotions.length > 0}
 	<section class="relative w-full py-10 md:py-14 overflow-hidden bg-gradient-to-b from-slate-100 to-white">
 		<div class="container mx-auto px-4">
 			<div class="text-center mb-6 md:mb-8">
@@ -218,7 +233,7 @@
 
 <!-- Categories Section -->
 {#if getMaquinariaSubcategories().length > 0}
-	<section id="categorias" class="py-16 bg-gray-50">
+	<section id="categorias" class="py-16 bg-gray-50 below-fold-section">
 		<div class="container mx-auto px-4">
 			<h2 class="text-3xl font-bold mb-8 text-center">Nuestras Máquinas</h2>
 			
@@ -255,7 +270,7 @@
 
 <!-- Featured Products -->
 {#if featuredProducts.length > 0}
-	<section id="productos-destacados" class="py-16 bg-gray-50">
+	<section id="productos-destacados" class="py-16 bg-gray-50 below-fold-section">
 		<div class="container mx-auto px-4">
 			<h2 class="text-3xl font-bold mb-8 text-center">Productos Destacados</h2>
 			
@@ -586,5 +601,10 @@
 		to {
 			transform: translateX(-50%);
 		}
+	}
+
+	.below-fold-section {
+		content-visibility: auto;
+		contain-intrinsic-size: auto 600px;
 	}
 </style>
