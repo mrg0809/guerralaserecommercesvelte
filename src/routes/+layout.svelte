@@ -9,7 +9,7 @@
 	import { getDisplayPrice } from '$lib/utils';
 	import { trackPageView, trackWhatsAppContact } from '$lib/gtag';
 	import ReauthModal from '$lib/components/ReauthModal.svelte';
-	import CookieBanner from '$lib/components/CookieBanner.svelte';
+	import LazyGoogleMap from '$lib/components/LazyGoogleMap.svelte';
 	import MetaPixel from '$lib/components/MetaPixel.svelte';
 	import { isNativeCapacitorApp } from '$lib/mobile/appShell';
 	import type { Category } from '$lib/types';
@@ -350,7 +350,7 @@ page.subscribe(($page) => {
 				<!-- Logo (Left) - Esquina superior izquierda -->
 				<div class="flex-shrink-0 min-w-fit">
 					<a href="/" class="flex items-center hover:opacity-90 transition-opacity">
-						<img src="/logorectangular.png" alt="Guerra Láser" class="h-16" />
+						<img src="/logorectangular.png" alt="Guerra Láser" width="149" height="112" class="h-16" />
 					</a>
 				</div>
 
@@ -463,7 +463,7 @@ page.subscribe(($page) => {
 					</button>
 
 					<!-- Cart Icon -->
-					<a href="/carrito" class="relative hover:text-red-600 transition-colors text-blue-900 group">
+					<a href="/carrito" class="relative hover:text-red-600 transition-colors text-blue-900 group" aria-label="Ver carrito de compras">
 						<div class="p-2 hover:bg-red-50 rounded-lg transition-colors">
 							<svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
@@ -500,7 +500,7 @@ page.subscribe(($page) => {
 				<div class="absolute left-0 top-0 bottom-0 w-80 max-w-[85vw] bg-white shadow-2xl border-r border-gray-200">
 					<div class="flex items-center justify-between px-4 py-3 border-b">
 						<div class="flex items-center gap-2">
-							<img src="/logorectangular.png" alt="Guerra Láser" class="h-8" />
+							<img src="/logorectangular.png" alt="Guerra Láser" width="43" height="32" class="h-8" />
 							<span class="font-bold">Categorías</span>
 						</div>
 						<button class="p-2 rounded hover:bg-gray-100" onclick={() => (showMobileMenu = false)} aria-label="Cerrar">
@@ -634,16 +634,10 @@ page.subscribe(($page) => {
 			<div class="grid md:grid-cols-2 gap-8 max-w-6xl mx-auto">
 				<!-- Mapa -->
 				<div class="rounded-2xl overflow-hidden shadow-2xl h-[400px] bg-white">
-					<iframe
+					<LazyGoogleMap
 						src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3732.8!2d-103.4539846724633!3d20.658089643947697!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x0%3A0x0!2zMjDCsDM5JzI5LjEiTiAxMDPCsDI3JzE0LjMiVw!5e0!3m2!1ses!2smx!4v1234567890"
-						width="100%"
-						height="100%"
-						style="border:0;"
-						allowfullscreen=""
-						loading="lazy"
-						referrerpolicy="no-referrer-when-downgrade"
 						title="Ubicación Guerra Láser"
-					></iframe>
+					/>
 				</div>
 
 				<!-- Información de Contacto y Horarios -->
@@ -708,7 +702,7 @@ page.subscribe(($page) => {
 		<div class="container mx-auto px-4">
 			<div class="grid grid-cols-1 md:grid-cols-5 gap-8">
 				<div>
-					<img src="/logorectangular.png" alt="Guerra Láser" class="h-12 mb-4" />
+					<img src="/logorectangular.png" alt="Guerra Láser" width="64" height="48" class="h-12 mb-4" />
 					<p class="text-gray-400">Máquinas de corte y grabado láser de alta precisión</p>
 				</div>
 				<div>
@@ -873,7 +867,7 @@ page.subscribe(($page) => {
     	{#if showWA}
     		<div class="mb-3 w-80 max-w-[92vw] bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden">
     			<div class="flex items-center gap-2 px-4 py-3 bg-green-500 text-white">
-    				<img src="/logorectangular.png" alt="Guerra Láser" class="h-6 w-auto bg-white rounded-sm px-1 py-0.5" />
+    				<img src="/logorectangular.png" alt="Guerra Láser" width="32" height="24" class="h-6 w-auto bg-white rounded-sm px-1 py-0.5" />
     				<div class="font-semibold">Guerra Láser</div>
     				<button
     					class="ml-auto hover:opacity-80"

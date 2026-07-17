@@ -89,6 +89,56 @@ export function getBannerVideoUrl(): string {
 	return getProductImageUrl('bannerpagina.mp4');
 }
 
+/** Añade transformaciones ImageKit a una URL ya convertida o convertible */
+export function getImageKitUrlWithTransform(
+	input: string | null | undefined,
+	transform: string
+): string {
+	const ikUrl = getImageKitUrl(input);
+	if (!ikUrl || !transform) return ikUrl;
+	if (!ikUrl.includes('ik.imagekit.io')) return ikUrl;
+
+	const separator = ikUrl.includes('?') ? '&' : '?';
+	return `${ikUrl}${separator}${transform}`;
+}
+
+export const IMAGEKIT_TRANSFORMS = {
+	heroMobile: 'tr=w-800,h-500,fo-auto,q-80,f-auto',
+	heroDesktopImage: 'tr=w-1920,h-500,fo-auto,q-80,f-auto',
+	promotion: 'tr=w-400,q-75,f-auto',
+	category: 'tr=w-500,h-384,fo-auto,q-75,f-auto',
+	featuredProduct: 'tr=w-600,h-512,fo-auto,q-80,f-auto'
+} as const;
+
+/** URL de video o imagen desktop del hero vía ImageKit (sin transform en videos) */
+export function getHeroDesktopMediaUrl(path: string, mediaType: 'video' | 'image'): string {
+	const ikUrl = getImageKitUrl(path);
+	if (mediaType === 'image') {
+		return getImageKitUrlWithTransform(path, IMAGEKIT_TRANSFORMS.heroDesktopImage);
+	}
+	return ikUrl;
+}
+
+/** URL de imagen móvil del hero optimizada para LCP */
+export function getHeroMobileImageUrl(path: string, desktopVideoPath?: string): string {
+	if (path) {
+		return getImageKitUrlWithTransform(path, IMAGEKIT_TRANSFORMS.heroMobile);
+	}
+
+	// Fallback: miniatura del video desktop vía ImageKit
+	if (desktopVideoPath) {
+		const videoUrl = getImageKitUrl(desktopVideoPath);
+		if (videoUrl.includes('ik.imagekit.io')) {
+			return getImageKitUrlWithTransform(
+				`${videoUrl}/ik-thumbnail.jpg`,
+				IMAGEKIT_TRANSFORMS.heroMobile
+			);
+		}
+	}
+
+	return '';
+}
+
 /**
  * Valida si una URL es una imagen válida del bucket
  * @param url - URL a validar
