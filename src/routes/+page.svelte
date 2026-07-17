@@ -1,23 +1,24 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { supabase } from '$lib/supabaseClient';
-	import { formatPrice, getDisplayPrice, getDisplayStock } from '$lib/utils';
-	import { getBannerVideoUrl, getImageKitUrl } from '$lib/storage';
+	import { formatPrice, getDisplayPrice } from '$lib/utils';
+	import { getImageKitUrlWithTransform, IMAGEKIT_TRANSFORMS } from '$lib/storage';
+	import HeroBanner from '$lib/components/HeroBanner.svelte';
+	import VideoEmbedFacade from '$lib/components/VideoEmbedFacade.svelte';
 	import type { Product, Category, ProductMedia, Promotion, TestimonialVideo } from '$lib/types';
+	import type { PageData } from './$types';
 
-	let featuredProducts: (Product & { media?: ProductMedia[]; category?: Category })[] = $state([]);
-	let categories: Category[] = $state([]);
-	let promotions: Promotion[] = $state([]);
-	let loading = $state(true);
+	let { data }: { data: PageData } = $props();
 
-	const bannerVideoUrl = getImageKitUrl(getBannerVideoUrl());
-	
-	// Variables para el carrusel de videos
+	const promotions = $derived(data.promotions as Promotion[]);
+	const categories = $derived(data.categories as Category[]);
+	const featuredProducts = $derived(
+		data.featuredProducts as (Product & { media?: ProductMedia[]; category?: Category })[]
+	);
+	const testimonialVideos = $derived(data.testimonialVideos as TestimonialVideo[]);
+
 	let currentVideoIndex = $state(0);
 	let videoAutoplayInterval: ReturnType<typeof setInterval> | null = null;
-	let testimonialVideos: TestimonialVideo[] = $state([]);
 
-	// Variables para el carrusel de productos destacados
 	let productsCarouselRef = $state<HTMLDivElement | null>(null);
 	let canScrollLeft = $state(false);
 	let canScrollRight = $state(false);
@@ -25,7 +26,9 @@
 	function checkScrollButtons() {
 		if (productsCarouselRef) {
 			canScrollLeft = productsCarouselRef.scrollLeft > 0;
-			canScrollRight = productsCarouselRef.scrollLeft < (productsCarouselRef.scrollWidth - productsCarouselRef.clientWidth - 10);
+			canScrollRight =
+				productsCarouselRef.scrollLeft <
+				productsCarouselRef.scrollWidth - productsCarouselRef.clientWidth - 10;
 		}
 	}
 
@@ -41,70 +44,11 @@
 	}
 
 	onMount(() => {
-		const init = async () => {
-			const { data: promos } = await supabase
-				.from('promotions')
-				.select('*')
-				.eq('is_active', true)
-				.order('display_order');
+		setTimeout(checkScrollButtons, 100);
 
-			if (promos) {
-				promotions = promos;
-			}
-
-			// Load featured products
-			const { data: products } = await supabase
-				.from('products')
-				.select('*, product_media(*), categories(*), product_variants(*)')
-				.eq('is_featured', true)
-				.eq('is_active', true)
-				.limit(12);
-
-			if (products) {
-				featuredProducts = products.map((p: any) => ({
-					...p,
-					media: p.product_media,
-					category: p.categories
-				}));
-			}
-
-			// Load categories
-			const { data: cats } = await supabase
-				.from('categories')
-				.select('*')
-				.eq('is_active', true)
-				.order('display_order');
-
-			if (cats) {
-				categories = cats;
-			}
-
-			// Load testimonial videos from database
-			const { data: videos } = await supabase
-				.from('testimonial_videos')
-				.select('*')
-				.eq('is_active', true)
-				.order('display_order');
-
-			if (videos) {
-				testimonialVideos = videos.map((video) => ({
-					...video,
-					video_type: video.video_type === 'tiktok' ? 'tiktok' : 'youtube'
-				}));
-			}
-
-			loading = false;
-
-			// Inicializar botones del carrusel de productos
-			setTimeout(checkScrollButtons, 100);
-
-			// Iniciar autoplay del carrusel de videos si hay videos
-			if (testimonialVideos.length > 0) {
-				startVideoCarousel();
-			}
-		};
-
-		void init();
+		if (testimonialVideos.length > 0) {
+			startVideoCarousel();
+		}
 
 		return () => {
 			if (videoAutoplayInterval) {
@@ -117,25 +61,24 @@
 		if (promotions.length === 0) return [];
 		return [...promotions, ...promotions];
 	}
-	
+
 	function startVideoCarousel() {
-		// Cambiar video cada 5 segundos
 		videoAutoplayInterval = setInterval(() => {
 			nextVideo();
 		}, 5000);
 	}
-	
+
 	function nextVideo() {
 		currentVideoIndex = (currentVideoIndex + 1) % testimonialVideos.length;
 	}
-	
+
 	function prevVideo() {
-		currentVideoIndex = (currentVideoIndex - 1 + testimonialVideos.length) % testimonialVideos.length;
+		currentVideoIndex =
+			(currentVideoIndex - 1 + testimonialVideos.length) % testimonialVideos.length;
 	}
-	
+
 	function goToVideo(index: number) {
 		currentVideoIndex = index;
-		// Reiniciar autoplay
 		if (videoAutoplayInterval) {
 			clearInterval(videoAutoplayInterval);
 		}
@@ -143,30 +86,22 @@
 	}
 
 	function getChildCategories(parentId: string): Category[] {
-		return categories.filter(c => c.parent_id === parentId).sort((a, b) => {
-			const orderA = a.display_order ?? 0;
-			const orderB = b.display_order ?? 0;
-			if (orderA !== orderB) {
-				return orderA - orderB;
-			}
-			return a.name.localeCompare(b.name);
-		});
+		return categories
+			.filter((c) => c.parent_id === parentId)
+			.sort((a, b) => {
+				const orderA = a.display_order ?? 0;
+				const orderB = b.display_order ?? 0;
+				if (orderA !== orderB) {
+					return orderA - orderB;
+				}
+				return a.name.localeCompare(b.name);
+			});
 	}
 
-	function getRootCategories(): Category[] {
-		return categories.filter(c => !c.parent_id).sort((a, b) => {
-			const orderA = a.display_order ?? 0;
-			const orderB = b.display_order ?? 0;
-			if (orderA !== orderB) {
-				return orderA - orderB;
-			}
-			return a.name.localeCompare(b.name);
-		});
-	}
-
-	// Obtener la categoría Maquinaria y sus subcategorías
 	function getMaquinariaSubcategories(): Category[] {
-		const maquinaria = categories.find(c => c.slug === 'maquinaria' || c.name.toLowerCase().includes('maquinaria'));
+		const maquinaria = categories.find(
+			(c) => c.slug === 'maquinaria' || c.name.toLowerCase().includes('maquinaria')
+		);
 		if (!maquinaria) return [];
 		return getChildCategories(maquinaria.id);
 	}
@@ -180,20 +115,7 @@
 	/>
 </svelte:head>
 
-<!-- Hero Banner with Video -->
-<section class="relative w-full h-[500px] overflow-hidden">
-	<video autoplay loop muted playsinline class="absolute inset-0 w-full h-full object-cover">
-		<source src={bannerVideoUrl} type="video/mp4" />
-		Tu navegador no soporta el elemento de video.
-	</video>
-
-	<div class="absolute inset-0 bg-blue-900 bg-opacity-30"></div>
-
-	<div class="relative z-10 container mx-auto px-4 h-full flex flex-col items-center justify-center text-center text-white">
-		<h1 class="text-5xl md:text-6xl font-bold mb-6 drop-shadow-lg">ESPECIALISTAS EN VENTA DE MAQUINARIA</h1>
-		<p class="text-xl md:text-2xl drop-shadow-lg">En corte de metales, corte laser co2, fibra óptica, plasma, router, etc.</p>
-	</div>
-</section>
+<HeroBanner config={data.heroBanner} />
 
 <!-- Sección de Promociones -->
 {#if promotions.length > 0}
@@ -216,7 +138,7 @@
 								aria-label={promotion.title}
 							>
 								<img
-									src={getImageKitUrl(promotion.image_url)}
+									src={getImageKitUrlWithTransform(promotion.image_url, IMAGEKIT_TRANSFORMS.promotion)}
 									alt={promotion.title}
 									class="w-full h-full object-contain"
 								/>
@@ -224,7 +146,7 @@
 						{:else}
 							<div class="promo-item">
 								<img
-									src={getImageKitUrl(promotion.image_url)}
+									src={getImageKitUrlWithTransform(promotion.image_url, IMAGEKIT_TRANSFORMS.promotion)}
 									alt={promotion.title}
 									class="w-full h-full object-contain"
 								/>
@@ -252,7 +174,7 @@
 					>
 						{#if category.image_url}
 							<img
-								src={getImageKitUrl(category.image_url)}
+								src={getImageKitUrlWithTransform(category.image_url, IMAGEKIT_TRANSFORMS.category)}
 								alt={category.name}
 								class="w-full h-48 object-cover"
 							/>
@@ -275,13 +197,7 @@
 {/if}
 
 <!-- Featured Products -->
-{#if loading}
-	<section class="py-16">
-		<div class="container mx-auto px-4 text-center">
-			<p class="text-xl text-gray-600">Cargando productos destacados...</p>
-		</div>
-	</section>
-{:else if featuredProducts.length > 0}
+{#if featuredProducts.length > 0}
 	<section id="productos-destacados" class="py-16 bg-gray-50">
 		<div class="container mx-auto px-4">
 			<h2 class="text-3xl font-bold mb-8 text-center">Productos Destacados</h2>
@@ -316,7 +232,10 @@
 						>
 							{#if product.media && product.media.length > 0}
 								<img
-									src={getImageKitUrl(product.media.find((m) => m.is_primary)?.url || product.media[0].url)}
+									src={getImageKitUrlWithTransform(
+										product.media.find((m) => m.is_primary)?.url || product.media[0].url,
+										IMAGEKIT_TRANSFORMS.featuredProduct
+									)}
 									alt={product.name}
 									class="w-full h-64 object-cover"
 								/>
@@ -389,14 +308,13 @@
 						{#each testimonialVideos as video, index}
 							{#if index === currentVideoIndex}
 								<div class="w-full h-full animate-fadeIn">
-									<iframe
-										src={video.video_url}
+									<VideoEmbedFacade
+										videoUrl={video.video_url}
+										videoType={video.video_type}
 										title={video.title}
-										class="w-full h-full"
-										frameborder="0"
-										allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-										allowfullscreen
-									></iframe>
+										thumbnailUrl={video.thumbnail_url}
+										active={index === currentVideoIndex}
+									/>
 								</div>
 							{/if}
 						{/each}
