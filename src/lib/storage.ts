@@ -1,4 +1,5 @@
 import { PUBLIC_SUPABASE_URL } from '$env/static/public';
+import type { HeroBannerSettings } from '$lib/heroBanner';
 
 /**
  * Configuración del almacenamiento de Supabase
@@ -103,6 +104,7 @@ export function getImageKitUrlWithTransform(
 }
 
 export const IMAGEKIT_TRANSFORMS = {
+	heroLcp: 'tr=w-480,h-300,fo-auto,q-75,f-auto',
 	heroMobile: 'tr=w-800,h-500,fo-auto,q-80,f-auto',
 	heroMobileVideo: 'tr=w-480,q-60',
 	heroDesktopImage: 'tr=w-1920,h-500,fo-auto,q-80,f-auto',
@@ -111,6 +113,9 @@ export const IMAGEKIT_TRANSFORMS = {
 	featuredProduct: 'tr=w-600,h-512,fo-auto,q-80,f-auto',
 	logo: 'tr=w-200,q-80,f-auto'
 } as const;
+
+/** Logo local servido desde /static cuando ImageKit no está disponible */
+export const SITE_LOGO_FALLBACK_URL = '/logorectangular.png';
 
 /** Logo del sitio optimizado vía ImageKit */
 export function getSiteLogoUrl(): string {
@@ -151,6 +156,56 @@ export function getHeroMobileImageUrl(path: string, desktopVideoPath?: string): 
 			return getImageKitUrlWithTransform(
 				`${videoUrl}/ik-thumbnail.jpg`,
 				IMAGEKIT_TRANSFORMS.heroMobile
+			);
+		}
+	}
+
+	return '';
+}
+
+/** URL optimizada del candidato LCP móvil (hero) */
+export function getHeroLcpImageUrl(config: HeroBannerSettings): string {
+	const mobilePath =
+		config.mobile_url || (config.media_type === 'image' ? config.desktop_url : '');
+
+	if (config.mobile_media_type === 'image') {
+		if (mobilePath) {
+			return getImageKitUrlWithTransform(mobilePath, IMAGEKIT_TRANSFORMS.heroLcp);
+		}
+
+		if (config.desktop_url && config.media_type === 'video') {
+			const videoUrl = getImageKitUrl(config.desktop_url);
+			if (videoUrl.includes('ik.imagekit.io')) {
+				return getImageKitUrlWithTransform(
+					`${videoUrl}/ik-thumbnail.jpg`,
+					IMAGEKIT_TRANSFORMS.heroLcp
+				);
+			}
+		}
+
+		return '';
+	}
+
+	if (config.mobile_poster_url) {
+		return getImageKitUrlWithTransform(config.mobile_poster_url, IMAGEKIT_TRANSFORMS.heroLcp);
+	}
+
+	if (mobilePath) {
+		const videoUrl = getImageKitUrl(mobilePath);
+		if (videoUrl.includes('ik.imagekit.io')) {
+			return getImageKitUrlWithTransform(
+				`${videoUrl}/ik-thumbnail.jpg`,
+				IMAGEKIT_TRANSFORMS.heroLcp
+			);
+		}
+	}
+
+	if (config.desktop_url && config.media_type === 'video') {
+		const videoUrl = getImageKitUrl(config.desktop_url);
+		if (videoUrl.includes('ik.imagekit.io')) {
+			return getImageKitUrlWithTransform(
+				`${videoUrl}/ik-thumbnail.jpg`,
+				IMAGEKIT_TRANSFORMS.heroLcp
 			);
 		}
 	}

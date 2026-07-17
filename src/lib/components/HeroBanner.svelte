@@ -2,8 +2,7 @@
 	import { onMount } from 'svelte';
 	import {
 		getHeroDesktopMediaUrl,
-		getHeroMobileImageUrl,
-		getHeroMobileVideoPosterUrl,
+		getHeroLcpImageUrl,
 		getHeroMobileVideoUrl,
 		getImageKitUrl
 	} from '$lib/storage';
@@ -17,6 +16,8 @@
 
 	type Viewport = 'mobile' | 'desktop';
 	let viewport = $state<Viewport>('mobile');
+	let showMobileVideo = $state(false);
+	let mobileVideoRef = $state<HTMLVideoElement | null>(null);
 
 	const bannerAlt = $derived(config.title || 'Guerra Láser');
 
@@ -24,21 +25,11 @@
 		config.mobile_url || (config.media_type === 'image' ? config.desktop_url : '')
 	);
 
+	const lcpImageUrl = $derived(getHeroLcpImageUrl(config));
+
 	const mobileVideoUrl = $derived(
 		config.mobile_media_type === 'video' && mobileMediaPath
 			? getHeroMobileVideoUrl(mobileMediaPath)
-			: ''
-	);
-
-	const mobileVideoPosterUrl = $derived(
-		config.mobile_media_type === 'video' && mobileMediaPath
-			? getHeroMobileVideoPosterUrl(mobileMediaPath)
-			: ''
-	);
-
-	const mobileImageUrl = $derived(
-		config.mobile_media_type === 'image'
-			? getHeroMobileImageUrl(mobileMediaPath, config.desktop_url)
 			: ''
 	);
 
@@ -63,49 +54,58 @@
 		updateViewport();
 		mediaQuery.addEventListener('change', updateViewport);
 
+		if (config.mobile_media_type === 'video' && mobileVideoUrl) {
+			const mountVideo = () => {
+				showMobileVideo = true;
+			};
+
+			if (document.readyState === 'complete') {
+				mountVideo();
+			} else {
+				window.addEventListener('load', mountVideo, { once: true });
+			}
+		}
+
 		return () => {
 			mediaQuery.removeEventListener('change', updateViewport);
 		};
+	});
+
+	$effect(() => {
+		if (showMobileVideo && mobileVideoRef) {
+			mobileVideoRef.preload = 'auto';
+			void mobileVideoRef.play().catch(() => {});
+		}
 	});
 </script>
 
 <section class="relative w-full h-[500px] overflow-hidden">
 	{#if viewport === 'mobile'}
-		{#if config.mobile_media_type === 'video' && mobileVideoUrl}
-			{#if mobileVideoPosterUrl}
-				<img
-					src={mobileVideoPosterUrl}
-					alt={bannerAlt}
-					class="absolute inset-0 w-full h-full object-cover"
-					fetchpriority="high"
-					loading="eager"
-					width="800"
-					height="500"
-				/>
-			{/if}
+		{#if lcpImageUrl}
+			<img
+				src={lcpImageUrl}
+				alt={bannerAlt}
+				class="absolute inset-0 w-full h-full object-cover"
+				loading="eager"
+				width="480"
+				height="300"
+			/>
+		{/if}
+		{#if showMobileVideo && mobileVideoUrl}
 			<video
+				bind:this={mobileVideoRef}
 				autoplay
 				loop
 				muted
 				playsinline
-				preload="metadata"
-				poster={mobileVideoPosterUrl}
+				preload="none"
+				poster={lcpImageUrl}
 				class="absolute inset-0 w-full h-full object-cover"
 				aria-label={bannerAlt}
 			>
 				<source src={mobileVideoUrl} type="video/mp4" />
 				Tu navegador no soporta el elemento de video.
 			</video>
-		{:else if mobileImageUrl}
-			<img
-				src={mobileImageUrl}
-				alt={bannerAlt}
-				class="absolute inset-0 w-full h-full object-cover"
-				fetchpriority="high"
-				loading="eager"
-				width="800"
-				height="500"
-			/>
 		{/if}
 	{:else if config.media_type === 'video' && desktopVideoUrl}
 		<video

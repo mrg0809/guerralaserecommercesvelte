@@ -12,10 +12,13 @@
 	let heroBanner = $state<HeroBannerSettings>({ ...DEFAULT_HERO_BANNER });
 	let uploadingDesktop = $state(false);
 	let uploadingMobile = $state(false);
+	let uploadingMobilePoster = $state(false);
 	let desktopPreview = $state('');
 	let mobilePreview = $state('');
+	let mobilePosterPreview = $state('');
 	let selectedDesktopFile: File | null = $state(null);
 	let selectedMobileFile: File | null = $state(null);
+	let selectedMobilePosterFile: File | null = $state(null);
 
 	let mobilePreviewIsVideo = $state(false);
 
@@ -69,6 +72,9 @@
 
 		mobilePreviewIsVideo = heroBanner.mobile_media_type === 'video';
 		mobilePreview = heroBanner.mobile_url ? getImageKitUrl(heroBanner.mobile_url) : '';
+		mobilePosterPreview = heroBanner.mobile_poster_url
+			? getImageKitUrl(heroBanner.mobile_poster_url)
+			: '';
 	}
 
 	function handleDesktopFileSelect(event: Event) {
@@ -151,6 +157,27 @@
 		mobilePreview = URL.createObjectURL(file);
 	}
 
+	function handleMobilePosterFileSelect(event: Event) {
+		const input = event.target as HTMLInputElement;
+		if (!input.files?.[0]) return;
+
+		const file = input.files[0];
+		const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+		if (!validTypes.includes(file.type)) {
+			alert('Selecciona una imagen válida (JPG, PNG o WEBP)');
+			input.value = '';
+			return;
+		}
+		if (file.size > 2 * 1024 * 1024) {
+			alert('La imagen poster no debe superar los 2MB. Usa un JPEG comprimido (~50-100 KB).');
+			input.value = '';
+			return;
+		}
+
+		selectedMobilePosterFile = file;
+		mobilePosterPreview = URL.createObjectURL(file);
+	}
+
 	async function uploadFile(file: File, prefix: string): Promise<string | null> {
 		const timestamp = Date.now();
 		const randomStr = Math.random().toString(36).slice(2, 8);
@@ -202,6 +229,7 @@
 		try {
 			uploadingDesktop = !!selectedDesktopFile;
 			uploadingMobile = !!selectedMobileFile;
+			uploadingMobilePoster = !!selectedMobilePosterFile;
 
 			if (selectedDesktopFile) {
 				const prefix = heroBanner.media_type === 'video' ? 'hero-video' : 'hero-desktop';
@@ -218,6 +246,13 @@
 				if (!uploadedUrl) return;
 				heroBanner.mobile_url = uploadedUrl;
 				selectedMobileFile = null;
+			}
+
+			if (selectedMobilePosterFile) {
+				const uploadedUrl = await uploadFile(selectedMobilePosterFile, 'hero-mobile-poster');
+				if (!uploadedUrl) return;
+				heroBanner.mobile_poster_url = uploadedUrl;
+				selectedMobilePosterFile = null;
 			}
 
 			const token = await getSessionToken();
@@ -249,6 +284,7 @@
 			saving = false;
 			uploadingDesktop = false;
 			uploadingMobile = false;
+			uploadingMobilePoster = false;
 		}
 	}
 
@@ -371,6 +407,37 @@
 						<p class="text-sm text-blue-600 mt-1">Subiendo media móvil...</p>
 					{/if}
 				</div>
+
+				{#if heroBanner.mobile_media_type === 'video'}
+					<div>
+						<label class="block text-sm font-medium text-gray-700 mb-1">
+							Imagen poster para carga rápida (opcional)
+						</label>
+						<p class="text-xs text-gray-500 mb-2">
+							JPEG/WebP comprimido (~50-100 KB) que se muestra al instante en móvil mientras carga el
+							video. Mejora el LCP en PageSpeed.
+						</p>
+						<input
+							id="hero-mobile-poster-file"
+							type="file"
+							accept="image/jpeg,image/png,image/webp"
+							onchange={handleMobilePosterFileSelect}
+							class="w-full text-sm"
+						/>
+						{#if mobilePosterPreview}
+							<div class="mt-2 rounded-lg overflow-hidden border max-h-48">
+								<img
+									src={mobilePosterPreview}
+									alt="Preview poster LCP"
+									class="w-full max-h-48 object-cover"
+								/>
+							</div>
+						{/if}
+						{#if uploadingMobilePoster}
+							<p class="text-sm text-blue-600 mt-1">Subiendo poster LCP...</p>
+						{/if}
+					</div>
+				{/if}
 
 				<div>
 					<label class="flex items-center gap-3 cursor-pointer">
