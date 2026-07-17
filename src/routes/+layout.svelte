@@ -13,6 +13,7 @@
 	import LazyGoogleMap from '$lib/components/LazyGoogleMap.svelte';
 	import MetaPixel from '$lib/components/MetaPixel.svelte';
 	import { isNativeCapacitorApp } from '$lib/mobile/appShell';
+	import { getSiteLogoUrl } from '$lib/storage';
 	import type { Category } from '$lib/types';
 	import '../app.css';
 	
@@ -351,7 +352,15 @@ page.subscribe(($page) => {
 				<!-- Logo (Left) - Esquina superior izquierda -->
 				<div class="flex-shrink-0 min-w-fit">
 					<a href="/" class="flex items-center hover:opacity-90 transition-opacity">
-						<img src="/logorectangular.png" alt="Guerra Láser" width="600" height="450" class="h-16 w-auto object-contain" />
+						<img
+							src={getSiteLogoUrl()}
+							alt="Guerra Láser"
+							width="600"
+							height="450"
+							class="h-16 w-auto object-contain"
+							loading="eager"
+							fetchpriority="high"
+						/>
 					</a>
 				</div>
 
