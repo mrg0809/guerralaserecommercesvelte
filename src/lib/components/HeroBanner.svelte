@@ -2,6 +2,7 @@
 	import {
 		getHeroDesktopMediaUrl,
 		getHeroMobileImageUrl,
+		getHeroMobileVideoUrl,
 		getImageKitUrl
 	} from '$lib/storage';
 	import type { HeroBannerSettings } from '$lib/heroBanner';
@@ -12,14 +13,19 @@
 
 	let { config }: Props = $props();
 
-	const mobileImagePath = $derived(
-		config.mobile_image_url ||
-			(config.media_type === 'image' ? config.desktop_url : '')
+	const mobileMediaPath = $derived(
+		config.mobile_url || (config.media_type === 'image' ? config.desktop_url : '')
+	);
+
+	const mobileVideoUrl = $derived(
+		config.mobile_media_type === 'video' && mobileMediaPath
+			? getHeroMobileVideoUrl(mobileMediaPath)
+			: ''
 	);
 
 	const mobileImageUrl = $derived(
-		mobileImagePath || config.media_type === 'video'
-			? getHeroMobileImageUrl(mobileImagePath, config.desktop_url)
+		config.mobile_media_type === 'image'
+			? getHeroMobileImageUrl(mobileMediaPath, config.desktop_url)
 			: ''
 	);
 
@@ -37,7 +43,19 @@
 </script>
 
 <section class="relative w-full h-[500px] overflow-hidden">
-	{#if mobileImageUrl}
+	{#if config.mobile_media_type === 'video' && mobileVideoUrl}
+		<video
+			autoplay
+			loop
+			muted
+			playsinline
+			preload="auto"
+			class="absolute inset-0 w-full h-full object-cover md:hidden"
+		>
+			<source src={mobileVideoUrl} type="video/mp4" />
+			Tu navegador no soporta el elemento de video.
+		</video>
+	{:else if mobileImageUrl}
 		<img
 			src={mobileImageUrl}
 			alt={config.title}

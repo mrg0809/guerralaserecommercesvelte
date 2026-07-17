@@ -43,7 +43,8 @@ export const PUT: RequestHandler = async ({ request }) => {
 		const settings: HeroBannerSettings = {
 			media_type: payload?.media_type === 'image' ? 'image' : 'video',
 			desktop_url: String(payload?.desktop_url || '').trim(),
-			mobile_image_url: String(payload?.mobile_image_url || '').trim(),
+			mobile_media_type: payload?.mobile_media_type === 'video' ? 'video' : 'image',
+			mobile_url: String(payload?.mobile_url || payload?.mobile_image_url || '').trim(),
 			title: String(payload?.title || '').trim(),
 			subtitle: String(payload?.subtitle || '').trim()
 		};

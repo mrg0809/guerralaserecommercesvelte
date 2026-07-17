@@ -3,7 +3,7 @@
 	import { supabase } from '$lib/supabaseClient';
 	import { getImageKitUrl, getProductImageUrl } from '$lib/storage';
 	import type { HeroBannerSettings } from '$lib/heroBanner';
-	import { DEFAULT_HERO_BANNER } from '$lib/heroBanner';
+	import { DEFAULT_HERO_BANNER, MOBILE_VIDEO_MAX_BYTES } from '$lib/heroBanner';
 
 	let loading = $state(true);
 	let saving = $state(false);
@@ -16,6 +16,8 @@
 	let mobilePreview = $state('');
 	let selectedDesktopFile: File | null = $state(null);
 	let selectedMobileFile: File | null = $state(null);
+
+	let mobilePreviewIsVideo = $state(false);
 
 	async function getSessionToken(): Promise<string | null> {
 		const {
@@ -63,16 +65,10 @@
 	}
 
 	function updatePreviews() {
-		desktopPreview =
-			heroBanner.media_type === 'video'
-				? heroBanner.desktop_url
-					? getImageKitUrl(heroBanner.desktop_url)
-					: ''
-				: heroBanner.desktop_url
-					? getImageKitUrl(heroBanner.desktop_url)
-					: '';
+		desktopPreview = heroBanner.desktop_url ? getImageKitUrl(heroBanner.desktop_url) : '';
 
-		mobilePreview = heroBanner.mobile_image_url ? getImageKitUrl(heroBanner.mobile_image_url) : '';
+		mobilePreviewIsVideo = heroBanner.mobile_media_type === 'video';
+		mobilePreview = heroBanner.mobile_url ? getImageKitUrl(heroBanner.mobile_url) : '';
 	}
 
 	function handleDesktopFileSelect(event: Event) {
@@ -111,24 +107,47 @@
 		desktopPreview = URL.createObjectURL(file);
 	}
 
+	function resetMobileFileInput() {
+		selectedMobileFile = null;
+		const fileInput = document.getElementById('hero-mobile-file') as HTMLInputElement;
+		if (fileInput) fileInput.value = '';
+		updatePreviews();
+	}
+
 	function handleMobileFileSelect(event: Event) {
 		const input = event.target as HTMLInputElement;
 		if (!input.files?.[0]) return;
 
 		const file = input.files[0];
-		const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
-		if (!validTypes.includes(file.type)) {
-			alert('Selecciona una imagen válida (JPG, PNG o WEBP)');
-			input.value = '';
-			return;
-		}
-		if (file.size > 8 * 1024 * 1024) {
-			alert('La imagen no debe superar los 8MB');
-			input.value = '';
-			return;
+		const isVideo = heroBanner.mobile_media_type === 'video';
+
+		if (isVideo) {
+			if (!file.type.startsWith('video/')) {
+				alert('Selecciona un archivo de video (MP4 recomendado)');
+				input.value = '';
+				return;
+			}
+			if (file.size > MOBILE_VIDEO_MAX_BYTES) {
+				alert('El video móvil no debe superar los 8MB. Usa un clip corto y comprimido.');
+				input.value = '';
+				return;
+			}
+		} else {
+			const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+			if (!validTypes.includes(file.type)) {
+				alert('Selecciona una imagen válida (JPG, PNG o WEBP)');
+				input.value = '';
+				return;
+			}
+			if (file.size > 8 * 1024 * 1024) {
+				alert('La imagen no debe superar los 8MB');
+				input.value = '';
+				return;
+			}
 		}
 
 		selectedMobileFile = file;
+		mobilePreviewIsVideo = isVideo;
 		mobilePreview = URL.createObjectURL(file);
 	}
 
@@ -193,9 +212,11 @@
 			}
 
 			if (selectedMobileFile) {
-				const uploadedUrl = await uploadFile(selectedMobileFile, 'hero-mobile');
+				const prefix =
+					heroBanner.mobile_media_type === 'video' ? 'hero-mobile-video' : 'hero-mobile-image';
+				const uploadedUrl = await uploadFile(selectedMobileFile, prefix);
 				if (!uploadedUrl) return;
-				heroBanner.mobile_image_url = uploadedUrl;
+				heroBanner.mobile_url = uploadedUrl;
 				selectedMobileFile = null;
 			}
 
@@ -253,8 +274,8 @@
 		<div class="bg-white rounded-lg shadow-md p-6">
 			<h2 class="text-xl font-bold mb-3">Banner de inicio</h2>
 			<p class="text-sm text-gray-600 mb-4">
-				Configura el banner principal de la página de inicio. En móvil siempre se muestra una imagen
-				optimizada (nunca el video) para mejorar la velocidad de carga.
+				Configura el banner principal de la página de inicio. En móvil puedes usar una imagen optimizada
+				(recomendado para velocidad) o un video ligero y corto.
 			</p>
 
 			<div class="space-y-4" class:opacity-50={loading || saving} class:pointer-events-none={loading || saving}>
@@ -264,7 +285,7 @@
 						bind:value={heroBanner.media_type}
 						class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
 					>
-						<option value="video">Video (escritorio) + imagen (móvil)</option>
+						<option value="video">Video en escritorio + media en móvil</option>
 						<option value="image">Imagen en todos los dispositivos</option>
 					</select>
 				</div>
@@ -297,29 +318,57 @@
 				</div>
 
 				<div>
+					<label class="block text-sm font-medium text-gray-700 mb-1">Tipo de media móvil</label>
+					<select
+						bind:value={heroBanner.mobile_media_type}
+						onchange={resetMobileFileInput}
+						class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+					>
+						<option value="image">Imagen optimizada (recomendado)</option>
+						<option value="video">Video ligero (máx. 8MB)</option>
+					</select>
+				</div>
+
+				<div>
 					<label class="block text-sm font-medium text-gray-700 mb-1">
-						Imagen para móvil
+						{heroBanner.mobile_media_type === 'video' ? 'Video para móvil' : 'Imagen para móvil'}
 						{#if heroBanner.media_type === 'video'}
 							<span class="text-red-600">*</span>
 						{/if}
 					</label>
 					<p class="text-xs text-gray-500 mb-2">
-						Esta imagen se usa en pantallas pequeñas y es el elemento LCP en móvil.
+						{#if heroBanner.mobile_media_type === 'video'}
+							Sube un clip corto comprimido (idealmente menor a 2MB) para no afectar la carga en móvil.
+						{:else}
+							Esta imagen se usa en pantallas pequeñas y suele ser el elemento LCP en móvil.
+						{/if}
 					</p>
 					<input
 						id="hero-mobile-file"
 						type="file"
-						accept="image/jpeg,image/png,image/webp"
+						accept={heroBanner.mobile_media_type === 'video'
+							? 'video/mp4,video/*'
+							: 'image/jpeg,image/png,image/webp'}
 						onchange={handleMobileFileSelect}
 						class="w-full text-sm"
 					/>
 					{#if mobilePreview}
 						<div class="mt-2 rounded-lg overflow-hidden border max-h-48">
-							<img src={mobilePreview} alt="Preview móvil" class="w-full max-h-48 object-cover" />
+							{#if mobilePreviewIsVideo}
+								<video
+									src={mobilePreview}
+									class="w-full max-h-48 object-cover"
+									muted
+									playsinline
+									controls
+								></video>
+							{:else}
+								<img src={mobilePreview} alt="Preview móvil" class="w-full max-h-48 object-cover" />
+							{/if}
 						</div>
 					{/if}
 					{#if uploadingMobile}
-						<p class="text-sm text-blue-600 mt-1">Subiendo imagen móvil...</p>
+						<p class="text-sm text-blue-600 mt-1">Subiendo media móvil...</p>
 					{/if}
 				</div>
 

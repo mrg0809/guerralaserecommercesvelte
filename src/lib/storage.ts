@@ -119,6 +119,11 @@ export function getHeroDesktopMediaUrl(path: string, mediaType: 'video' | 'image
 	return ikUrl;
 }
 
+/** URL de video móvil del hero (sin transformaciones de imagen) */
+export function getHeroMobileVideoUrl(path: string): string {
+	return getImageKitUrl(path);
+}
+
 /** URL de imagen móvil del hero optimizada para LCP */
 export function getHeroMobileImageUrl(path: string, desktopVideoPath?: string): string {
 	if (path) {
