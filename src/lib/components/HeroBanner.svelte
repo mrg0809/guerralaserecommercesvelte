@@ -10,9 +10,10 @@
 
 	interface Props {
 		config: HeroBannerSettings;
+		lcpImageUrl?: string;
 	}
 
-	let { config }: Props = $props();
+	let { config, lcpImageUrl: lcpImageUrlProp }: Props = $props();
 
 	type Viewport = 'mobile' | 'desktop';
 	let viewport = $state<Viewport>('mobile');
@@ -25,7 +26,7 @@
 		config.mobile_url || (config.media_type === 'image' ? config.desktop_url : '')
 	);
 
-	const lcpImageUrl = $derived(getHeroLcpImageUrl(config));
+	const lcpImageUrl = $derived(lcpImageUrlProp || getHeroLcpImageUrl(config));
 
 	const mobileVideoUrl = $derived(
 		config.mobile_media_type === 'video' && mobileMediaPath
@@ -87,8 +88,11 @@
 				alt={bannerAlt}
 				class="absolute inset-0 w-full h-full object-cover"
 				loading="eager"
-				width="480"
-				height="300"
+				fetchpriority="high"
+				decoding="sync"
+				width="412"
+				height="260"
+				sizes="100vw"
 			/>
 		{/if}
 		{#if showMobileVideo && mobileVideoUrl}

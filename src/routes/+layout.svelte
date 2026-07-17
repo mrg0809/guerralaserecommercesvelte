@@ -17,9 +17,6 @@
 	import type { Category } from '$lib/types';
 	import '../app.css';
 	
-	// Inicializar Vercel Analytics
-	injectAnalytics();
-
 	let { children } = $props();
 
 	let cartItemCount = $state(0);
@@ -53,12 +50,18 @@ page.subscribe(($page) => {
 			isStandaloneApp = true;
 		}
 
+		const deferNonCritical = (fn: () => void) => {
+			if ('requestIdleCallback' in window) {
+				requestIdleCallback(fn, { timeout: 5000 });
+			} else {
+				window.addEventListener('load', fn, { once: true });
+			}
+		};
+
+		deferNonCritical(() => injectAnalytics());
+
 		const loadGa = () => loadGoogleAnalytics();
-		if ('requestIdleCallback' in window) {
-			requestIdleCallback(loadGa, { timeout: 3000 });
-		} else {
-			window.addEventListener('load', loadGa, { once: true });
-		}
+		deferNonCritical(loadGa);
 
 		// Inicializar store de usuario si hay sesión
 		const {
@@ -66,19 +69,24 @@ page.subscribe(($page) => {
 		} = await supabase.auth.getSession();
 		
 		if (session?.user) {
-			await userStore.init();
+			deferNonCritical(() => {
+				void userStore.init();
+			});
 		}
 		
-		// Load categories for navigation
-		const { data: cats } = await supabase
-			.from('categories')
-			.select('id, name, slug, parent_id, display_order, is_active')
-			.eq('is_active', true)
-			.order('display_order');
+		deferNonCritical(() => {
+			void (async () => {
+				const { data: cats } = await supabase
+					.from('categories')
+					.select('id, name, slug, parent_id, display_order, is_active')
+					.eq('is_active', true)
+					.order('display_order');
 
-		if (cats) {
-			categories = cats;
-		}
+				if (cats) {
+					categories = cats;
+				}
+			})();
+		});
 		
 		// Escuchar cambios de autenticación
 		supabase.auth.onAuthStateChange(async (event, session) => {
@@ -332,18 +340,22 @@ page.subscribe(($page) => {
 		const submenu = menuItem.querySelector(':scope > .js-submenu') as HTMLElement | null;
 		if (!submenu) return;
 
-		menuItem.classList.remove('open-left');
-
-		const viewportPadding = 8;
-		const initialRect = submenu.getBoundingClientRect();
-		if (initialRect.right > window.innerWidth - viewportPadding) {
-			menuItem.classList.add('open-left');
-		}
-
-		const adjustedRect = submenu.getBoundingClientRect();
-		if (adjustedRect.left < viewportPadding && menuItem.classList.contains('open-left')) {
+		requestAnimationFrame(() => {
 			menuItem.classList.remove('open-left');
-		}
+
+			const viewportPadding = 8;
+			const initialRect = submenu.getBoundingClientRect();
+			if (initialRect.right > window.innerWidth - viewportPadding) {
+				menuItem.classList.add('open-left');
+			}
+
+			requestAnimationFrame(() => {
+				const adjustedRect = submenu.getBoundingClientRect();
+				if (adjustedRect.left < viewportPadding && menuItem.classList.contains('open-left')) {
+					menuItem.classList.remove('open-left');
+				}
+			});
+		});
 	}
 </script>
 
