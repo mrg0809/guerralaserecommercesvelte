@@ -104,11 +104,18 @@ export function getImageKitUrlWithTransform(
 
 export const IMAGEKIT_TRANSFORMS = {
 	heroMobile: 'tr=w-800,h-500,fo-auto,q-80,f-auto',
+	heroMobileVideo: 'tr=w-480,q-60',
 	heroDesktopImage: 'tr=w-1920,h-500,fo-auto,q-80,f-auto',
 	promotion: 'tr=w-400,q-75,f-auto',
 	category: 'tr=w-500,h-384,fo-auto,q-75,f-auto',
-	featuredProduct: 'tr=w-600,h-512,fo-auto,q-80,f-auto'
+	featuredProduct: 'tr=w-600,h-512,fo-auto,q-80,f-auto',
+	logo: 'tr=w-200,q-80,f-auto'
 } as const;
+
+/** Logo del sitio optimizado vía ImageKit */
+export function getSiteLogoUrl(): string {
+	return `${IMAGEKIT_BASE_URL}/logorectangular.png?${IMAGEKIT_TRANSFORMS.logo}`;
+}
 
 /** URL de video o imagen desktop del hero vía ImageKit (sin transform en videos) */
 export function getHeroDesktopMediaUrl(path: string, mediaType: 'video' | 'image'): string {
@@ -119,9 +126,16 @@ export function getHeroDesktopMediaUrl(path: string, mediaType: 'video' | 'image
 	return ikUrl;
 }
 
-/** URL de video móvil del hero (sin transformaciones de imagen) */
+/** URL de video móvil del hero comprimido para móvil */
 export function getHeroMobileVideoUrl(path: string): string {
-	return getImageKitUrl(path);
+	return getImageKitUrlWithTransform(path, IMAGEKIT_TRANSFORMS.heroMobileVideo);
+}
+
+/** Poster/thumbnail del video móvil para LCP */
+export function getHeroMobileVideoPosterUrl(path: string): string {
+	const videoUrl = getImageKitUrl(path);
+	if (!videoUrl.includes('ik.imagekit.io')) return '';
+	return getImageKitUrlWithTransform(`${videoUrl}/ik-thumbnail.jpg`, IMAGEKIT_TRANSFORMS.heroMobile);
 }
 
 /** URL de imagen móvil del hero optimizada para LCP */

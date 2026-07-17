@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { formatPrice, getDisplayPrice } from '$lib/utils';
-	import { getImageKitUrlWithTransform, IMAGEKIT_TRANSFORMS } from '$lib/storage';
+	import { getImageKitUrlWithTransform, IMAGEKIT_TRANSFORMS, getSiteLogoUrl } from '$lib/storage';
 	import HeroBanner from '$lib/components/HeroBanner.svelte';
 	import VideoEmbedFacade from '$lib/components/VideoEmbedFacade.svelte';
 	import type { Product, Category, ProductMedia, Promotion, TestimonialVideo } from '$lib/types';
@@ -141,6 +141,9 @@
 									src={getImageKitUrlWithTransform(promotion.image_url, IMAGEKIT_TRANSFORMS.promotion)}
 									alt={promotion.title}
 									class="w-full h-full object-contain"
+									loading={index === 0 ? 'eager' : 'lazy'}
+									fetchpriority={index === 0 ? 'high' : undefined}
+									decoding="async"
 								/>
 							</a>
 						{:else}
@@ -149,6 +152,9 @@
 									src={getImageKitUrlWithTransform(promotion.image_url, IMAGEKIT_TRANSFORMS.promotion)}
 									alt={promotion.title}
 									class="w-full h-full object-contain"
+									loading={index === 0 ? 'eager' : 'lazy'}
+									fetchpriority={index === 0 ? 'high' : undefined}
+									decoding="async"
 								/>
 							</div>
 						{/if}
@@ -360,9 +366,9 @@
 						{#each testimonialVideos as video, index}
 							<button
 								onclick={() => goToVideo(index)}
-								class="transition-all duration-300 {index === currentVideoIndex 
-									? 'w-12 h-3 bg-blue-600' 
-									: 'w-3 h-3 bg-gray-300 hover:bg-blue-400'} rounded-full"
+								class="h-3 w-3 rounded-full origin-center transition-transform duration-300 will-change-transform {index === currentVideoIndex
+									? 'scale-x-[4] bg-blue-600'
+									: 'scale-x-100 bg-gray-300 hover:bg-blue-400'}"
 								aria-label="Ir al video {index + 1}"
 							></button>
 						{/each}
