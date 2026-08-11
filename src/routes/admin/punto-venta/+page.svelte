@@ -332,16 +332,10 @@
 	}
 
 	function addToCart(c: CandidateItem) {
-		// Permitir agregar aunque stock sea 0? Mejor bloquear para evitar ventas inválidas.
-		if (c.stockAvailable <= 0) {
-			alert('Este artículo no tiene inventario disponible.');
-			return;
-		}
-
+		// Permitir venta aunque no haya existencia (el stock puede quedar negativo).
 		const existingByKey = cartItems.find((it) => it.productId === c.productId && it.variantId === c.variantId);
 		if (existingByKey) {
-			const nextQty = Math.min(existingByKey.quantity + 1, c.stockAvailable);
-			existingByKey.quantity = nextQty;
+			existingByKey.quantity = existingByKey.quantity + 1;
 			cartItems = [...cartItems];
 			return;
 		}
@@ -371,11 +365,7 @@
 
 	function updateQty(lineId: string, value: string) {
 		const qty = Math.max(1, Math.floor(Number(value) || 1));
-		cartItems = cartItems.map((it) => {
-			if (it.lineId !== lineId) return it;
-			const nextQty = Math.min(qty, it.stockAvailable);
-			return { ...it, quantity: nextQty };
-		});
+		cartItems = cartItems.map((it) => (it.lineId === lineId ? { ...it, quantity: qty } : it));
 	}
 
 	function updateUnitPrice(lineId: string, value: string) {
@@ -895,8 +885,8 @@
 										onclick={() => addToCart(c)}
 									>
 										<div class="font-medium text-gray-900 text-sm">{candidateDisplayName(c)}</div>
-										<div class="text-xs text-gray-500 mt-1">
-											{c.sku ? `SKU: ${c.sku} - ` : ''}Stock: {c.stockAvailable}
+										<div class="text-xs mt-1 {c.stockAvailable <= 0 ? 'text-amber-600' : 'text-gray-500'}">
+											{c.sku ? `SKU: ${c.sku} - ` : ''}Stock: {c.stockAvailable}{c.stockAvailable <= 0 ? ' (sin existencia)' : ''}
 										</div>
 										<div class="text-xs text-gray-700 mt-1">Precio: {formatMoney(c.unitPrice)}</div>
 									</button>
@@ -937,7 +927,9 @@
 														{#if it.sku}
 															<div class="text-xs text-gray-500 mt-1">SKU: {it.sku}</div>
 														{/if}
-														<div class="text-xs text-gray-500 mt-1">Stock: {it.stockAvailable}</div>
+														<div class="text-xs mt-1 {it.stockAvailable <= 0 || it.quantity > it.stockAvailable ? 'text-amber-600' : 'text-gray-500'}">
+															Stock: {it.stockAvailable}{#if it.stockAvailable <= 0 || it.quantity > it.stockAvailable} (venta sin existencia){/if}
+														</div>
 													</td>
 													<td class="px-3 py-2 align-top">
 														<input

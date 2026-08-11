@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { supabase } from '$lib/supabaseClient';
 	import { formatPrice, generateSlug, getDisplayPrice, getDisplayStock } from '$lib/utils';
-	import { getProductImageUrl } from '$lib/storage';
+	import { getProductImageUrl, getImageKitUrl } from '$lib/storage';
 	import type { Product, Category, ProductSpecification, Discount, Tag, ProductMedia, ProductVariant } from '$lib/types';
 
 	let products: Product[] = $state([]);
@@ -75,6 +75,7 @@
 		color_hex?: string;
 		grosor?: string;
 		tamano?: string;
+		image_url?: string;
 	};
 
 	let variants: VariantForm[] = $state([]);
@@ -87,7 +88,8 @@
 		color: '',
 		color_hex: '',
 		grosor: '',
-		tamano: ''
+		tamano: '',
+		image_url: ''
 	});
 
 	let duplicateColorFrom = $state('');
@@ -95,11 +97,32 @@
 	let duplicateColorHex = $state('');
 	let duplicateColorSkuCode = $state('');
 	const duplicateStockDefault = 1;
+	let uploadingColorImage = $state<string | null>(null);
 
 	let duplicateColorOptions = $derived.by(() => {
 		const colors = variants.map((v) => (v.color ?? '').trim()).filter(Boolean);
 		return [...new Set(colors)].sort((a, b) =>
 			a.localeCompare(b, 'es', { sensitivity: 'base' })
+		);
+	});
+
+	/** Colores únicos con la foto asignada (acrílico). */
+	let acrylicColorImageRows = $derived.by(() => {
+		const map = new Map<string, { name: string; image_url: string }>();
+		for (const v of variants) {
+			const name = (v.color ?? '').trim();
+			if (!name) continue;
+			const key = name.toLowerCase();
+			const existing = map.get(key);
+			const url = (v.image_url ?? '').trim();
+			if (!existing) {
+				map.set(key, { name, image_url: url });
+			} else if (!existing.image_url && url) {
+				existing.image_url = url;
+			}
+		}
+		return [...map.values()].sort((a, b) =>
+			a.name.localeCompare(b.name, 'es', { sensitivity: 'base' })
 		);
 	});
 
@@ -188,6 +211,7 @@
 				sku: newSku,
 				color: newName,
 				color_hex: newHex || v.color_hex || '',
+				image_url: v.image_url || '',
 				stock_quantity: duplicateStockDefault
 			};
 		});
@@ -734,7 +758,8 @@
 			color: '',
 			color_hex: '',
 			grosor: '',
-			tamano: ''
+			tamano: '',
+			image_url: ''
 		};
 		newTagName = '';
 		selectedFiles = [];
@@ -802,7 +827,8 @@
 			color: '',
 			color_hex: '',
 			grosor: '',
-			tamano: ''
+			tamano: '',
+			image_url: ''
 		};
 		newTagName = '';
 		selectedFiles = [];
@@ -912,7 +938,8 @@
 				color: attributes.color || '',
 				color_hex: attributes.color_hex || '',
 				grosor: attributes.grosor || '',
-				tamano: attributes.tamano || ''
+				tamano: attributes.tamano || '',
+				image_url: attributes.image_url || ''
 			};
 			});
 		}
@@ -1078,7 +1105,16 @@
 			return;
 		}
 
-		variants = [...variants, { ...newVariant }];
+		const toAdd: VariantForm = { ...newVariant };
+		const colorKey = (toAdd.color ?? '').trim().toLowerCase();
+		if (colorKey && !toAdd.image_url?.trim()) {
+			const withImage = variants.find(
+				(v) => (v.color ?? '').trim().toLowerCase() === colorKey && (v.image_url ?? '').trim()
+			);
+			if (withImage?.image_url) toAdd.image_url = withImage.image_url;
+		}
+
+		variants = [...variants, toAdd];
 		newVariant = {
 			name: '',
 			sku: '',
@@ -1088,7 +1124,8 @@
 			color: '',
 			color_hex: '',
 			grosor: '',
-			tamano: ''
+			tamano: '',
+			image_url: ''
 		};
 	}
 
@@ -1513,7 +1550,8 @@
 			color: v.color?.trim() || undefined,
 			color_hex: v.color_hex?.trim() || undefined,
 			grosor: v.grosor?.trim() || undefined,
-			tamano: v.tamano?.trim() || undefined
+			tamano: v.tamano?.trim() || undefined,
+			image_url: v.image_url?.trim() || undefined
 		};
 		const hasAttributes = Object.values(attributes).some(Boolean);
 		return {
@@ -1525,6 +1563,57 @@
 			is_active: v.is_active,
 			attributes: hasAttributes ? attributes : null
 		};
+	}
+
+	function setColorImageUrl(colorName: string, url: string) {
+		const target = colorName.trim().toLowerCase();
+		if (!target) return;
+		variants = variants.map((v) =>
+			(v.color ?? '').trim().toLowerCase() === target ? { ...v, image_url: url } : v
+		);
+	}
+
+	function clearColorImage(colorName: string) {
+		setColorImageUrl(colorName, '');
+	}
+
+	async function uploadColorImage(colorName: string, file: File) {
+		const color = colorName.trim();
+		if (!color) return;
+
+		const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+		if (!validTypes.includes(file.type)) {
+			alert('Selecciona una imagen válida (JPG, PNG o WEBP)');
+			return;
+		}
+		if (file.size > 8 * 1024 * 1024) {
+			alert('La imagen no debe superar los 8MB');
+			return;
+		}
+
+		uploadingColorImage = color;
+		try {
+			const timestamp = Date.now();
+			const randomStr = Math.random().toString(36).substring(7);
+			const fileExt = file.name.split('.').pop() || 'jpg';
+			const slugPart = (formData.slug || editingProduct?.slug || 'product').replace(/[^a-z0-9-_]/gi, '-');
+			const colorSlug = color.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-_]/gi, '');
+			const fileName = `products/${slugPart}-color-${colorSlug}-${timestamp}-${randomStr}.${fileExt}`;
+
+			const { error } = await supabase.storage.from('product-images').upload(fileName, file, {
+				cacheControl: '3600',
+				upsert: false
+			});
+			if (error) throw error;
+
+			const publicUrl = getProductImageUrl(fileName);
+			setColorImageUrl(color, publicUrl);
+		} catch (error: any) {
+			console.error('Error uploading color image:', error);
+			alert('Error al subir imagen del color: ' + (error?.message || 'desconocido'));
+		} finally {
+			uploadingColorImage = null;
+		}
 	}
 
 	async function saveProductVariants(productId: string) {
@@ -2720,6 +2809,70 @@
 											Duplicar medidas del color
 										</button>
 									</div>
+								</div>
+
+								<div class="bg-white border border-gray-200 rounded-lg p-4 space-y-4">
+									<h4 class="font-semibold text-sm text-gray-800">Fotos por color</h4>
+									<p class="text-xs text-gray-500">
+										Asigna una foto a cada color. En la tienda, al elegir el color se muestra esa imagen.
+										Guarda el producto para persistir los cambios.
+									</p>
+
+									{#if acrylicColorImageRows.length === 0}
+										<p class="text-sm text-gray-500">Agrega variantes con color para poder asignar fotos.</p>
+									{:else}
+										<div class="space-y-3">
+											{#each acrylicColorImageRows as colorRow (colorRow.name)}
+												<div class="flex flex-wrap items-center gap-4 border rounded-lg p-3 bg-gray-50">
+													<div class="w-16 h-16 rounded-lg overflow-hidden border bg-white flex items-center justify-center shrink-0">
+														{#if colorRow.image_url}
+															<img
+																src={getImageKitUrl(colorRow.image_url)}
+																alt={colorRow.name}
+																class="w-full h-full object-contain"
+															/>
+														{:else}
+															<span class="text-[10px] text-gray-400 text-center px-1">Sin foto</span>
+														{/if}
+													</div>
+													<div class="min-w-[120px] flex-1">
+														<div class="font-medium text-gray-900 capitalize">{colorRow.name}</div>
+														<p class="text-xs text-gray-500 mt-0.5">
+															{colorRow.image_url ? 'Foto asignada' : 'Usa la imagen principal del producto'}
+														</p>
+													</div>
+													<div class="flex flex-wrap gap-2">
+														<label
+															class="cursor-pointer bg-blue-600 text-white px-3 py-1.5 rounded-lg text-sm hover:bg-blue-700 {uploadingColorImage === colorRow.name ? 'opacity-60 pointer-events-none' : ''}"
+														>
+															{uploadingColorImage === colorRow.name ? 'Subiendo...' : colorRow.image_url ? 'Cambiar' : 'Subir foto'}
+															<input
+																type="file"
+																accept="image/jpeg,image/png,image/webp"
+																class="hidden"
+																disabled={uploadingColorImage === colorRow.name}
+																onchange={(e) => {
+																	const input = e.currentTarget;
+																	const file = input.files?.[0];
+																	if (file) void uploadColorImage(colorRow.name, file);
+																	input.value = '';
+																}}
+															/>
+														</label>
+														{#if colorRow.image_url}
+															<button
+																type="button"
+																class="px-3 py-1.5 rounded-lg text-sm border border-gray-300 text-gray-700 hover:bg-gray-100"
+																onclick={() => clearColorImage(colorRow.name)}
+															>
+																Quitar
+															</button>
+														{/if}
+													</div>
+												</div>
+											{/each}
+										</div>
+									{/if}
 								</div>
 							{/if}
 

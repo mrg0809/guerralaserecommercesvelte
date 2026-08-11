@@ -80,11 +80,26 @@
 		return true;
 	}
 
+	function getProductPrimaryImageUrl() {
+		const baseUrl =
+			data.product?.media?.find((m: any) => m.is_primary)?.url || data.product?.media?.[0]?.url || '';
+		return baseUrl ? getImageKitUrl(baseUrl) : '';
+	}
+
+	function applyImageForSelectedColor(colorName: string) {
+		if (!isAcrylic) return;
+		const option = colorOptions.find((c) => c.name === colorName);
+		if (option?.imageUrl) {
+			selectedImage = getImageKitUrl(option.imageUrl);
+			return;
+		}
+		const fallback = getProductPrimaryImageUrl();
+		if (fallback) selectedImage = fallback;
+	}
+
 	$effect(() => {
 		if (!selectedImage && data.product?.media?.length > 0) {
-			const baseUrl =
-				data.product.media.find((m: any) => m.is_primary)?.url || data.product.media[0]?.url || '';
-			selectedImage = getImageKitUrl(baseUrl);
+			selectedImage = getProductPrimaryImageUrl();
 		}
 	});
 
@@ -111,16 +126,25 @@
 	);
 
 	let colorOptions = $derived.by(() => {
-		const colors = new Map<string, { name: string; hex: string }>();
+		const colors = new Map<string, { name: string; hex: string; imageUrl: string }>();
 		for (const variant of availableVariants) {
 			const colorName = getVariantAttribute(variant, 'color');
 			if (!colorName) continue;
 			const colorHex = getVariantAttribute(variant, 'color_hex');
+			const imageUrl = getVariantAttribute(variant, 'image_url');
 			if (!colors.has(colorName)) {
-				colors.set(colorName, { name: colorName, hex: colorHex });
+				colors.set(colorName, { name: colorName, hex: colorHex, imageUrl });
+			} else if (!colors.get(colorName)!.imageUrl && imageUrl) {
+				colors.get(colorName)!.imageUrl = imageUrl;
 			}
 		}
 		return Array.from(colors.values());
+	});
+
+	$effect(() => {
+		if (!isAcrylic) return;
+		if (!selectedColor) return;
+		applyImageForSelectedColor(selectedColor);
 	});
 
 	let grosorOptions = $derived.by(() => {

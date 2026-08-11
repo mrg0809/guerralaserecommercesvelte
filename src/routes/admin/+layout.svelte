@@ -263,6 +263,13 @@
 				},
 				{
 					kind: 'link',
+					href: '/admin/configuracion/whatsapp',
+					label: 'WhatsApp',
+					icon: '💬',
+					permission: 'manage_settings'
+				},
+				{
+					kind: 'link',
 					href: '/admin/tipo-cambio',
 					label: 'Tipo de Cambio',
 					icon: '💵',
