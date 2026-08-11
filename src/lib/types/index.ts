@@ -34,6 +34,14 @@ export interface TestimonialVideo {
 	updated_at: string | null;
 }
 
+export interface AcrylicCut {
+	width_cm: number;
+	height_cm: number;
+	size_id: string | 'custom';
+	unit_price: number;
+	label: string;
+}
+
 export interface CartItem {
 	product: Product & { shipping_types?: { name: string } | null };
 	shipping_type_name?: string;
@@ -41,6 +49,8 @@ export interface CartItem {
 	bundle?: ProductBundle;
 	quantity: number;
 	media?: ProductMedia[];
+	/** Corte de acrílico calculado (precio unitario en acrylicCut.unit_price) */
+	acrylicCut?: AcrylicCut;
 }
 
 export interface BundleWithItems extends ProductBundle {

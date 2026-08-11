@@ -13,6 +13,10 @@ export type ProductVariantAttributes = {
 	tamano?: string
 	/** Foto del color (misma URL en todas las variantes de ese color) */
 	image_url?: string
+	/** Variante = lámina completa 122×244 (modelo nuevo acrílico) */
+	is_sheet?: boolean
+	sheet_width_cm?: number
+	sheet_height_cm?: number
 }
 
 export type Database = {

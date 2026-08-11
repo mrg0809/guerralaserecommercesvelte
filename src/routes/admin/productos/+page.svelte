@@ -3,6 +3,11 @@
 	import { supabase } from '$lib/supabaseClient';
 	import { formatPrice, generateSlug, getDisplayPrice, getDisplayStock } from '$lib/utils';
 	import { getProductImageUrl, getImageKitUrl } from '$lib/storage';
+	import {
+		isFullSheetSize,
+		normalizeGrosor,
+		parseSizeFromLabel
+	} from '$lib/acrylicPricing';
 	import type { Product, Category, ProductSpecification, Discount, Tag, ProductMedia, ProductVariant } from '$lib/types';
 
 	let products: Product[] = $state([]);
@@ -98,6 +103,7 @@
 	let duplicateColorSkuCode = $state('');
 	const duplicateStockDefault = 1;
 	let uploadingColorImage = $state<string | null>(null);
+	let consolidatingAcrylic = $state(false);
 
 	let duplicateColorOptions = $derived.by(() => {
 		const colors = variants.map((v) => (v.color ?? '').trim()).filter(Boolean);
@@ -1546,14 +1552,23 @@
 	}
 
 	function buildVariantPayload(v: VariantForm, productId: string) {
-		const attributes = {
+		const attributes: Record<string, any> = {
 			color: v.color?.trim() || undefined,
 			color_hex: v.color_hex?.trim() || undefined,
 			grosor: v.grosor?.trim() || undefined,
-			tamano: v.tamano?.trim() || undefined,
 			image_url: v.image_url?.trim() || undefined
 		};
-		const hasAttributes = Object.values(attributes).some(Boolean);
+
+		if (isAcrylicSheetProduct) {
+			attributes.is_sheet = true;
+			attributes.sheet_width_cm = 122;
+			attributes.sheet_height_cm = 244;
+			// Modelo lámina: no persistir tamaño de corte
+		} else {
+			attributes.tamano = v.tamano?.trim() || undefined;
+		}
+
+		const hasAttributes = Object.values(attributes).some((val) => val !== undefined && val !== '');
 		return {
 			product_id: productId,
 			name: v.name,
@@ -1563,6 +1578,180 @@
 			is_active: v.is_active,
 			attributes: hasAttributes ? attributes : null
 		};
+	}
+
+	/** Consolida variantes corte → una lámina por color+grosor */
+	async function consolidateAcrylicToSheets() {
+		if (!editingProduct?.id || !isAcrylicSheetProduct) return;
+		const ok = confirm(
+			'Esto agrupará las variantes por color+grosor en láminas 122×244, desactivará los cortes y eliminará los no usados en pedidos. ¿Continuar?'
+		);
+		if (!ok) return;
+
+		consolidatingAcrylic = true;
+		try {
+			const productId = editingProduct.id;
+			const { data: existing, error } = await supabase
+				.from('product_variants')
+				.select('*')
+				.eq('product_id', productId);
+			if (error) throw error;
+
+			type Group = {
+				color: string;
+				grosor: string;
+				color_hex: string;
+				image_url: string;
+				sheetPrice: number;
+				sheetStock: number;
+				sheetSku: string;
+				sheetName: string;
+				keepId?: string;
+				cutIds: string[];
+			};
+
+			const groups = new Map<string, Group>();
+
+			for (const row of existing || []) {
+				const attrs =
+					row.attributes && typeof row.attributes === 'object'
+						? (row.attributes as Record<string, any>)
+						: {};
+				const color = String(attrs.color || '').trim() || 'Sin color';
+				const grosor = normalizeGrosor(String(attrs.grosor || '')) || 'sin-grosor';
+				const key = `${color.toLowerCase()}|${grosor.toLowerCase()}`;
+				const parsed = parseSizeFromLabel(String(attrs.tamano || row.name || ''));
+				const isSheet =
+					attrs.is_sheet === true ||
+					(parsed ? isFullSheetSize(parsed.width, parsed.height) : false);
+
+				let g = groups.get(key);
+				if (!g) {
+					g = {
+						color,
+						grosor,
+						color_hex: String(attrs.color_hex || ''),
+						image_url: String(attrs.image_url || ''),
+						sheetPrice: 0,
+						sheetStock: 0,
+						sheetSku: '',
+						sheetName: '',
+						cutIds: []
+					};
+					groups.set(key, g);
+				}
+				if (!g.color_hex && attrs.color_hex) g.color_hex = String(attrs.color_hex);
+				if (!g.image_url && attrs.image_url) g.image_url = String(attrs.image_url);
+
+				if (isSheet) {
+					g.sheetPrice = Math.max(g.sheetPrice, Number(row.price) || 0);
+					g.sheetStock = Number(row.stock_quantity) || g.sheetStock;
+					g.sheetSku = row.sku || g.sheetSku;
+					g.sheetName = row.name || g.sheetName;
+					g.keepId = row.id;
+				} else {
+					g.sheetPrice = Math.max(g.sheetPrice, Number(row.price) || 0);
+					g.cutIds.push(row.id);
+				}
+			}
+
+			// Referencias en pedidos/cotizaciones
+			const allCutIds = [...groups.values()].flatMap((g) => g.cutIds);
+			let referenced = new Set<string>();
+			if (allCutIds.length) {
+				const { data: oi } = await supabase
+					.from('order_items')
+					.select('variant_id')
+					.in('variant_id', allCutIds);
+				const { data: qi } = await supabase
+					.from('quotation_items')
+					.select('variant_id')
+					.in('variant_id', allCutIds);
+				for (const r of [...(oi || []), ...(qi || [])]) {
+					if (r.variant_id) referenced.add(r.variant_id);
+				}
+			}
+
+			let created = 0;
+			let deactivated = 0;
+			let deleted = 0;
+
+			for (const g of groups.values()) {
+				const colorCode = g.color
+					.slice(0, 3)
+					.toUpperCase()
+					.normalize('NFD')
+					.replace(/[\u0300-\u036f]/g, '')
+					.replace(/[^A-Z0-9]/g, '');
+				const grosorCode = g.grosor.replace(/[^0-9.]/g, '') || 'X';
+				const sku =
+					g.sheetSku ||
+					`MAT-ACR-${colorCode || 'COL'}-${grosorCode}MM-122244`.replace(/MM-MM/, 'MM');
+				const name = g.sheetName || `${g.color} ${g.grosor} lámina 122x244`;
+				const payload = {
+					product_id: productId,
+					name,
+					sku,
+					price: g.sheetPrice || 0,
+					stock_quantity: g.sheetStock || 0,
+					is_active: true,
+					attributes: {
+						color: g.color,
+						color_hex: g.color_hex || undefined,
+						grosor: g.grosor,
+						image_url: g.image_url || undefined,
+						is_sheet: true,
+						sheet_width_cm: 122,
+						sheet_height_cm: 244
+					}
+				};
+
+				if (g.keepId) {
+					const { error: upErr } = await supabase
+						.from('product_variants')
+						.update(payload)
+						.eq('id', g.keepId);
+					if (upErr) throw upErr;
+				} else {
+					const { error: inErr } = await supabase.from('product_variants').insert(payload);
+					if (inErr) throw inErr;
+					created++;
+				}
+
+				const toDelete: string[] = [];
+				const toDeactivate: string[] = [];
+				for (const id of g.cutIds) {
+					if (referenced.has(id)) toDeactivate.push(id);
+					else toDelete.push(id);
+				}
+				if (toDeactivate.length) {
+					const { error: dErr } = await supabase
+						.from('product_variants')
+						.update({ is_active: false })
+						.in('id', toDeactivate);
+					if (dErr) throw dErr;
+					deactivated += toDeactivate.length;
+				}
+				if (toDelete.length) {
+					const { error: delErr } = await supabase
+						.from('product_variants')
+						.delete()
+						.in('id', toDelete);
+					if (delErr) throw delErr;
+					deleted += toDelete.length;
+				}
+			}
+
+			await loadProductVariants(productId);
+			alert(
+				`Consolidación lista.\nLáminas/grupos: ${groups.size}\nNuevas: ${created}\nCortes desactivados: ${deactivated}\nCortes eliminados: ${deleted}\n\nRevisa precios y stock de cada lámina, luego guarda si editas.`
+			);
+		} catch (e: any) {
+			console.error(e);
+			alert('Error al consolidar: ' + (e?.message || 'desconocido'));
+		} finally {
+			consolidatingAcrylic = false;
+		}
 	}
 
 	function setColorImageUrl(colorName: string, url: string) {
@@ -2610,19 +2799,37 @@
 					{:else if activeTab === 'variants'}
 						<!-- PESTAÑA VARIANTES -->
 						<div class="space-y-4">
-							<div class="flex items-center justify-between">
+							<div class="flex items-center justify-between gap-4 flex-wrap">
 								<div>
-									<h3 class="text-lg font-semibold">Variantes del Producto</h3>
-									<p class="text-sm text-gray-600">Ej: tallas, colores, potencias</p>
+									<h3 class="text-lg font-semibold">
+										{isAcrylicSheetProduct ? 'Láminas 122×244' : 'Variantes del Producto'}
+									</h3>
+									<p class="text-sm text-gray-600">
+										{#if isAcrylicSheetProduct}
+											Solo color + grosor + precio/stock de lámina completa. Tamaños de corte en
+											<a href="/admin/configuracion/acrylic" class="text-blue-600 underline">Configuración → Acrílico</a>.
+										{:else}
+											Ej: tallas, colores, potencias
+										{/if}
+									</p>
 									{#if editingProduct && !isAcrylicSheetProduct}
 										<p class="text-xs text-amber-700 mt-1 max-w-xl">
-											Las columnas Color / HEX / Grosor / Tamaño y la herramienta <strong>Duplicar color</strong> solo
-											aparecen en láminas de acrílico: agrega la especificación
+											Para acrílico: agrega
 											<code class="bg-amber-100 px-1 rounded">tipo_producto</code> =
-											<code class="bg-amber-100 px-1 rounded">acrilico</code> en la pestaña Especificaciones.
+											<code class="bg-amber-100 px-1 rounded">acrilico</code> en Especificaciones.
 										</p>
 									{/if}
 								</div>
+								{#if isAcrylicSheetProduct && editingProduct}
+									<button
+										type="button"
+										class="text-sm px-3 py-2 rounded-lg border border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100 disabled:opacity-60"
+										disabled={consolidatingAcrylic}
+										onclick={consolidateAcrylicToSheets}
+									>
+										{consolidatingAcrylic ? 'Consolidando...' : 'Consolidar a láminas'}
+									</button>
+								{/if}
 							</div>
 
 							{#if variants.length > 0}
@@ -2636,10 +2843,13 @@
 													<th class="px-4 py-3 text-left">Color</th>
 													<th class="px-4 py-3 text-left">Color HEX</th>
 													<th class="px-4 py-3 text-left">Grosor</th>
-													<th class="px-4 py-3 text-left">Tamaño</th>
 												{/if}
-												<th class="px-4 py-3 text-left">Precio</th>
-												<th class="px-4 py-3 text-left">Stock</th>
+												<th class="px-4 py-3 text-left"
+													>{isAcrylicSheetProduct ? 'Precio lámina' : 'Precio'}</th
+												>
+												<th class="px-4 py-3 text-left"
+													>{isAcrylicSheetProduct ? 'Stock láminas' : 'Stock'}</th
+												>
 												<th class="px-4 py-3 text-left">Activo</th>
 												<th class="px-4 py-3"></th>
 											</tr>
@@ -2684,15 +2894,7 @@
 															<input
 																type="text"
 																bind:value={variant.grosor}
-																placeholder="Ej: 3mm"
-																class="w-full px-2 py-1 border border-gray-300 rounded"
-															/>
-														</td>
-														<td class="px-4 py-3">
-															<input
-																type="text"
-																bind:value={variant.tamano}
-																placeholder="Ej: 60x90"
+																placeholder="3mm"
 																class="w-full px-2 py-1 border border-gray-300 rounded"
 															/>
 														</td>
@@ -2806,7 +3008,7 @@
 											onclick={duplicateColorVariants}
 											class="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition font-medium"
 										>
-											Duplicar medidas del color
+											Duplicar láminas del color
 										</button>
 									</div>
 								</div>
@@ -2903,7 +3105,7 @@
 								</div>
 
 									{#if isAcrylicSheetProduct}
-										<div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+										<div class="grid grid-cols-1 md:grid-cols-3 gap-3">
 											<div>
 												<label class="block text-sm font-semibold mb-1" for="new-variant-color">Color</label>
 												<input
@@ -2934,22 +3136,14 @@
 													class="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
 												/>
 											</div>
-											<div>
-												<label class="block text-sm font-semibold mb-1" for="new-variant-tamano">Tamaño</label>
-												<input
-													id="new-variant-tamano"
-													type="text"
-													bind:value={newVariant.tamano}
-													placeholder="Ej: 60x90"
-													class="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-												/>
-											</div>
 										</div>
 									{/if}
 
 								<div class="grid grid-cols-1 md:grid-cols-3 gap-3">
 									<div>
-										<label class="block text-sm font-semibold mb-1" for="new-variant-price">Precio</label>
+										<label class="block text-sm font-semibold mb-1" for="new-variant-price"
+											>{isAcrylicSheetProduct ? 'Precio lámina 122×244' : 'Precio'}</label
+										>
 										<input
 											id="new-variant-price"
 											type="number"
@@ -2961,7 +3155,9 @@
 										/>
 									</div>
 									<div>
-										<label class="block text-sm font-semibold mb-1" for="new-variant-stock">Stock</label>
+										<label class="block text-sm font-semibold mb-1" for="new-variant-stock"
+											>{isAcrylicSheetProduct ? 'Stock láminas' : 'Stock'}</label
+										>
 										<input
 											id="new-variant-stock"
 											type="number"
