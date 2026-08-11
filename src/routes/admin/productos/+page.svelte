@@ -3,11 +3,6 @@
 	import { supabase } from '$lib/supabaseClient';
 	import { formatPrice, generateSlug, getDisplayPrice, getDisplayStock } from '$lib/utils';
 	import { getProductImageUrl, getImageKitUrl } from '$lib/storage';
-	import {
-		isFullSheetSize,
-		normalizeGrosor,
-		parseSizeFromLabel
-	} from '$lib/acrylicPricing';
 	import type { Product, Category, ProductSpecification, Discount, Tag, ProductMedia, ProductVariant } from '$lib/types';
 
 	let products: Product[] = $state([]);
@@ -1580,7 +1575,7 @@
 		};
 	}
 
-	/** Consolida variantes corte → una lámina por color+grosor */
+	/** Consolida variantes corte → una lámina por color+grosor (vía API service role) */
 	async function consolidateAcrylicToSheets() {
 		if (!editingProduct?.id || !isAcrylicSheetProduct) return;
 		const ok = confirm(
@@ -1590,175 +1585,46 @@
 
 		consolidatingAcrylic = true;
 		try {
-			const productId = editingProduct.id;
-			const { data: existing, error } = await supabase
-				.from('product_variants')
-				.select('*')
-				.eq('product_id', productId);
-			if (error) throw error;
+			const {
+				data: { session }
+			} = await supabase.auth.getSession();
+			if (!session?.access_token) throw new Error('No autorizado');
 
-			type Group = {
-				color: string;
-				grosor: string;
-				color_hex: string;
-				image_url: string;
-				sheetPrice: number;
-				sheetStock: number;
-				sheetSku: string;
-				sheetName: string;
-				keepId?: string;
-				cutIds: string[];
-			};
-
-			const groups = new Map<string, Group>();
-
-			for (const row of existing || []) {
-				const attrs =
-					row.attributes && typeof row.attributes === 'object'
-						? (row.attributes as Record<string, any>)
-						: {};
-				const color = String(attrs.color || '').trim() || 'Sin color';
-				const grosor = normalizeGrosor(String(attrs.grosor || '')) || 'sin-grosor';
-				const key = `${color.toLowerCase()}|${grosor.toLowerCase()}`;
-				const parsed = parseSizeFromLabel(String(attrs.tamano || row.name || ''));
-				const isSheet =
-					attrs.is_sheet === true ||
-					(parsed ? isFullSheetSize(parsed.width, parsed.height) : false);
-
-				let g = groups.get(key);
-				if (!g) {
-					g = {
-						color,
-						grosor,
-						color_hex: String(attrs.color_hex || ''),
-						image_url: String(attrs.image_url || ''),
-						sheetPrice: 0,
-						sheetStock: 0,
-						sheetSku: '',
-						sheetName: '',
-						cutIds: []
-					};
-					groups.set(key, g);
-				}
-				if (!g.color_hex && attrs.color_hex) g.color_hex = String(attrs.color_hex);
-				if (!g.image_url && attrs.image_url) g.image_url = String(attrs.image_url);
-
-				if (isSheet) {
-					g.sheetPrice = Math.max(g.sheetPrice, Number(row.price) || 0);
-					g.sheetStock = Number(row.stock_quantity) || g.sheetStock;
-					g.sheetSku = row.sku || g.sheetSku;
-					g.sheetName = row.name || g.sheetName;
-					g.keepId = row.id;
-				} else {
-					g.sheetPrice = Math.max(g.sheetPrice, Number(row.price) || 0);
-					g.cutIds.push(row.id);
-				}
+			const res = await fetch('/api/admin/products/consolidate-acrylic', {
+				method: 'POST',
+				headers: {
+					Authorization: `Bearer ${session.access_token}`,
+					'Content-Type': 'application/json'
+				},
+				body: JSON.stringify({ productId: editingProduct.id })
+			});
+			const data = await res.json();
+			if (!res.ok || !data.success) {
+				throw new Error(data.error || 'Error al consolidar');
 			}
 
-			// Referencias en pedidos / cotizaciones / POS / bundles
-			const allCutIds = [...groups.values()].flatMap((g) => g.cutIds);
-			let referenced = new Set<string>();
-			if (allCutIds.length) {
-				const [oi, qi, pos, bi] = await Promise.all([
-					supabase.from('order_items').select('variant_id').in('variant_id', allCutIds),
-					supabase.from('quotation_items').select('variant_id').in('variant_id', allCutIds),
-					(supabase as any).from('pos_sale_items').select('variant_id').in('variant_id', allCutIds),
-					supabase.from('bundle_items').select('variant_id').in('variant_id', allCutIds)
-				]);
-				for (const r of [
-					...(oi.data || []),
-					...(qi.data || []),
-					...(pos.data || []),
-					...(bi.data || [])
-				]) {
-					if (r.variant_id) referenced.add(r.variant_id);
-				}
-			}
-
-			let created = 0;
-			let deactivated = 0;
-			let deleted = 0;
-
-			for (const g of groups.values()) {
-				const colorCode = g.color
-					.slice(0, 3)
-					.toUpperCase()
-					.normalize('NFD')
-					.replace(/[\u0300-\u036f]/g, '')
-					.replace(/[^A-Z0-9]/g, '');
-				const grosorCode = g.grosor.replace(/[^0-9.]/g, '') || 'X';
-				const sku =
-					g.sheetSku ||
-					`MAT-ACR-${colorCode || 'COL'}-${grosorCode}MM-122244`.replace(/MM-MM/, 'MM');
-				const name = g.sheetName || `${g.color} ${g.grosor} lámina 122x244`;
-				const payload = {
-					product_id: productId,
-					name,
-					sku,
-					price: g.sheetPrice || 0,
-					stock_quantity: g.sheetStock || 0,
-					is_active: true,
-					attributes: {
-						color: g.color,
-						color_hex: g.color_hex || undefined,
-						grosor: g.grosor,
-						image_url: g.image_url || undefined,
-						is_sheet: true,
-						sheet_width_cm: 122,
-						sheet_height_cm: 244
-					}
+			const rows = data.variants || [];
+			variants = rows.map((v: any) => {
+				const attributes =
+					v?.attributes && typeof v.attributes === 'object' ? (v.attributes as Record<string, any>) : {};
+				return {
+					id: v.id,
+					name: v.name || '',
+					sku: v.sku || '',
+					price: v.price || 0,
+					stock_quantity: v.stock_quantity || 0,
+					is_active: v.is_active ?? true,
+					color: attributes.color || '',
+					color_hex: attributes.color_hex || '',
+					grosor: attributes.grosor || '',
+					tamano: attributes.tamano || '',
+					image_url: attributes.image_url || ''
 				};
+			});
 
-				if (g.keepId) {
-					const { error: upErr } = await supabase
-						.from('product_variants')
-						.update(payload)
-						.eq('id', g.keepId);
-					if (upErr) throw upErr;
-				} else {
-					const { error: inErr } = await supabase.from('product_variants').insert(payload);
-					if (inErr) throw inErr;
-					created++;
-				}
-
-				const toDelete: string[] = [];
-				const toDeactivate: string[] = [];
-				for (const id of g.cutIds) {
-					if (referenced.has(id)) toDeactivate.push(id);
-					else toDelete.push(id);
-				}
-				if (toDeactivate.length) {
-					const { error: dErr } = await supabase
-						.from('product_variants')
-						.update({ is_active: false })
-						.in('id', toDeactivate);
-					if (dErr) throw dErr;
-					deactivated += toDeactivate.length;
-				}
-				if (toDelete.length) {
-					const { error: delErr } = await supabase
-						.from('product_variants')
-						.delete()
-						.in('id', toDelete);
-					if (delErr) {
-						// Si alguna FK no contemplada bloquea el delete, desactivar en su lugar
-						const { error: fallbackErr } = await supabase
-							.from('product_variants')
-							.update({ is_active: false })
-							.in('id', toDelete);
-						if (fallbackErr) throw delErr;
-						deactivated += toDelete.length;
-					} else {
-						deleted += toDelete.length;
-					}
-				}
-			}
-
-			await loadProductVariants(productId);
-			// Ocultar cortes desactivados del editor (siguen en BD por historial POS/pedidos)
-			variants = variants.filter((v) => v.is_active !== false);
+			const s = data.summary || {};
 			alert(
-				`Consolidación lista.\nLáminas/grupos: ${groups.size}\nNuevas: ${created}\nCortes desactivados: ${deactivated}\nCortes eliminados: ${deleted}\n\nRevisa precios y stock de cada lámina, luego guarda si editas.`
+				`Consolidación lista.\nLáminas/grupos: ${s.groups ?? 0}\nNuevas: ${s.created ?? 0}\nCortes desactivados: ${s.deactivated ?? 0}\nCortes eliminados: ${s.deleted ?? 0}\n\nRevisa precios y stock de cada lámina, luego guarda si editas.`
 			);
 		} catch (e: any) {
 			console.error(e);
