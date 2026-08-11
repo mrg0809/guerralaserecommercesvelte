@@ -26,6 +26,7 @@ En cada variante de `product_variants`, usa el campo `attributes` con estas clav
 - `color_hex`: código HEX (ej. `#22c55e`) **opcional pero recomendado**
 - `grosor`: grosor (ej. `3mm`, `5mm` o `3`)
 - `tamano`: tamaño (ej. `60x90 cm` o `120x240 cm`)
+- `image_url`: URL de la foto del color (**opcional**; misma URL en todas las variantes de ese color)
 
 Ejemplo de `attributes`:
 
@@ -34,9 +35,17 @@ Ejemplo de `attributes`:
   "color": "verde",
   "color_hex": "#22c55e",
   "grosor": "3mm",
-  "tamano": "60x90 cm"
+  "tamano": "60x90 cm",
+  "image_url": "https://.../products/...-color-verde-....jpg"
 }
 ```
+
+## Foto por color
+- La foto es **por color**, no por cada combinación grosor/tamaño.
+- En Admin → Productos → pestaña Variantes (producto acrílico), usa el bloque **Fotos por color** para subir o quitar la imagen de cada color.
+- Al guardar el producto, `image_url` se escribe en todas las variantes de ese color.
+- En la tienda, al seleccionar un color se muestra esa foto como imagen principal. Si el color no tiene foto, se usa la imagen principal del producto (`product_media`).
+- Al **Duplicar color**, se copia también la `image_url` del color origen (puedes cambiarla después en Fotos por color).
 
 ## Orden y disponibilidad
 - El orden es **ascendente** (numérico si detecta números en el texto).
@@ -44,7 +53,7 @@ Ejemplo de `attributes`:
 
 ## Flujo esperado
 1. Entra al producto “Lámina de Acrílico X”.
-2. Selecciona color (muestra solo colores disponibles).
+2. Selecciona color (muestra solo colores disponibles; la imagen principal cambia si hay foto del color).
 3. Selecciona grosor (filtrado por color).
 4. Selecciona tamaño (filtrado por color + grosor).
 5. Se elige automáticamente la variante que coincide con la combinación.
@@ -58,7 +67,8 @@ Ejemplo de `attributes`:
 1. Crear producto: “Lámina de Acrílico [Acabado]”.
 2. Agregar especificación: `tipo_producto = acrilico` (pestaña Especificaciones).
 3. Crear variantes con `attributes` completos (pestaña Variantes).
-4. Verificar que el stock y `is_active` estén correctos.
+4. (Opcional) Asignar fotos por color en **Fotos por color**.
+5. Verificar que el stock y `is_active` estén correctos.
 
 ## Cómo cargar color/grosor/tamaño desde la UI
 1. En la pestaña “Variantes”, agrega o edita una variante.
@@ -67,9 +77,11 @@ Ejemplo de `attributes`:
   - Color HEX (ej. #22c55e)
   - Grosor (ej. 3mm)
   - Tamaño (ej. 60x90 cm)
-3. Guarda el producto.
+3. En **Fotos por color**, sube la imagen de cada color.
+4. Guarda el producto.
 
 ## Archivos relevantes
 - Lógica de detección: [src/routes/productos/[slug]/+page.svelte](src/routes/productos/[slug]/+page.svelte)
 - Carga de especificaciones: [src/routes/productos/[slug]/+page.ts](src/routes/productos/[slug]/+page.ts)
+- Admin variantes / fotos por color: [src/routes/admin/productos/+page.svelte](src/routes/admin/productos/+page.svelte)
 - Tipos: [src/lib/types/database.types.ts](src/lib/types/database.types.ts)

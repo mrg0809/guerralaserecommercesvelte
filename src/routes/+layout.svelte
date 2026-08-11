@@ -15,12 +15,23 @@
 	import { isNativeCapacitorApp } from '$lib/mobile/appShell';
 	import { getSiteLogoUrl, SITE_LOGO_FALLBACK_URL } from '$lib/storage';
 	import type { Category } from '$lib/types';
+	import {
+		DEFAULT_WHATSAPP_PHONE,
+		resolveWhatsAppPhoneFromPath,
+		type WhatsappRoutingConfig
+	} from '$lib/whatsappRouting';
 	import '../app.css';
 	
 	let { children } = $props();
 
 	let cartItemCount = $state(0);
 	let categories: Category[] = $state([]);
+	let whatsappRouting = $state<WhatsappRoutingConfig>({
+		defaultPhone: DEFAULT_WHATSAPP_PHONE,
+		categoryPhoneMap: {}
+	});
+	let productCategoryId = $state<string | null>(null);
+	let resolvedWhatsAppPhone = $state(DEFAULT_WHATSAPP_PHONE);
 	let showSearch = $state(false);
 	let searchQuery = $state('');
 let searchResults = $state<any[]>([]);
@@ -76,14 +87,20 @@ page.subscribe(($page) => {
 		
 		deferNonCritical(() => {
 			void (async () => {
-				const { data: cats } = await supabase
-					.from('categories')
-					.select('id, name, slug, parent_id, display_order, is_active')
-					.eq('is_active', true)
-					.order('display_order');
+				const [{ data: cats }, routingRes] = await Promise.all([
+					supabase
+						.from('categories')
+						.select('id, name, slug, parent_id, display_order, is_active')
+						.eq('is_active', true)
+						.order('display_order'),
+					fetch('/api/whatsapp-routing').then((r) => r.json()).catch(() => null)
+				]);
 
 				if (cats) {
 					categories = cats;
+				}
+				if (routingRes?.success && routingRes.routing) {
+					whatsappRouting = routingRes.routing;
 				}
 			})();
 		});
@@ -252,6 +269,45 @@ page.subscribe(($page) => {
 		tryAutoOpenWAOnProduct();
 	});
 
+	$effect(() => {
+		const path = currentPath;
+		const cats = categories;
+		const routing = whatsappRouting;
+
+		let cancelled = false;
+
+		async function refreshProductCategory() {
+			const productMatch = path.match(/^\/productos\/([^/?#]+)/);
+			if (!productMatch?.[1]) {
+				productCategoryId = null;
+				resolvedWhatsAppPhone = resolveWhatsAppPhoneFromPath(path, cats, routing, null);
+				return;
+			}
+
+			const slug = productMatch[1];
+			const { data } = await supabase
+				.from('products')
+				.select('category_id')
+				.eq('slug', slug)
+				.maybeSingle();
+
+			if (cancelled) return;
+			productCategoryId = data?.category_id ?? null;
+			resolvedWhatsAppPhone = resolveWhatsAppPhoneFromPath(
+				path,
+				cats,
+				routing,
+				productCategoryId
+			);
+		}
+
+		void refreshProductCategory();
+
+		return () => {
+			cancelled = true;
+		};
+	});
+
 	function revealWhatsAppButton() {
 		showWAButton = true;
 		void playWhatsAppSound();
@@ -264,7 +320,7 @@ page.subscribe(($page) => {
 	}
 
 	function sendWhatsApp() {
-		const phone = '523334758653'; // +52 33 3475 8653
+		const phone = resolvedWhatsAppPhone || DEFAULT_WHATSAPP_PHONE;
 		const base = waMessage.trim() || 'Hola 👋 me interesa más información.';
 		let context = '';
 		if (typeof window !== 'undefined') {
@@ -837,7 +893,7 @@ page.subscribe(($page) => {
 							</svg>
 						</a>
 						<a
-							href="https://wa.me/523334758653"
+							href={`https://wa.me/${resolvedWhatsAppPhone || DEFAULT_WHATSAPP_PHONE}`}
 							target="_blank"
 							rel="noopener noreferrer"
 							class="text-gray-400 hover:text-green-500 transition-colors"

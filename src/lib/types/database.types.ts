@@ -11,6 +11,8 @@ export type ProductVariantAttributes = {
 	color_hex?: string
 	grosor?: string | number
 	tamano?: string
+	/** Foto del color (misma URL en todas las variantes de ese color) */
+	image_url?: string
 }
 
 export type Database = {
