@@ -31,6 +31,7 @@ export const DEFAULT_ACRYLIC_PRICING: AcrylicPricingConfig = {
 	sheet_width_cm: 122,
 	sheet_height_cm: 244,
 	sizes: [
+		{ id: '122x244', width: 122, height: 244, factor: 1, enabled: true },
 		{ id: '122x122', width: 122, height: 122, factor: 1.15, enabled: true },
 		{ id: '120x90', width: 120, height: 90, factor: 1.3, enabled: true },
 		{ id: '120x60', width: 120, height: 60, factor: 1.3, enabled: true },
@@ -146,7 +147,23 @@ export function parseAcrylicPricing(raw: unknown): AcrylicPricingConfig {
 					enabled: s?.enabled !== false
 				}))
 				.filter((s: AcrylicSizeConfig) => s.width > 0 && s.height > 0)
-		: base.sizes;
+		: [...base.sizes];
+
+	// Asegurar que la lámina completa siempre esté disponible para comprar
+	const hasFullSheet = sizes.some(
+		(s) =>
+			(s.width === sheet_width_cm && s.height === sheet_height_cm) ||
+			(s.width === sheet_height_cm && s.height === sheet_width_cm)
+	);
+	if (!hasFullSheet) {
+		sizes.unshift({
+			id: `${sheet_width_cm}x${sheet_height_cm}`,
+			width: sheet_width_cm,
+			height: sheet_height_cm,
+			factor: 1,
+			enabled: true
+		});
+	}
 
 	const rulesRaw = parsed.custom?.factor_rules;
 	const factor_rules: AcrylicCustomFactorRule[] = Array.isArray(rulesRaw)

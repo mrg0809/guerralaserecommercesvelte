@@ -38,7 +38,8 @@ Botón **Consolidar a láminas**: agrupa variantes viejas (cortes) por color+gro
 ## Configuración → Acrílico
 Factores globales:
 
-- Tamaños fijos (122×122, 120×90, …) con factor
+- Tamaños fijos (122×244 lámina completa, 122×122, 120×90, …) con factor
+  - Lámina completa usa factor **1** (precio = precio de la lámina)
 - Corte personalizado: reglas área → factor
 
 Fórmulas:
