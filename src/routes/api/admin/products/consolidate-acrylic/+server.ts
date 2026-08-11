@@ -90,12 +90,14 @@ export const POST: RequestHandler = async ({ request }) => {
 
 			if (isSheet) {
 				g.sheetPrice = Math.max(g.sheetPrice, Number(row.price) || 0);
-				g.sheetStock = Number(row.stock_quantity) || g.sheetStock;
+				g.sheetStock = Math.max(g.sheetStock, Number(row.stock_quantity) || 0);
 				g.sheetSku = row.sku || g.sheetSku;
 				g.sheetName = row.name || g.sheetName;
 				g.keepId = row.id;
 			} else {
 				g.sheetPrice = Math.max(g.sheetPrice, Number(row.price) || 0);
+				// Si no hay stock de lámina, usar el mayor stock de cortes del grupo como referencia
+				g.sheetStock = Math.max(g.sheetStock, Number(row.stock_quantity) || 0);
 				g.cutIds.push(row.id);
 			}
 		}

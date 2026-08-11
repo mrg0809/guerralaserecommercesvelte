@@ -101,6 +101,12 @@
 		return true;
 	}
 
+	/** En acrílico el stock de lámina es manual: se listan láminas activas aunque stock sea 0. */
+	function isAcrylicSheetListable(variant: any) {
+		if (variant?.is_active === false) return false;
+		return isSheetVariant(variant);
+	}
+
 	function getProductPrimaryImageUrl() {
 		const baseUrl =
 			data.product?.media?.find((m: any) => m.is_primary)?.url || data.product?.media?.[0]?.url || '';
@@ -150,12 +156,15 @@
 		}
 	});
 
-	/** Láminas activas con stock (modelo nuevo) o fallback a todas disponibles */
+	/** Láminas activas (modelo nuevo). Stock 0 no oculta colores; el inventario se maneja a mano. */
 	let sheetVariants = $derived.by(() => {
 		if (!isAcrylic) return [];
-		const all = (data.product?.variants || []).filter(isVariantAvailable);
-		const sheets = all.filter(isSheetVariant);
-		return sheets.length > 0 ? sheets : all;
+		const sheets = (data.product?.variants || []).filter(isAcrylicSheetListable);
+		if (sheets.length > 0) return sheets;
+		// Fallback legacy: variantes activas con color (aunque tengan tamaño viejo)
+		return (data.product?.variants || []).filter(
+			(v: any) => v?.is_active !== false && getVariantAttribute(v, 'color')
+		);
 	});
 
 	let colorOptions = $derived.by(() => {
@@ -302,6 +311,12 @@
 		if (selectedBundle) {
 			return selectedBundle.stock_quantity || 0;
 		}
+		// Acrílico: stock de lámina es referencia; no bloquear compra por 0
+		if (isAcrylic && selectedVariant) {
+			const n = Number(selectedVariant.stock_quantity);
+			if (Number.isFinite(n) && n > 0) return n;
+			return 99;
+		}
 		const variantStock = selectedVariant?.stock_quantity;
 		if (typeof variantStock === 'number' && variantStock >= 0) {
 			return variantStock;
@@ -311,6 +326,15 @@
 			return productStock;
 		}
 		return 0;
+	});
+
+	let stockLabel = $derived.by(() => {
+		if (isAcrylic && selectedVariant) {
+			const n = Number(selectedVariant.stock_quantity);
+			if (Number.isFinite(n) && n > 0) return `${n} láminas en inventario`;
+			return 'Disponible';
+		}
+		return stock > 0 ? `${stock} disponibles` : 'Agotado';
 	});
 
 	let whatsappUrl = $derived(
@@ -759,7 +783,7 @@
 					+
 				</button>
 				<span class="ml-4 text-sm text-gray-600">
-					{stock > 0 ? `${stock} disponibles` : 'Agotado'}
+					{stockLabel}
 				</span>
 			</div>
 		</div>
