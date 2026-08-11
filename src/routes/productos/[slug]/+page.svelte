@@ -311,12 +311,7 @@
 		if (selectedBundle) {
 			return selectedBundle.stock_quantity || 0;
 		}
-		// Acrílico: stock de lámina es referencia; no bloquear compra por 0
-		if (isAcrylic && selectedVariant) {
-			const n = Number(selectedVariant.stock_quantity);
-			if (Number.isFinite(n) && n > 0) return n;
-			return 99;
-		}
+		// Web: respetar stock real de la lámina (venta sin stock solo en POS)
 		const variantStock = selectedVariant?.stock_quantity;
 		if (typeof variantStock === 'number' && variantStock >= 0) {
 			return variantStock;
@@ -329,12 +324,16 @@
 	});
 
 	let stockLabel = $derived.by(() => {
-		if (isAcrylic && selectedVariant) {
-			const n = Number(selectedVariant.stock_quantity);
-			if (Number.isFinite(n) && n > 0) return `${n} láminas en inventario`;
-			return 'Disponible';
+		if (isAcrylic) {
+			if (stock > 0) return `${stock} láminas en inventario`;
+			return 'Agotado';
 		}
 		return stock > 0 ? `${stock} disponibles` : 'Agotado';
+	});
+
+	$effect(() => {
+		if (stock > 0 && quantity > stock) quantity = stock;
+		if (stock === 0) quantity = 1;
 	});
 
 	let whatsappUrl = $derived(
@@ -792,10 +791,14 @@
 		<div class="flex flex-col sm:flex-row gap-3">
 			<button
 				onclick={addToCart}
-				disabled={stock === 0}
+				disabled={stock === 0 || (isAcrylic && !selectedVariant)}
 				class="w-full bg-blue-600 text-white px-8 py-4 rounded-lg font-semibold hover:bg-blue-700 transition disabled:bg-gray-400 disabled:cursor-not-allowed"
 			>
-				{addedToCart ? '✓ Agregado al Carrito' : '🛒 Agregar al Carrito'}
+				{addedToCart
+					? '✓ Agregado al Carrito'
+					: stock === 0
+						? 'Agotado'
+						: '🛒 Agregar al Carrito'}
 			</button>
 		</div>
 
