@@ -1,8 +1,17 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { cart } from '$lib/stores/cart';
 	import { formatPrice } from '$lib/utils';
 	import { getImageKitUrl } from '$lib/storage';
 	import FormattedText from '$lib/components/FormattedText.svelte';
+	import {
+		customPrice,
+		DEFAULT_ACRYLIC_PRICING,
+		sizeLabel,
+		sizePrice,
+		validateCustomDimensions,
+		type AcrylicPricingConfig
+	} from '$lib/acrylicPricing';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -14,7 +23,11 @@
 	let shareMessage = $state('');
 	let selectedColor = $state('');
 	let selectedGrosor = $state('');
-	let selectedTamano = $state('');
+	let selectedSizeId = $state('');
+	let customMode = $state(false);
+	let customWidth = $state(60);
+	let customHeight = $state(40);
+	let acrylicConfig = $state<AcrylicPricingConfig>(structuredClone(DEFAULT_ACRYLIC_PRICING));
 
 	const acrylicSpecKey = 'tipo_producto';
 	const acrylicSpecValue = 'acrilico';
@@ -51,6 +64,14 @@
 		return normalizeValue(attributes?.[key]);
 	}
 
+	function isSheetVariant(variant: any) {
+		const attrs = getVariantAttributes(variant);
+		if (attrs.is_sheet === true) return true;
+		// Legacy: sin is_sheet, preferir variantes sin tamaño de corte (solo color/grosor)
+		const tamano = normalizeValue(attrs.tamano);
+		return !tamano;
+	}
+
 	function getColorSwatch(colorName: string, colorHex: string) {
 		if (colorHex) return colorHex;
 		const normalized = colorName.toLowerCase();
@@ -80,6 +101,12 @@
 		return true;
 	}
 
+	/** En acrílico el stock de lámina es manual: se listan láminas activas aunque stock sea 0. */
+	function isAcrylicSheetListable(variant: any) {
+		if (variant?.is_active === false) return false;
+		return isSheetVariant(variant);
+	}
+
 	function getProductPrimaryImageUrl() {
 		const baseUrl =
 			data.product?.media?.find((m: any) => m.is_primary)?.url || data.product?.media?.[0]?.url || '';
@@ -97,13 +124,21 @@
 		if (fallback) selectedImage = fallback;
 	}
 
+	onMount(() => {
+		void fetch('/api/acrylic-pricing')
+			.then((r) => r.json())
+			.then((res) => {
+				if (res?.config) acrylicConfig = res.config;
+			})
+			.catch(() => {});
+	});
+
 	$effect(() => {
 		if (!selectedImage && data.product?.media?.length > 0) {
 			selectedImage = getProductPrimaryImageUrl();
 		}
 	});
 
-	// Derived state
 	let currentUrl = $derived(typeof window !== 'undefined' ? window.location.href : '');
 	let shareText = $derived(data.product.short_description || data.product.name);
 	let isAcrylic = $derived.by(() => {
@@ -121,13 +156,20 @@
 		}
 	});
 
-	let availableVariants = $derived.by(() =>
-		isAcrylic ? (data.product?.variants || []).filter(isVariantAvailable) : []
-	);
+	/** Láminas activas (modelo nuevo). Stock 0 no oculta colores; el inventario se maneja a mano. */
+	let sheetVariants = $derived.by(() => {
+		if (!isAcrylic) return [];
+		const sheets = (data.product?.variants || []).filter(isAcrylicSheetListable);
+		if (sheets.length > 0) return sheets;
+		// Fallback legacy: variantes activas con color (aunque tengan tamaño viejo)
+		return (data.product?.variants || []).filter(
+			(v: any) => v?.is_active !== false && getVariantAttribute(v, 'color')
+		);
+	});
 
 	let colorOptions = $derived.by(() => {
 		const colors = new Map<string, { name: string; hex: string; imageUrl: string }>();
-		for (const variant of availableVariants) {
+		for (const variant of sheetVariants) {
 			const colorName = getVariantAttribute(variant, 'color');
 			if (!colorName) continue;
 			const colorHex = getVariantAttribute(variant, 'color_hex');
@@ -149,8 +191,8 @@
 
 	let grosorOptions = $derived.by(() => {
 		const variants = selectedColor
-			? availableVariants.filter((variant) => getVariantAttribute(variant, 'color') === selectedColor)
-			: availableVariants;
+			? sheetVariants.filter((variant) => getVariantAttribute(variant, 'color') === selectedColor)
+			: sheetVariants;
 		const values = new Set<string>();
 		for (const variant of variants) {
 			const grosor = getVariantAttribute(variant, 'grosor');
@@ -159,23 +201,7 @@
 		return sortByNumeric([...values]);
 	});
 
-	let tamanoOptions = $derived.by(() => {
-		const variants = availableVariants.filter((variant) => {
-			const matchesColor = selectedColor
-				? getVariantAttribute(variant, 'color') === selectedColor
-				: true;
-			const matchesGrosor = selectedGrosor
-				? getVariantAttribute(variant, 'grosor') === selectedGrosor
-				: true;
-			return matchesColor && matchesGrosor;
-		});
-		const values = new Set<string>();
-		for (const variant of variants) {
-			const tamano = getVariantAttribute(variant, 'tamano');
-			if (tamano) values.add(tamano);
-		}
-		return sortByNumeric([...values]);
-	});
+	let enabledSizes = $derived(acrylicConfig.sizes.filter((s) => s.enabled));
 
 	$effect(() => {
 		if (!isAcrylic) return;
@@ -185,15 +211,15 @@
 		if (!selectedGrosor && grosorOptions.length > 0) {
 			selectedGrosor = grosorOptions[0];
 		}
-		if (!selectedTamano && tamanoOptions.length > 0) {
-			selectedTamano = tamanoOptions[0];
+		if (!customMode && !selectedSizeId && enabledSizes.length > 0) {
+			selectedSizeId = enabledSizes[0].id;
 		}
 	});
 
 	$effect(() => {
 		if (!isAcrylic) return;
 		if (!selectedColor) return;
-		const variantsByColor = availableVariants.filter(
+		const variantsByColor = sheetVariants.filter(
 			(variant) => getVariantAttribute(variant, 'color') === selectedColor
 		);
 		const grosorByColor = sortByNumeric(
@@ -202,48 +228,71 @@
 		if (grosorByColor.length > 0 && !grosorByColor.includes(selectedGrosor)) {
 			selectedGrosor = grosorByColor[0];
 		}
-		const variantsByColorGrosor = variantsByColor.filter((variant) =>
-			selectedGrosor ? getVariantAttribute(variant, 'grosor') === selectedGrosor : true
-		);
-		const tamanoByColorGrosor = sortByNumeric(
-			[
-				...new Set(
-					variantsByColorGrosor
-						.map((variant) => getVariantAttribute(variant, 'tamano'))
-						.filter(Boolean)
-				)
-			]
-		);
-		if (tamanoByColorGrosor.length > 0 && !tamanoByColorGrosor.includes(selectedTamano)) {
-			selectedTamano = tamanoByColorGrosor[0];
-		}
 	});
 
 	$effect(() => {
 		if (!isAcrylic) return;
-		const matching = (data.product?.variants || []).find((variant: any) => {
+		const matching = sheetVariants.find((variant: any) => {
 			const matchesColor = selectedColor
 				? getVariantAttribute(variant, 'color') === selectedColor
 				: true;
 			const matchesGrosor = selectedGrosor
 				? getVariantAttribute(variant, 'grosor') === selectedGrosor
 				: true;
-			const matchesTamano = selectedTamano
-				? getVariantAttribute(variant, 'tamano') === selectedTamano
-				: true;
-			return matchesColor && matchesGrosor && matchesTamano;
+			return matchesColor && matchesGrosor;
 		});
 		if (matching && selectedVariant?.id !== matching.id) {
 			setSelectedVariant(matching);
 		}
 	});
+
+	let selectedCutSize = $derived.by(() => {
+		if (customMode) return null;
+		return enabledSizes.find((s) => s.id === selectedSizeId) || enabledSizes[0] || null;
+	});
+
+	let customDimError = $derived.by(() => {
+		if (!customMode) return null;
+		return validateCustomDimensions(Number(customWidth), Number(customHeight), acrylicConfig);
+	});
+
+	let acrylicUnitPrice = $derived.by(() => {
+		const sheetPrice = Number(selectedVariant?.price) || 0;
+		if (customMode) {
+			if (customDimError) return 0;
+			return customPrice(sheetPrice, Number(customWidth), Number(customHeight), acrylicConfig);
+		}
+		const size = selectedCutSize;
+		if (!size) return sheetPrice;
+		return sizePrice(sheetPrice, size.width, size.height, size.factor, acrylicConfig);
+	});
+
+	let acrylicCutLabel = $derived.by(() => {
+		if (customMode) return `Especial ${sizeLabel(Number(customWidth), Number(customHeight))}`;
+		const size = selectedCutSize;
+		if (!size) return '';
+		return sizeLabel(size.width, size.height);
+	});
+
 	let finalPrice = $derived.by(() => {
-		// Si hay un bundle seleccionado, usar el precio del bundle
 		if (selectedBundle) {
 			return selectedBundle.bundle_price;
 		}
 
-		// Si no, calcular el precio normal con descuentos
+		if (isAcrylic) {
+			let price = acrylicUnitPrice;
+			if (data.product.discounts?.length) {
+				for (const discount of data.product.discounts) {
+					if (discount.discount_type === 'percentage') {
+						price = price * (1 - discount.discount_value / 100);
+					} else {
+						price = price - discount.discount_value;
+					}
+				}
+			}
+			return Math.max(0, Math.round(price));
+		}
+
 		if (!data.product.discounts || data.product.discounts.length === 0) {
 			return selectedVariant?.price || data.product.base_price || 0;
 		}
@@ -259,25 +308,32 @@
 	});
 
 	let stock = $derived.by(() => {
-		// Si hay un bundle seleccionado, usar el stock del bundle
 		if (selectedBundle) {
 			return selectedBundle.stock_quantity || 0;
 		}
-
-		// Intentar obtener stock de la variante seleccionada
+		// Web: respetar stock real de la lámina (venta sin stock solo en POS)
 		const variantStock = selectedVariant?.stock_quantity;
 		if (typeof variantStock === 'number' && variantStock >= 0) {
 			return variantStock;
 		}
-
-		// Si no, obtener del producto
 		const productStock = data.product?.stock_quantity;
 		if (typeof productStock === 'number' && productStock >= 0) {
 			return productStock;
 		}
-
-		// Por defecto retornar 0
 		return 0;
+	});
+
+	let stockLabel = $derived.by(() => {
+		if (isAcrylic) {
+			if (stock > 0) return `${stock} láminas en inventario`;
+			return 'Agotado';
+		}
+		return stock > 0 ? `${stock} disponibles` : 'Agotado';
+	});
+
+	$effect(() => {
+		if (stock > 0 && quantity > stock) quantity = stock;
+		if (stock === 0) quantity = 1;
 	});
 
 	let whatsappUrl = $derived(
@@ -295,34 +351,62 @@
 	function setSelectedVariant(variant: any) {
 		selectedVariant = variant;
 		if (variant) {
-			selectedBundle = null; // Deseleccionar bundles cuando se selecciona una variante
+			selectedBundle = null;
 		}
 	}
 
 	function selectBundle(bundle: any) {
 		selectedBundle = bundle;
-		selectedVariant = null; // Deseleccionar variantes cuando se selecciona un bundle
+		selectedVariant = null;
 	}
 
 	function selectVariant(variant: any) {
 		setSelectedVariant(variant);
 		const color = getVariantAttribute(variant, 'color');
 		const grosor = getVariantAttribute(variant, 'grosor');
-		const tamano = getVariantAttribute(variant, 'tamano');
 		if (color) selectedColor = color;
 		if (grosor) selectedGrosor = grosor;
-		if (tamano) selectedTamano = tamano;
+	}
+
+	function chooseSize(sizeId: string) {
+		customMode = false;
+		selectedSizeId = sizeId;
+	}
+
+	function chooseCustom() {
+		customMode = true;
+		selectedSizeId = 'custom';
 	}
 
 	async function addToCart() {
 		if (stock === 0) return;
+		if (isAcrylic && customMode && customDimError) {
+			alert(customDimError);
+			return;
+		}
+
+		const acrylicCut = isAcrylic
+			? {
+					width_cm: customMode
+						? Number(customWidth)
+						: selectedCutSize?.width || 0,
+					height_cm: customMode
+						? Number(customHeight)
+						: selectedCutSize?.height || 0,
+					size_id: customMode ? ('custom' as const) : selectedCutSize?.id || 'custom',
+					unit_price: finalPrice,
+					label: acrylicCutLabel
+				}
+			: undefined;
+
 		cart.addItem({
 			product: data.product,
 			shipping_type_name: data.product.shipping_types?.name,
 			variant: selectedVariant || undefined,
 			bundle: selectedBundle || undefined,
 			quantity,
-			media: data.product.media
+			media: data.product.media,
+			acrylicCut
 		});
 		addedToCart = true;
 		setTimeout(() => (addedToCart = false), 2000);
@@ -533,21 +617,65 @@
 							</div>
 						{/if}
 
-						{#if tamanoOptions.length > 0}
+						{#if enabledSizes.length > 0 || acrylicConfig.custom.enabled}
 							<div class="mt-5">
 								<p class="block text-sm font-semibold mb-2">Tamaño:</p>
 								<div class="flex flex-wrap gap-2">
-									{#each tamanoOptions as tamano}
+									{#each enabledSizes as size}
 										<button
-											onclick={() => (selectedTamano = tamano)}
-											class="px-4 py-2 rounded-lg border-2 transition {selectedTamano === tamano
+											type="button"
+											onclick={() => chooseSize(size.id)}
+											class="px-4 py-2 rounded-lg border-2 transition {!customMode && selectedSizeId === size.id
 												? 'border-blue-600 bg-blue-50'
 												: 'border-gray-300 hover:border-blue-400'}"
 										>
-											{tamano}
+											{size.width}x{size.height}
 										</button>
 									{/each}
+									{#if acrylicConfig.custom.enabled}
+										<button
+											type="button"
+											onclick={chooseCustom}
+											class="px-4 py-2 rounded-lg border-2 transition {customMode
+												? 'border-blue-600 bg-blue-50'
+												: 'border-gray-300 hover:border-blue-400'}"
+										>
+											Medida especial
+										</button>
+									{/if}
 								</div>
+								{#if customMode}
+									<div class="mt-3 grid grid-cols-2 gap-3 max-w-sm">
+										<div>
+											<label class="block text-xs text-gray-600 mb-1" for="custom-w">Ancho (cm)</label>
+											<input
+												id="custom-w"
+												type="number"
+												min={acrylicConfig.custom.min_width_cm}
+												max={acrylicConfig.custom.max_width_cm}
+												bind:value={customWidth}
+												class="w-full border rounded-lg px-3 py-2"
+											/>
+										</div>
+										<div>
+											<label class="block text-xs text-gray-600 mb-1" for="custom-h">Alto (cm)</label>
+											<input
+												id="custom-h"
+												type="number"
+												min={acrylicConfig.custom.min_height_cm}
+												max={acrylicConfig.custom.max_height_cm}
+												bind:value={customHeight}
+												class="w-full border rounded-lg px-3 py-2"
+											/>
+										</div>
+									</div>
+									{#if customDimError}
+										<p class="text-sm text-red-600 mt-2">{customDimError}</p>
+									{/if}
+								{/if}
+								{#if acrylicCutLabel}
+									<p class="text-xs text-gray-500 mt-2">Corte: {acrylicCutLabel}</p>
+								{/if}
 							</div>
 						{/if}
 					{:else}
@@ -654,7 +782,7 @@
 					+
 				</button>
 				<span class="ml-4 text-sm text-gray-600">
-					{stock > 0 ? `${stock} disponibles` : 'Agotado'}
+					{stockLabel}
 				</span>
 			</div>
 		</div>
@@ -663,10 +791,14 @@
 		<div class="flex flex-col sm:flex-row gap-3">
 			<button
 				onclick={addToCart}
-				disabled={stock === 0}
+				disabled={stock === 0 || (isAcrylic && !selectedVariant)}
 				class="w-full bg-blue-600 text-white px-8 py-4 rounded-lg font-semibold hover:bg-blue-700 transition disabled:bg-gray-400 disabled:cursor-not-allowed"
 			>
-				{addedToCart ? '✓ Agregado al Carrito' : '🛒 Agregar al Carrito'}
+				{addedToCart
+					? '✓ Agregado al Carrito'
+					: stock === 0
+						? 'Agotado'
+						: '🛒 Agregar al Carrito'}
 			</button>
 		</div>
 

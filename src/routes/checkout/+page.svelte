@@ -60,11 +60,24 @@
 		notes: ''
 	});
 
+	function cartLineUnitPrice(item: any): number {
+		if (item.bundle) return item.bundle.bundle_price;
+		if (item.acrylicCut?.unit_price != null) return item.acrylicCut.unit_price;
+		if (item.variant) return item.variant.price;
+		return item.product.base_price;
+	}
+
+	function cartLineName(item: any): string {
+		const base = item.product.name;
+		if (item.acrylicCut?.label) {
+			const sheet = item.variant?.name ? `${item.variant.name} — ` : '';
+			return `${base} (${sheet}${item.acrylicCut.label})`;
+		}
+		return base;
+	}
+
 	let subtotal = $derived(
-		cartItems.reduce((sum, item) => {
-			const price = item.variant ? item.variant.price : item.product.base_price;
-			return sum + price * item.quantity;
-		}, 0)
+		cartItems.reduce((sum, item) => sum + cartLineUnitPrice(item) * item.quantity, 0)
 	);
 
 	// IVA ya está incluido en los precios
@@ -318,17 +331,22 @@
 			const order = orderData.order;
 
 			// Create order items
-			const orderItems = cartItems.map((item) => ({
-				order_id: order.id,
-				product_id: item.product.id,
-				variant_id: item.variant?.id || null,
-				product_name: item.product.name,
-				variant_name: item.variant?.name || null,
-				quantity: item.quantity,
-				unit_price: item.variant ? item.variant.price : item.product.base_price,
-				total_price:
-					(item.variant ? item.variant.price : item.product.base_price) * item.quantity
-			}));
+			const orderItems = cartItems.map((item) => {
+				const unit = cartLineUnitPrice(item);
+				const variantName = item.acrylicCut
+					? [item.variant?.name, item.acrylicCut.label].filter(Boolean).join(' — ')
+					: item.variant?.name || null;
+				return {
+					order_id: order.id,
+					product_id: item.product.id,
+					variant_id: item.variant?.id || null,
+					product_name: item.product.name,
+					variant_name: variantName,
+					quantity: item.quantity,
+					unit_price: unit,
+					total_price: unit * item.quantity
+				};
+			});
 
 			const itemsResponse = await fetch('/api/orders/items', {
 				method: 'POST',
@@ -413,9 +431,11 @@
 						productId: item.product.id,
 						productName: item.product.name,
 						variantId: item.variant?.id,
-						variantName: item.variant?.name,
+						variantName: item.acrylicCut
+							? [item.variant?.name, item.acrylicCut.label].filter(Boolean).join(' — ')
+							: item.variant?.name,
 						quantity: item.quantity,
-						price: item.variant ? item.variant.price : item.product.base_price
+						price: cartLineUnitPrice(item)
 					})),
 					estimatedSubtotal: subtotal,
 					estimatedTax: 0,
@@ -585,9 +605,9 @@
 					<h3 class="font-semibold mb-3">Resumen de Items</h3>
 					<div class="space-y-2 max-h-40 overflow-y-auto">
 						{#each cartItems as item}
-							{@const price = item.variant ? item.variant.price : item.product.base_price}
+							{@const price = cartLineUnitPrice(item)}
 							<div class="flex justify-between text-sm">
-								<span>{item.product.name} x{item.quantity}</span>
+								<span>{cartLineName(item)} x{item.quantity}</span>
 								<span>{formatPrice(price * item.quantity)}</span>
 							</div>
 						{/each}
@@ -867,11 +887,15 @@
 
 					<div class="space-y-3 mb-4 max-h-64 overflow-y-auto">
 						{#each cartItems as item}
-							{@const price = item.variant ? item.variant.price : item.product.base_price}
+							{@const price = cartLineUnitPrice(item)}
 							<div class="flex justify-between text-sm">
 								<div class="flex-1">
 									<p class="font-semibold">{item.product.name}</p>
-									{#if item.variant}
+									{#if item.acrylicCut}
+										<p class="text-gray-600">
+											{[item.variant?.name, item.acrylicCut.label].filter(Boolean).join(' — ')}
+										</p>
+									{:else if item.variant}
 										<p class="text-gray-600">{item.variant.name}</p>
 									{/if}
 									<p class="text-gray-600">Cantidad: {item.quantity}</p>

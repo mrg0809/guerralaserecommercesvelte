@@ -270,6 +270,13 @@
 				},
 				{
 					kind: 'link',
+					href: '/admin/configuracion/acrylic',
+					label: 'Acrílico',
+					icon: '⬛',
+					permission: 'manage_settings'
+				},
+				{
+					kind: 'link',
 					href: '/admin/tipo-cambio',
 					label: 'Tipo de Cambio',
 					icon: '💵',

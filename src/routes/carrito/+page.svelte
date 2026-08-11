@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { cart } from '$lib/stores/cart';
+	import { cart, acrylicCutKey } from '$lib/stores/cart';
 	import { formatPrice } from '$lib/utils';
 	import { goto } from '$app/navigation';
 
@@ -9,33 +9,31 @@
 		cartItems = items;
 	});
 
-	function updateQuantity(productId: string, quantity: number, variantId?: string, bundleId?: string) {
+	function linePrice(item: any): number {
+		if (item.bundle) return item.bundle.bundle_price;
+		if (item.acrylicCut?.unit_price != null) return item.acrylicCut.unit_price;
+		if (item.variant) return item.variant.price;
+		return item.product.base_price;
+	}
+
+	function updateQuantity(item: any, quantity: number) {
+		const cutKey = item.acrylicCut ? acrylicCutKey(item) : undefined;
 		if (quantity <= 0) {
-			cart.removeItem(productId, variantId, bundleId);
+			cart.removeItem(item.product.id, item.variant?.id, item.bundle?.id, cutKey);
 		} else {
-			cart.updateQuantity(productId, quantity, variantId, bundleId);
+			cart.updateQuantity(item.product.id, quantity, item.variant?.id, item.bundle?.id, cutKey);
 		}
 	}
 
-	function removeItem(productId: string, variantId?: string, bundleId?: string) {
-		cart.removeItem(productId, variantId, bundleId);
+	function removeItem(item: any) {
+		const cutKey = item.acrylicCut ? acrylicCutKey(item) : undefined;
+		cart.removeItem(item.product.id, item.variant?.id, item.bundle?.id, cutKey);
 	}
 
 	let subtotal = $derived(
-		cartItems.reduce((sum, item) => {
-			let price = 0;
-			if (item.bundle) {
-				price = item.bundle.bundle_price;
-			} else if (item.variant) {
-				price = item.variant.price;
-			} else {
-				price = item.product.base_price;
-			}
-			return sum + price * item.quantity;
-		}, 0)
+		cartItems.reduce((sum, item) => sum + linePrice(item) * item.quantity, 0)
 	);
 
-	// IVA ya está incluido en los precios
 	let total = $derived(subtotal);
 
 	function proceedToCheckout() {
@@ -62,17 +60,15 @@
 		</div>
 	{:else}
 		<div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-			<!-- Cart Items -->
 			<div class="lg:col-span-2">
 				<div class="bg-white rounded-lg shadow-md">
 					{#each cartItems as item, index}
-						{@const price = item.bundle ? item.bundle.bundle_price : (item.variant ? item.variant.price : item.product.base_price)}
+						{@const price = linePrice(item)}
 						{@const image =
-							item.media?.find((m) => m.is_primary)?.url || item.media?.[0]?.url}
+							item.media?.find((m: any) => m.is_primary)?.url || item.media?.[0]?.url}
 
 						<div class="p-4 {index > 0 ? 'border-t' : ''}">
 							<div class="flex gap-4">
-								<!-- Image -->
 								<a href="/productos/{item.product.slug}" class="flex-shrink-0">
 									{#if image}
 										<img src={image} alt={item.product.name} class="w-24 h-24 object-cover rounded-lg" />
@@ -83,7 +79,6 @@
 									{/if}
 								</a>
 
-								<!-- Info -->
 								<div class="flex-grow">
 									<a
 										href="/productos/{item.product.slug}"
@@ -113,43 +108,34 @@
 												✓ Ahorras {formatPrice(item.bundle.savings)}
 											</p>
 										{/if}
+									{:else if item.acrylicCut}
+										<p class="text-gray-600 text-sm">
+											{item.variant?.name || 'Lámina'} — {item.acrylicCut.label}
+										</p>
 									{:else if item.variant}
 										<p class="text-gray-600 text-sm">{item.variant.name}</p>
 									{/if}
 									<p class="text-blue-600 font-semibold mt-1">{formatPrice(price)}</p>
 								</div>
 
-								<!-- Quantity Controls -->
 								<div class="flex flex-col items-end gap-2">
 									<div class="flex items-center gap-2">
 										<button
-											onclick={() =>
-												updateQuantity(
-													item.product.id,
-													item.quantity - 1,
-													item.variant?.id,
-													item.bundle?.id
-												)}
+											onclick={() => updateQuantity(item, item.quantity - 1)}
 											class="w-8 h-8 bg-gray-200 hover:bg-gray-300 rounded"
 										>
 											-
 										</button>
 										<span class="w-12 text-center">{item.quantity}</span>
 										<button
-											onclick={() =>
-												updateQuantity(
-													item.product.id,
-													item.quantity + 1,
-													item.variant?.id,
-													item.bundle?.id
-												)}
+											onclick={() => updateQuantity(item, item.quantity + 1)}
 											class="w-8 h-8 bg-gray-200 hover:bg-gray-300 rounded"
 										>
 											+
 										</button>
 									</div>
 									<button
-										onclick={() => removeItem(item.product.id, item.variant?.id, item.bundle?.id)}
+										onclick={() => removeItem(item)}
 										class="text-red-600 hover:text-red-700 text-sm"
 									>
 										Eliminar
@@ -162,7 +148,6 @@
 				</div>
 			</div>
 
-			<!-- Order Summary -->
 			<div class="lg:col-span-1">
 				<div class="bg-white rounded-lg shadow-md p-6 sticky top-4">
 					<h2 class="text-2xl font-bold mb-4">Resumen del Pedido</h2>
@@ -180,17 +165,10 @@
 
 					<button
 						onclick={proceedToCheckout}
-						class="w-full bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 transition"
+						class="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition font-semibold"
 					>
-						Proceder al Pago
+						Proceder al Checkout
 					</button>
-
-					<a
-						href="/productos"
-						class="block text-center text-blue-600 hover:text-blue-700 mt-4"
-					>
-						Continuar Comprando
-					</a>
 				</div>
 			</div>
 		</div>
