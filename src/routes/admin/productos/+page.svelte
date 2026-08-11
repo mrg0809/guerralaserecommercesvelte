@@ -1655,19 +1655,22 @@
 				}
 			}
 
-			// Referencias en pedidos/cotizaciones
+			// Referencias en pedidos / cotizaciones / POS / bundles
 			const allCutIds = [...groups.values()].flatMap((g) => g.cutIds);
 			let referenced = new Set<string>();
 			if (allCutIds.length) {
-				const { data: oi } = await supabase
-					.from('order_items')
-					.select('variant_id')
-					.in('variant_id', allCutIds);
-				const { data: qi } = await supabase
-					.from('quotation_items')
-					.select('variant_id')
-					.in('variant_id', allCutIds);
-				for (const r of [...(oi || []), ...(qi || [])]) {
+				const [oi, qi, pos, bi] = await Promise.all([
+					supabase.from('order_items').select('variant_id').in('variant_id', allCutIds),
+					supabase.from('quotation_items').select('variant_id').in('variant_id', allCutIds),
+					(supabase as any).from('pos_sale_items').select('variant_id').in('variant_id', allCutIds),
+					supabase.from('bundle_items').select('variant_id').in('variant_id', allCutIds)
+				]);
+				for (const r of [
+					...(oi.data || []),
+					...(qi.data || []),
+					...(pos.data || []),
+					...(bi.data || [])
+				]) {
 					if (r.variant_id) referenced.add(r.variant_id);
 				}
 			}
@@ -1737,12 +1740,23 @@
 						.from('product_variants')
 						.delete()
 						.in('id', toDelete);
-					if (delErr) throw delErr;
-					deleted += toDelete.length;
+					if (delErr) {
+						// Si alguna FK no contemplada bloquea el delete, desactivar en su lugar
+						const { error: fallbackErr } = await supabase
+							.from('product_variants')
+							.update({ is_active: false })
+							.in('id', toDelete);
+						if (fallbackErr) throw delErr;
+						deactivated += toDelete.length;
+					} else {
+						deleted += toDelete.length;
+					}
 				}
 			}
 
 			await loadProductVariants(productId);
+			// Ocultar cortes desactivados del editor (siguen en BD por historial POS/pedidos)
+			variants = variants.filter((v) => v.is_active !== false);
 			alert(
 				`Consolidación lista.\nLáminas/grupos: ${groups.size}\nNuevas: ${created}\nCortes desactivados: ${deactivated}\nCortes eliminados: ${deleted}\n\nRevisa precios y stock de cada lámina, luego guarda si editas.`
 			);
