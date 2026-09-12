@@ -2,9 +2,15 @@
 	import { supabase } from '$lib/supabaseClient';
 	import jsPDF from 'jspdf';
 	import CustomerSearch from '$lib/components/customers/CustomerSearch.svelte';
+	import AcrylicCutPicker from '$lib/components/acrylic/AcrylicCutPicker.svelte';
+	import { acrylicCutKey } from '$lib/acrylicPricing';
+	import type { AcrylicCut } from '$lib/types';
 	import type { Database } from '$lib/types/database.types';
 
 	type Customer = Database['public']['Tables']['customers']['Row'];
+
+	const ACRYLIC_SPEC_KEY = 'tipo_producto';
+	const ACRYLIC_SPEC_VALUE = 'acrilico';
 
 	type Product = {
 		id: string;
@@ -21,6 +27,11 @@
 			price: number | null;
 			stock_quantity: number | null;
 			is_active: boolean | null;
+			attributes?: Record<string, unknown> | string | null;
+		}>;
+		product_specifications?: Array<{
+			specification_key: string | null;
+			specification_value: string | null;
 		}>;
 	};
 
@@ -35,6 +46,7 @@
 		stockAvailable: number;
 		categoryLevelId: string | null; // categoría (nivel 2)
 		subcategoryId: string | null; // subcategoría (nivel 3) o null si el producto está en nivel 2
+		isAcrylic?: boolean;
 	};
 
 	type CartItem = {
@@ -47,6 +59,7 @@
 		quantity: number;
 		unitPrice: number;
 		stockAvailable: number;
+		acrylicCut?: AcrylicCut | null;
 	};
 
 	const supabaseAny: any = supabase;
@@ -59,6 +72,9 @@
 	let productSearch = $state('');
 
 	let cartItems = $state<CartItem[]>([]);
+
+	let acrylicPickerOpen = $state(false);
+	let acrylicPickerCandidate = $state<CandidateItem | null>(null);
 
 	let paymentMethod = $state<'cash' | 'card' | 'transfer'>('cash');
 	let amountPaid = $state(0);
@@ -236,13 +252,47 @@
 		return { categoryLevelId: cat.parent_id, subcategoryId: cat.id };
 	}
 
+	function getVariantAttributes(variant: { attributes?: Record<string, unknown> | string | null }): Record<string, any> {
+		const attrs = variant?.attributes;
+		if (!attrs) return {};
+		if (typeof attrs === 'string') {
+			try {
+				return JSON.parse(attrs) || {};
+			} catch {
+				return {};
+			}
+		}
+		return typeof attrs === 'object' ? attrs : {};
+	}
+
+	function isAcrylicProduct(product: Product): boolean {
+		const specs = product.product_specifications || [];
+		return specs.some(
+			(s) =>
+				String(s?.specification_key || '')
+					.trim()
+					.toLowerCase() === ACRYLIC_SPEC_KEY &&
+				String(s?.specification_value || '')
+					.trim()
+					.toLowerCase() === ACRYLIC_SPEC_VALUE
+		);
+	}
+
+	function isSheetVariant(variant: NonNullable<Product['product_variants']>[number]): boolean {
+		const attrs = getVariantAttributes(variant);
+		if (attrs.is_sheet === true) return true;
+		const tamano = String(attrs.tamano || '').trim();
+		return !tamano;
+	}
+
 	async function loadProducts() {
 		loading = true;
 		const { data, error } = await supabase
 			.from('products')
 			.select(
 				'id, sku, name, base_price, stock_quantity, category_id,' +
-					' product_variants(id, name, sku, price, stock_quantity, is_active)'
+					' product_variants(id, name, sku, price, stock_quantity, is_active, attributes),' +
+					' product_specifications(specification_key, specification_value)'
 			)
 			.eq('is_active', true)
 			.order('name');
@@ -259,11 +309,13 @@
 
 		const nextCandidates: CandidateItem[] = [];
 		for (const p of products) {
+			const acrylic = isAcrylicProduct(p);
 			const variants = (p.product_variants ?? []).filter((v) => v.is_active !== false);
 			const { categoryLevelId, subcategoryId } = inferCategoryIds(p.category_id ?? null);
 
 			if (variants.length > 0) {
-				for (const v of variants) {
+				const listable = acrylic ? variants.filter(isSheetVariant) : variants;
+				for (const v of listable) {
 					const unitPrice = v.price ?? p.base_price ?? 0;
 					nextCandidates.push({
 						key: v.id,
@@ -275,7 +327,8 @@
 						unitPrice,
 						stockAvailable: v.stock_quantity ?? 0,
 						categoryLevelId,
-						subcategoryId
+						subcategoryId,
+						isAcrylic: acrylic
 					});
 				}
 			} else {
@@ -290,7 +343,8 @@
 					unitPrice,
 					stockAvailable: p.stock_quantity ?? 0,
 					categoryLevelId,
-					subcategoryId
+					subcategoryId,
+					isAcrylic: acrylic
 				});
 			}
 		}
@@ -331,9 +385,29 @@
 		return list.slice(0, 200);
 	}
 
-	function addToCart(c: CandidateItem) {
-		// Permitir venta aunque no haya existencia (el stock puede quedar negativo).
-		const existingByKey = cartItems.find((it) => it.productId === c.productId && it.variantId === c.variantId);
+	function cartLineDisplayName(it: CartItem) {
+		const base = it.variantName ? `${it.productName} - ${it.variantName}` : it.productName;
+		if (it.acrylicCut?.label) return `${base} — ${it.acrylicCut.label}`;
+		return base;
+	}
+
+	function cartLineVariantNameForPersist(it: CartItem) {
+		if (!it.acrylicCut?.label) return it.variantName;
+		return it.variantName ? `${it.variantName} — ${it.acrylicCut.label}` : it.acrylicCut.label;
+	}
+
+	function pushCartLine(
+		c: CandidateItem,
+		opts?: { unitPrice?: number; acrylicCut?: AcrylicCut | null }
+	) {
+		const acrylicCut = opts?.acrylicCut ?? null;
+		const cutKey = acrylicCutKey(acrylicCut);
+		const existingByKey = cartItems.find(
+			(it) =>
+				it.productId === c.productId &&
+				it.variantId === c.variantId &&
+				acrylicCutKey(it.acrylicCut) === cutKey
+		);
 		if (existingByKey) {
 			existingByKey.quantity = existingByKey.quantity + 1;
 			cartItems = [...cartItems];
@@ -353,10 +427,38 @@
 				productName: c.productName,
 				variantName: c.variantName,
 				quantity: 1,
-				unitPrice: c.unitPrice,
-				stockAvailable: c.stockAvailable
+				unitPrice: opts?.unitPrice ?? c.unitPrice,
+				stockAvailable: c.stockAvailable,
+				acrylicCut
 			}
 		];
+	}
+
+	function addToCart(c: CandidateItem) {
+		// Permitir venta aunque no haya existencia (el stock puede quedar negativo).
+		if (c.isAcrylic) {
+			acrylicPickerCandidate = c;
+			acrylicPickerOpen = true;
+			return;
+		}
+		pushCartLine(c);
+	}
+
+	function confirmAcrylicCut(cut: AcrylicCut) {
+		const c = acrylicPickerCandidate;
+		acrylicPickerOpen = false;
+		acrylicPickerCandidate = null;
+		if (!c) return;
+
+		pushCartLine(c, {
+			unitPrice: cut.unit_price,
+			acrylicCut: cut
+		});
+	}
+
+	function cancelAcrylicCut() {
+		acrylicPickerOpen = false;
+		acrylicPickerCandidate = null;
 	}
 
 	function removeLine(lineId: string) {
@@ -415,7 +517,7 @@
 			change: computedChange,
 			customerName: customerName?.trim() || null,
 			items: cartItems.map((it) => ({
-				displayName: it.variantName ? `${it.productName} - ${it.variantName}` : it.productName,
+				displayName: cartLineDisplayName(it),
 				sku: it.sku,
 				quantity: it.quantity,
 				unitPrice: it.unitPrice,
@@ -706,7 +808,7 @@
 				unit_price: it.unitPrice,
 				sku: it.sku,
 				product_name: it.productName,
-				variant_name: it.variantName
+				variant_name: cartLineVariantNameForPersist(it)
 			}));
 
 			const { data, error } = await supabaseAny.rpc('create_pos_sale', {
@@ -888,7 +990,13 @@
 										<div class="text-xs mt-1 {c.stockAvailable <= 0 ? 'text-amber-600' : 'text-gray-500'}">
 											{c.sku ? `SKU: ${c.sku} - ` : ''}Stock: {c.stockAvailable}{c.stockAvailable <= 0 ? ' (sin existencia)' : ''}
 										</div>
-										<div class="text-xs text-gray-700 mt-1">Precio: {formatMoney(c.unitPrice)}</div>
+										<div class="text-xs text-gray-700 mt-1">
+											{#if c.isAcrylic}
+												Precio lámina: {formatMoney(c.unitPrice)} · elige tamaño al agregar
+											{:else}
+												Precio: {formatMoney(c.unitPrice)}
+											{/if}
+										</div>
 									</button>
 								{/each}
 							{/if}
@@ -923,7 +1031,7 @@
 											{#each cartItems as it (it.lineId)}
 												<tr class="border-t">
 													<td class="px-3 py-2 align-top">
-														<div class="font-medium text-gray-900">{it.variantName ? `${it.productName} - ${it.variantName}` : it.productName}</div>
+														<div class="font-medium text-gray-900">{cartLineDisplayName(it)}</div>
 														{#if it.sku}
 															<div class="text-xs text-gray-500 mt-1">SKU: {it.sku}</div>
 														{/if}
@@ -1231,4 +1339,12 @@
 		{/if}
 	</div>
 </div>
+
+<AcrylicCutPicker
+	open={acrylicPickerOpen}
+	sheetPrice={acrylicPickerCandidate?.unitPrice || 0}
+	title="Tamaño de corte (POS)"
+	onconfirm={confirmAcrylicCut}
+	oncancel={cancelAcrylicCut}
+/>
 
