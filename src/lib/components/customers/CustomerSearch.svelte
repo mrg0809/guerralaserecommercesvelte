@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { supabase } from '$lib/supabaseClient';
+	import { textMatchesSearch } from '$lib/utils';
 	import type { Database } from '$lib/types/database.types';
 
 	type Customer = Database['public']['Tables']['customers']['Row'];
@@ -14,16 +15,52 @@
 
 	// Estado
 	let searchTerm = $state('');
-	let customers = $state<Customer[]>([]);
 	let filteredCustomers = $state<Customer[]>([]);
 	let showResults = $state(false);
 	let loading = $state(false);
 	let selectedIndex = $state(0);
 
-	// Búsqueda de clientes
+	/** Cache en memoria para filtrar sin acentos en el cliente. */
+	let customersCache: Customer[] | null = null;
+	let cacheLoading: Promise<Customer[]> | null = null;
+
+	async function ensureCustomersLoaded(): Promise<Customer[]> {
+		if (customersCache) return customersCache;
+		if (cacheLoading) return cacheLoading;
+
+		cacheLoading = (async () => {
+			const { data, error } = await supabase
+				.from('customers')
+				.select('*')
+				.order('contact_name', { ascending: true });
+
+			if (error) throw error;
+			customersCache = data || [];
+			return customersCache;
+		})();
+
+		try {
+			return await cacheLoading;
+		} finally {
+			cacheLoading = null;
+		}
+	}
+
+	function customerMatches(customer: Customer, query: string): boolean {
+		const fields = [
+			customer.contact_name,
+			customer.email,
+			customer.company_name,
+			customer.phone,
+			customer.mobile,
+			customer.customer_number
+		];
+		return fields.some((field) => textMatchesSearch(field, query));
+	}
+
+	// Búsqueda de clientes (sin acentos)
 	async function searchCustomers() {
 		if (!searchTerm.trim()) {
-			customers = [];
 			filteredCustomers = [];
 			showResults = false;
 			return;
@@ -31,24 +68,13 @@
 
 		loading = true;
 		try {
-			const { data, error } = await supabase
-				.from('customers')
-				.select('*')
-				.or(
-					`contact_name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%,company_name.ilike.%${searchTerm}%,phone.ilike.%${searchTerm}%,mobile.ilike.%${searchTerm}%,customer_number.ilike.%${searchTerm}%`
-				)
-				.order('contact_name', { ascending: true })
-				.limit(10);
-
-			if (error) throw error;
-
-			customers = data || [];
-			filteredCustomers = customers;
+			const all = await ensureCustomersLoaded();
+			const query = searchTerm.trim();
+			filteredCustomers = all.filter((c) => customerMatches(c, query)).slice(0, 10);
 			showResults = true;
 			selectedIndex = 0;
 		} catch (error) {
 			console.error('Error buscando clientes:', error);
-			customers = [];
 			filteredCustomers = [];
 		} finally {
 			loading = false;
@@ -224,7 +250,3 @@
 		</div>
 	{/if}
 </div>
-
-<style>
-	/* Estilos adicionales si es necesario */
-</style>

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { supabase } from '$lib/supabaseClient';
+	import { textMatchesSearch } from '$lib/utils';
 	import type { Database } from '$lib/types/database.types';
 
 	type Customer = Database['public']['Tables']['customers']['Row'];
@@ -17,24 +18,57 @@
 	let loading = $state(false);
 	let showDropdown = $state(false);
 
+	let customersCache: Customer[] | null = null;
+	let cacheLoading: Promise<Customer[]> | null = null;
+	let searchTimeout: number;
+
+	async function ensureCustomersLoaded(): Promise<Customer[]> {
+		if (customersCache) return customersCache;
+		if (cacheLoading) return cacheLoading;
+
+		cacheLoading = (async () => {
+			const { data, error } = await supabase
+				.from('customers')
+				.select('*')
+				.order('contact_name', { ascending: true });
+			if (error) throw error;
+			customersCache = data || [];
+			return customersCache;
+		})();
+
+		try {
+			return await cacheLoading;
+		} finally {
+			cacheLoading = null;
+		}
+	}
+
+	function customerMatches(customer: Customer, query: string): boolean {
+		return [customer.contact_name, customer.email, customer.company_name, customer.phone].some(
+			(field) => textMatchesSearch(field, query)
+		);
+	}
+
 	async function search() {
+		clearTimeout(searchTimeout);
 		if (searchTerm.length < 2) {
 			results = [];
 			return;
 		}
-		loading = true;
-		const term = searchTerm.trim();
-		const { data } = await supabase
-			.from('customers')
-			.select('*')
-			.or(
-				`contact_name.ilike.%${term}%,email.ilike.%${term}%,company_name.ilike.%${term}%,phone.ilike.%${term}%`
-			)
-			.limit(10);
 
-		results = data || [];
-		loading = false;
-		showDropdown = true;
+		searchTimeout = window.setTimeout(async () => {
+			loading = true;
+			try {
+				const all = await ensureCustomersLoaded();
+				const term = searchTerm.trim();
+				results = all.filter((c) => customerMatches(c, term)).slice(0, 10);
+				showDropdown = true;
+			} catch {
+				results = [];
+			} finally {
+				loading = false;
+			}
+		}, 250);
 	}
 
 	function pick(customer: Customer) {
@@ -42,10 +76,6 @@
 		searchTerm = customer.contact_name;
 		showDropdown = false;
 		onSelect(customer);
-	}
-
-	function formatAddress(c: Customer): string {
-		return [c.street, c.neighborhood, c.city, c.state, c.zip_code].filter(Boolean).join(', ');
 	}
 </script>
 

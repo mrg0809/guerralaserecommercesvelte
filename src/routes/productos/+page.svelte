@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { supabase } from '$lib/supabaseClient';
-	import { formatPrice, getDisplayPrice, getDisplayStock } from '$lib/utils';
+	import { formatPrice, getDisplayPrice, getDisplayStock, textMatchesSearch } from '$lib/utils';
 	import { getImageKitUrl } from '$lib/storage';
 	import type { Product, Category, ProductMedia } from '$lib/types';
 
@@ -83,7 +83,7 @@
 
 	let filteredProducts = $derived(
 		searchTerm
-			? products.filter((p) => p.name.toLowerCase().includes(searchTerm.toLowerCase()))
+			? products.filter((p) => textMatchesSearch(p.name, searchTerm))
 			: products
 	);
 </script>

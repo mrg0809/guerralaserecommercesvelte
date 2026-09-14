@@ -246,3 +246,13 @@ export function normalizeGrosor(value: string): string {
 	}
 	return v;
 }
+
+/** Clave estable para fusionar líneas con el mismo corte. */
+export function acrylicCutKey(cut: {
+	size_id: string;
+	width_cm: number;
+	height_cm: number;
+} | null | undefined): string {
+	if (!cut) return '';
+	return `${cut.size_id}:${cut.width_cm}x${cut.height_cm}`;
+}

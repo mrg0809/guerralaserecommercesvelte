@@ -5,6 +5,24 @@ export function formatPrice(price: number): string {
 	}).format(price);
 }
 
+/** Minúsculas sin acentos/diacríticos, para búsquedas (lámina ≈ lamina). */
+export function normalizeSearchText(text: string | null | undefined): string {
+	return String(text ?? '')
+		.toLowerCase()
+		.normalize('NFD')
+		.replace(/[\u0300-\u036f]/g, '');
+}
+
+/** ¿El haystack contiene el query, ignorando mayúsculas y acentos? */
+export function textMatchesSearch(
+	haystack: string | null | undefined,
+	query: string | null | undefined
+): boolean {
+	const q = normalizeSearchText(query).trim();
+	if (!q) return true;
+	return normalizeSearchText(haystack).includes(q);
+}
+
 export function generateSlug(text: string): string {
 	return text
 		.toLowerCase()

@@ -4,6 +4,8 @@
 	import jsPDF from 'jspdf';
 	import CustomerSearch from '$lib/components/customers/CustomerSearch.svelte';
 	import ExtraCostField from '$lib/components/quotations/ExtraCostField.svelte';
+	import AcrylicCutPicker from '$lib/components/acrylic/AcrylicCutPicker.svelte';
+	import { acrylicCutKey } from '$lib/acrylicPricing';
 	import { getPrimaryProductImageUrl, buildCatalogDetail } from '$lib/utils/productMedia';
 	import { loadImageForPdf } from '$lib/utils/pdfImages';
 	import {
@@ -35,9 +37,14 @@
 		savedQuotationToAdminForm
 	} from '$lib/services/quotationApi';
 	import type { QuotationSource } from '$lib/types/savedQuotation';
+	import type { AcrylicCut } from '$lib/types';
 	import type { Database } from '$lib/types/database.types';
+	import { textMatchesSearch } from '$lib/utils';
 
 	type Customer = Database['public']['Tables']['customers']['Row'];
+
+	const ACRYLIC_SPEC_KEY = 'tipo_producto';
+	const ACRYLIC_SPEC_VALUE = 'acrilico';
 
 	let products = $state<any[]>([]);
 	let productItems = $state<any[]>([]); // Items para mostrar (productos sin variantes + variantes)
@@ -64,12 +71,16 @@
 		catalogDetail?: string;
 		detailDescription?: string;
 		includeDetail?: boolean;
+		acrylicCut?: AcrylicCut | null;
 	};
 
 	let quotationItems = $state<QuotationItem[]>([]);
 	let productSearch = $state('');
 	let generalDiscount = $state(0); // porcentaje de descuento general
 	let includeAllDetails = $state(false);
+
+	let acrylicPickerOpen = $state(false);
+	let acrylicPickerProduct = $state<any | null>(null);
 
 	// Datos de cliente para la cotización
 	let selectedCustomerId = $state<string | null>(null);
@@ -165,13 +176,51 @@
 		}
 	}
 
+	function getVariantAttributes(variant: any): Record<string, any> {
+		const attrs = variant?.attributes;
+		if (!attrs) return {};
+		if (typeof attrs === 'string') {
+			try {
+				return JSON.parse(attrs) || {};
+			} catch {
+				return {};
+			}
+		}
+		return typeof attrs === 'object' ? attrs : {};
+	}
+
+	function isAcrylicProduct(product: any): boolean {
+		const specs = product?.product_specifications || [];
+		return specs.some(
+			(s: any) =>
+				String(s?.specification_key || '')
+					.trim()
+					.toLowerCase() === ACRYLIC_SPEC_KEY &&
+				String(s?.specification_value || '')
+					.trim()
+					.toLowerCase() === ACRYLIC_SPEC_VALUE
+		);
+	}
+
+	function isSheetVariant(variant: any): boolean {
+		const attrs = getVariantAttributes(variant);
+		if (attrs.is_sheet === true) return true;
+		const tamano = String(attrs.tamano || '').trim();
+		return !tamano;
+	}
+
 	async function loadProducts() {
 		loading = true;
 
-		// Cargar productos con variantes
+		// Cargar productos con variantes, atributos y specs (acrílico)
 		const { data: productsData } = await supabase
 			.from('products')
-			.select('id, sku, name, base_price, stock_quantity, short_description, description, product_variants(id, name, sku, price, stock_quantity), product_media(url, is_primary, display_order)')
+			.select(
+				'id, sku, name, base_price, stock_quantity, short_description, description,' +
+					' product_variants(id, name, sku, price, stock_quantity, is_active, attributes),' +
+					' product_specifications(specification_key, specification_value),' +
+					' product_media(url, is_primary, display_order)'
+			)
 			.eq('is_active', true)
 			.order('name');
 
@@ -180,13 +229,14 @@
 		// Crear items para búsqueda: si tiene variantes, mostrar solo variantes; si no, mostrar el producto
 		productItems = [];
 		for (const product of products) {
-			const variants = product.product_variants || [];
+			const acrylic = isAcrylicProduct(product);
+			const variants = (product.product_variants || []).filter((v: any) => v.is_active !== false);
 			const imageUrl = getPrimaryProductImageUrl(product.product_media);
 			const catalogDetail = buildCatalogDetail(product);
 			
 			if (variants.length > 0) {
-				// Producto con variantes: agregar solo las variantes
-				for (const variant of variants) {
+				const listable = acrylic ? variants.filter(isSheetVariant) : variants;
+				for (const variant of listable) {
 					productItems.push({
 						id: variant.id,
 						productId: product.id,
@@ -197,7 +247,8 @@
 						isVariant: true,
 						variantId: variant.id,
 						imageUrl,
-						catalogDetail
+						catalogDetail,
+						isAcrylic: acrylic
 					});
 				}
 			} else {
@@ -212,7 +263,8 @@
 					isVariant: false,
 					variantId: null,
 					imageUrl,
-					catalogDetail
+					catalogDetail,
+					isAcrylic: acrylic
 				});
 			}
 		}
@@ -224,36 +276,35 @@
 
 	function filteredProductsForQuotation() {
 		if (!productSearch.trim()) return productItems;
-		const query = productSearch.toLowerCase();
+		const query = productSearch.trim();
 		return productItems.filter((p) => {
-			const name = (p.name || '').toLowerCase();
-			const sku = (p.sku || '').toLowerCase();
-			return name.includes(query) || sku.includes(query);
+			return textMatchesSearch(p.name, query) || textMatchesSearch(p.sku, query);
 		});
 	}
 
-	function addProductToQuotation(product: any) {
-		if (!product) return;
-		
-		// Usar id único (puede ser productId o variantId)
+	function pushQuotationLine(product: any, opts?: { price?: number; description?: string; acrylicCut?: AcrylicCut | null }) {
 		const uniqueId = product.isVariant ? product.variantId : product.productId;
-		const existing = quotationItems.find((item) => 
-			item.productId === uniqueId && item.isVariant === product.isVariant
-		);
-		
+		const acrylicCut = opts?.acrylicCut ?? null;
+		const cutKey = acrylicCutKey(acrylicCut);
+
+		const existing = quotationItems.find((item) => {
+			if (item.productId !== uniqueId || item.isVariant !== product.isVariant) return false;
+			return acrylicCutKey(item.acrylicCut) === cutKey;
+		});
+
 		if (existing) {
 			existing.quantity += 1;
 			quotationItems = [...quotationItems];
 			return;
 		}
 
-		const basePrice = product.price || 0;
+		const basePrice = opts?.price ?? product.price ?? 0;
 		quotationItems = [
 			...quotationItems,
 			{
 				productId: uniqueId,
 				sku: product.sku || '',
-				description: product.name || '',
+				description: opts?.description ?? product.name ?? '',
 				quantity: 1,
 				price: basePrice,
 				discount: 0,
@@ -262,9 +313,42 @@
 				imageUrl: product.imageUrl || '',
 				catalogDetail: product.catalogDetail || '',
 				detailDescription: '',
-				includeDetail: false
+				includeDetail: false,
+				acrylicCut
 			}
 		];
+	}
+
+	function addProductToQuotation(product: any) {
+		if (!product) return;
+
+		if (product.isAcrylic) {
+			acrylicPickerProduct = product;
+			acrylicPickerOpen = true;
+			return;
+		}
+
+		pushQuotationLine(product);
+	}
+
+	function confirmAcrylicCut(cut: AcrylicCut) {
+		const product = acrylicPickerProduct;
+		acrylicPickerOpen = false;
+		acrylicPickerProduct = null;
+		if (!product) return;
+
+		const baseName = product.name || '';
+		const description = cut.label ? `${baseName} — ${cut.label}` : baseName;
+		pushQuotationLine(product, {
+			price: cut.unit_price,
+			description,
+			acrylicCut: cut
+		});
+	}
+
+	function cancelAcrylicCut() {
+		acrylicPickerOpen = false;
+		acrylicPickerProduct = null;
 	}
 
 	function fillDetailFromCatalog(index: number) {
@@ -936,7 +1020,7 @@
 										onclick={() => addProductToQuotation(product)}
 										class="w-full px-3 py-1.5 text-xs bg-blue-600 text-white rounded-md hover:bg-blue-700"
 									>
-										Agregar a cotización
+										{product.isAcrylic ? 'Elegir tamaño y agregar' : 'Agregar a cotización'}
 									</button>
 								</div>
 							{/each}
@@ -1210,6 +1294,14 @@
 		</div>
 	</div>
 </div>
+
+<AcrylicCutPicker
+	open={acrylicPickerOpen}
+	sheetPrice={acrylicPickerProduct?.price || 0}
+	title="Tamaño de corte (cotización)"
+	onconfirm={confirmAcrylicCut}
+	oncancel={cancelAcrylicCut}
+/>
 
 <style>
 	button:disabled {
