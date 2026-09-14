@@ -6,6 +6,7 @@
 	import { acrylicCutKey } from '$lib/acrylicPricing';
 	import type { AcrylicCut } from '$lib/types';
 	import type { Database } from '$lib/types/database.types';
+	import { textMatchesSearch } from '$lib/utils';
 
 	type Customer = Database['public']['Tables']['customers']['Row'];
 
@@ -358,7 +359,7 @@
 	}
 
 	function filteredCandidates() {
-		const q = productSearch.trim().toLowerCase();
+		const q = productSearch.trim();
 		const hasSearch = !!q;
 		const hasCategoryFilter = !!selectedCategoryId || !!selectedSubcategoryId;
 
@@ -369,9 +370,7 @@
 
 		if (hasSearch) {
 			list = list.filter((c) => {
-				const name = candidateDisplayName(c).toLowerCase();
-				const sku = (c.sku || '').toLowerCase();
-				return name.includes(q) || sku.includes(q);
+				return textMatchesSearch(candidateDisplayName(c), q) || textMatchesSearch(c.sku, q);
 			});
 		}
 

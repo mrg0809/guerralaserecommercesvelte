@@ -6,7 +6,7 @@
 	import { cart } from '$lib/stores/cart';
 	import { userStore } from '$lib/stores/user';
 	import { supabase } from '$lib/supabaseClient';
-	import { getDisplayPrice } from '$lib/utils';
+	import { getDisplayPrice, textMatchesSearch } from '$lib/utils';
 	import { trackPageView, trackWhatsAppContact, loadGoogleAnalytics } from '$lib/gtag';
 	import ReauthModal from '$lib/components/ReauthModal.svelte';
 	import CookieBanner from '$lib/components/CookieBanner.svelte';
@@ -34,11 +34,45 @@
 	let resolvedWhatsAppPhone = $state(DEFAULT_WHATSAPP_PHONE);
 	let showSearch = $state(false);
 	let searchQuery = $state('');
-let searchResults = $state<any[]>([]);
-let searchTimeout: NodeJS.Timeout;
-let currentPath = $state('/');
-let isAdminRoute = $state(false);
-let isStandaloneApp = $state(false);
+	let searchResults = $state<any[]>([]);
+	let searchTimeout: NodeJS.Timeout;
+	let currentPath = $state('/');
+	let isAdminRoute = $state(false);
+	let isStandaloneApp = $state(false);
+
+	type NavSearchProduct = {
+		id: string;
+		name: string;
+		slug: string;
+		base_price: number | null;
+	};
+
+	/** Cache ligera para filtrar sin acentos (lámina ≈ lamina). */
+	let navProductsCache: NavSearchProduct[] | null = null;
+	let navProductsLoading: Promise<NavSearchProduct[]> | null = null;
+
+	async function ensureNavProductsLoaded(): Promise<NavSearchProduct[]> {
+		if (navProductsCache) return navProductsCache;
+		if (navProductsLoading) return navProductsLoading;
+
+		navProductsLoading = (async () => {
+			const { data, error } = await supabase
+				.from('products')
+				.select('id, name, slug, base_price')
+				.eq('is_active', true)
+				.order('name');
+
+			if (error) throw error;
+			navProductsCache = (data || []) as NavSearchProduct[];
+			return navProductsCache;
+		})();
+
+		try {
+			return await navProductsLoading;
+		} finally {
+			navProductsLoading = null;
+		}
+	}
 
 const showPublicSiteChrome = $derived(!isAdminRoute && !isStandaloneApp);
 	
@@ -165,32 +199,49 @@ page.subscribe(($page) => {
 		});
 	}
 
+	function closeSearch() {
+		showSearch = false;
+		searchQuery = '';
+		searchResults = [];
+	}
+
 	function toggleSearch() {
-		showSearch = !showSearch;
-		if (!showSearch) {
-			searchQuery = '';
-			searchResults = [];
+		if (showSearch) {
+			closeSearch();
+			return;
 		}
+		showSearch = true;
+	}
+
+	function handleSearchClickOutside(e: MouseEvent) {
+		if (!showSearch) return;
+		const target = e.target as HTMLElement | null;
+		if (target?.closest('[data-nav-search]')) return;
+		closeSearch();
+	}
+
+	function handleSearchKeydown(e: KeyboardEvent) {
+		if (!showSearch) return;
+		if (e.key === 'Escape') closeSearch();
 	}
 
 	async function handleSearch() {
 		if (searchTimeout) clearTimeout(searchTimeout);
-		
+
 		if (searchQuery.trim().length < 3) {
 			searchResults = [];
 			return;
 		}
 
 		searchTimeout = setTimeout(async () => {
-			const { data } = await supabase
-				.from('products')
-				.select('id, name, slug, base_price')
-				.eq('is_active', true)
-				.ilike('name', `%${searchQuery}%`)
-				.limit(5);
-
-			if (data) {
-				searchResults = data;
+			try {
+				const all = await ensureNavProductsLoaded();
+				const query = searchQuery.trim();
+				searchResults = all
+					.filter((p) => textMatchesSearch(p.name, query) || textMatchesSearch(p.slug, query))
+					.slice(0, 5);
+			} catch {
+				searchResults = [];
 			}
 		}, 300);
 	}
@@ -415,6 +466,8 @@ page.subscribe(($page) => {
 	}
 </script>
 
+<svelte:window onclick={handleSearchClickOutside} onkeydown={handleSearchKeydown} />
+
 <svelte:head>
 	<link rel="icon" href={favicon} />
 </svelte:head>
@@ -541,9 +594,12 @@ page.subscribe(($page) => {
 				<div class="flex items-center gap-2 flex-shrink-0 min-w-fit">
 					<!-- Search Icon -->
 					<button
+						type="button"
+						data-nav-search
 						onclick={toggleSearch}
 						class="relative hover:text-red-600 transition-colors text-blue-900 group"
 						aria-label="Buscar productos"
+						aria-expanded={showSearch}
 					>
 						<div class="p-2 hover:bg-red-50 rounded-lg transition-colors">
 							<svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -661,7 +717,7 @@ page.subscribe(($page) => {
 
 		<!-- Search Bar -->
 		{#if showSearch}
-			<div class="bg-white border-t border-gray-200 shadow-lg">
+			<div class="bg-white border-t border-gray-200 shadow-lg" data-nav-search>
 				<div class="container mx-auto px-4 py-4">
 					<div class="relative">
 						<input
@@ -683,7 +739,7 @@ page.subscribe(($page) => {
 								<a
 									href="/productos/{product.slug}"
 									class="block px-4 py-3 hover:bg-gray-50 border-b last:border-b-0"
-									onclick={() => { showSearch = false; searchQuery = ''; searchResults = []; }}
+									onclick={closeSearch}
 								>
 									<p class="font-semibold text-gray-900">{product.name}</p>
 									{#if product.short_description}

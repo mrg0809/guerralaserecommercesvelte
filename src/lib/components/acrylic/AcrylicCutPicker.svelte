@@ -8,6 +8,7 @@
 		type AcrylicPricingConfig
 	} from '$lib/acrylicPricing';
 	import type { AcrylicCut } from '$lib/types';
+	import { untrack } from 'svelte';
 
 	type Props = {
 		open?: boolean;
@@ -34,45 +35,81 @@
 	let customWidth = $state(60);
 	let customHeight = $state(40);
 
+	/** Guardias no reactivas para no crear bucles con $effect. */
+	let hasLoadedConfig = false;
+	let prevOpen = false;
+
 	let activeConfig = $derived(config ?? loadedConfig);
 	let enabledSizes = $derived(activeConfig.sizes.filter((s) => s.enabled));
 
-	$effect(() => {
-		if (!open) return;
-		if (config) {
-			loadedConfig = config;
-			return;
-		}
-		if (loadingConfig) return;
-		loadingConfig = true;
-		void fetch('/api/acrylic-pricing')
-			.then((r) => r.json())
-			.then((res) => {
-				if (res?.config) loadedConfig = res.config;
-			})
-			.catch(() => {
-				loadedConfig = DEFAULT_ACRYLIC_PRICING;
-			})
-			.finally(() => {
-				loadingConfig = false;
-			});
-	});
-
-	let wasOpen = $state(false);
-	$effect(() => {
-		const justOpened = open && !wasOpen;
-		wasOpen = open;
-		if (!justOpened) return;
+	function resetSelection(cfg: AcrylicPricingConfig) {
 		customMode = false;
 		customWidth = 60;
 		customHeight = 40;
-		const sizes = (config ?? loadedConfig).sizes.filter((s) => s.enabled);
+		const sizes = cfg.sizes.filter((s) => s.enabled);
 		if (sizes.length > 0) {
 			selectedSizeId = sizes[0].id;
 		} else {
 			selectedSizeId = '';
-			if ((config ?? loadedConfig).custom.enabled) customMode = true;
+			if (cfg.custom.enabled) customMode = true;
 		}
+	}
+
+	$effect(() => {
+		const isOpen = open;
+		const externalConfig = config;
+
+		if (!isOpen) {
+			prevOpen = false;
+			untrack(() => {
+				loadingConfig = false;
+			});
+			return;
+		}
+
+		const justOpened = !prevOpen;
+		prevOpen = true;
+
+		if (justOpened) {
+			untrack(() => resetSelection(externalConfig ?? loadedConfig));
+		}
+
+		if (externalConfig) {
+			untrack(() => {
+				loadedConfig = externalConfig;
+				loadingConfig = false;
+				hasLoadedConfig = true;
+			});
+			return;
+		}
+
+		if (hasLoadedConfig) return;
+
+		let cancelled = false;
+		untrack(() => {
+			loadingConfig = true;
+		});
+
+		void fetch('/api/acrylic-pricing')
+			.then((r) => r.json())
+			.then((res) => {
+				if (cancelled) return;
+				if (res?.config) loadedConfig = res.config;
+				hasLoadedConfig = true;
+			})
+			.catch(() => {
+				if (cancelled) return;
+				loadedConfig = DEFAULT_ACRYLIC_PRICING;
+				hasLoadedConfig = true;
+			})
+			.finally(() => {
+				if (cancelled) return;
+				loadingConfig = false;
+			});
+
+		return () => {
+			cancelled = true;
+		};
 	});
 
 	let selectedCutSize = $derived.by(() => {

@@ -39,6 +39,7 @@
 	import type { QuotationSource } from '$lib/types/savedQuotation';
 	import type { AcrylicCut } from '$lib/types';
 	import type { Database } from '$lib/types/database.types';
+	import { textMatchesSearch } from '$lib/utils';
 
 	type Customer = Database['public']['Tables']['customers']['Row'];
 
@@ -275,11 +276,9 @@
 
 	function filteredProductsForQuotation() {
 		if (!productSearch.trim()) return productItems;
-		const query = productSearch.toLowerCase();
+		const query = productSearch.trim();
 		return productItems.filter((p) => {
-			const name = (p.name || '').toLowerCase();
-			const sku = (p.sku || '').toLowerCase();
-			return name.includes(query) || sku.includes(query);
+			return textMatchesSearch(p.name, query) || textMatchesSearch(p.sku, query);
 		});
 	}
 
