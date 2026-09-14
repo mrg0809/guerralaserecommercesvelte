@@ -51,6 +51,8 @@ export interface CartItem {
 	media?: ProductMedia[];
 	/** Corte de acrílico calculado (precio unitario en acrylicCut.unit_price) */
 	acrylicCut?: AcrylicCut;
+	/** Origen de campaña; p. ej. landing local /acrilico-gdl */
+	source?: 'acrilico-gdl';
 }
 
 export interface BundleWithItems extends ProductBundle {

@@ -87,6 +87,18 @@ export function trackWhatsAppContact(context?: string) {
 }
 
 /**
+ * Conversión de Google Ads. `sendTo` es el label completo, p. ej. AW-950721855/xxxxx.
+ * Si no hay label aún, no dispara nada (el evento GA4 ya cubre el clic).
+ */
+export function trackAdsConversion(sendTo: string | null | undefined, extra?: Record<string, unknown>) {
+	if (!sendTo) return;
+	trackEvent('conversion', {
+		send_to: sendTo,
+		...(extra || {})
+	});
+}
+
+/**
  * Rastreo de conversión general
  */
 export function trackConversion(eventName: string, conversionValue?: number, currency?: string) {
