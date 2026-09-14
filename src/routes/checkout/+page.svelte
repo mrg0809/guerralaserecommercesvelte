@@ -2,10 +2,24 @@
 	import { cart } from '$lib/stores/cart';
 	import { formatPrice, generateOrderNumber } from '$lib/utils';
 	import { goto } from '$app/navigation';
-	import { cartRequiresQuotation, getCheckoutButtonLabel } from '$lib/services/shippingService';
+	import { cartRequiresQuotation } from '$lib/services/shippingService';
 	import { loadStripe } from '@stripe/stripe-js';
 	import type { Stripe, StripeElements } from '@stripe/stripe-js';
 	import { onMount, tick } from 'svelte';
+	import {
+		GDL_WAREHOUSE_ADDRESS,
+		GDL_WAREHOUSE_LABEL,
+		ZMG_FREE_SHIPPING_MIN,
+		buildCheckoutLocalDeliveryWhatsAppMessage,
+		getGdlShippingOptions,
+		gdlOrderNotes,
+		isGdlAcrylicCart,
+		isGdlLocalDeliveryOption,
+		isGdlPickupOption,
+		isGdlWhatsAppDeliveryOption,
+		isZmgAddress,
+		openAcrilicoGdlWhatsApp
+	} from '$lib/acrilicoGdl';
 
 	let cartItems = $state<any[]>([]);
 	let submitting = $state(false);
@@ -80,6 +94,8 @@
 		cartItems.reduce((sum, item) => sum + cartLineUnitPrice(item) * item.quantity, 0)
 	);
 
+	let isGdlCart = $derived(isGdlAcrylicCart(cartItems));
+
 	// IVA ya está incluido en los precios
 	let shipping = $derived(selectedShippingOption ? selectedShippingOption.price : 0);
 	let total = $derived(subtotal + shipping);
@@ -88,19 +104,26 @@
 	$effect(() => {
 		cart.subscribe((items) => {
 			cartItems = items;
-			shippingOptions = [];
-			selectedShippingOption = null;
-			showShippingOptions = false;
 			if (cartRequiresQuotation(items)) {
-				// If cart contains items requiring quotation, show modal instead
 				showQuotationModal = true;
+			}
+			if (!isGdlAcrylicCart(items)) {
+				shippingOptions = [];
+				selectedShippingOption = null;
+				showShippingOptions = false;
 			}
 		})();
 	});
 
 	$effect(() => {
+		if (!isGdlAcrylicCart(cartItems) || cartItems.length === 0) return;
+		applyGdlShippingOptions();
+	});
+
+	$effect(() => {
 		if (
 			cartItems.length > 0 &&
+			!isGdlAcrylicCart(cartItems) &&
 			!cartRequiresQuotation(cartItems) &&
 			!loadingShippingOptions &&
 			!showShippingOptions
@@ -109,8 +132,47 @@
 		}
 	});
 
+	$effect(() => {
+		if (!isGdlAcrylicCart(cartItems) || !selectedShippingOption) return;
+		if (isGdlPickupOption(selectedShippingOption)) {
+			if (formData.shipping_address.street !== GDL_WAREHOUSE_ADDRESS.street) {
+				formData.shipping_address = {
+					street: GDL_WAREHOUSE_ADDRESS.street,
+					city: GDL_WAREHOUSE_ADDRESS.city,
+					state: GDL_WAREHOUSE_ADDRESS.state,
+					zip_code: GDL_WAREHOUSE_ADDRESS.zip_code,
+					country: GDL_WAREHOUSE_ADDRESS.country
+				};
+			}
+			return;
+		}
+		if (
+			isGdlLocalDeliveryOption(selectedShippingOption) &&
+			formData.shipping_address.street === GDL_WAREHOUSE_ADDRESS.street
+		) {
+			formData.shipping_address = {
+				street: '',
+				city: '',
+				state: 'Jalisco',
+				zip_code: '',
+				country: 'México'
+			};
+		}
+	});
+
+	function applyGdlShippingOptions() {
+		const options = getGdlShippingOptions(subtotal);
+		shippingOptions = options;
+		showShippingOptions = true;
+		if (!selectedShippingOption || !options.some((o) => o.id === selectedShippingOption.id)) {
+			selectedShippingOption = options[0];
+		}
+	}
+
 	function isQuotationShippingOption(option: any): boolean {
 		if (!option) return false;
+		if (isGdlPickupOption(option) || option.id === 'gdl-local-free') return false;
+		if (isGdlWhatsAppDeliveryOption(option)) return true;
 		const name = String(option.name || '').toLowerCase();
 		const service = String(option.service || '').toLowerCase();
 		const description = String(option.description || '').toLowerCase();
@@ -125,7 +187,39 @@
 		);
 	}
 
+	function checkoutSubmitLabel(): string {
+		if (submitting) return 'Procesando...';
+		if (!selectedShippingOption) {
+			return isGdlCart ? 'Selecciona cómo recibirlo' : 'Selecciona envío primero';
+		}
+		if (isGdlPickupOption(selectedShippingOption)) return 'Pagar y recoger en bodega';
+		if (selectedShippingOption.id === 'gdl-local-free') return 'Pagar con envío gratis';
+		if (isGdlWhatsAppDeliveryOption(selectedShippingOption)) {
+			return 'Enviar pedido por WhatsApp para entrega local';
+		}
+		if (isQuotationShippingOption(selectedShippingOption)) {
+			return 'Continuar por WhatsApp para cotizar envío';
+		}
+		return 'Pagar y Finalizar Compra';
+	}
+
 	function redirectToWhatsAppShippingQuotation() {
+		if (isGdlWhatsAppDeliveryOption(selectedShippingOption)) {
+			openAcrilicoGdlWhatsApp(
+				buildCheckoutLocalDeliveryWhatsAppMessage({
+					customerName: formData.customer_name,
+					customerPhone: formData.customer_phone,
+					street: formData.shipping_address.street,
+					city: formData.shipping_address.city,
+					zip: formData.shipping_address.zip_code,
+					items: cartItems,
+					subtotal
+				}),
+				'acrilico_gdl_checkout'
+			);
+			return;
+		}
+
 		const itemsText = cartItems
 			.map((item) => `${item.product.name} x${item.quantity}`)
 			.join(', ');
@@ -262,14 +356,31 @@
 		}
 
 		// Validate form
-		if (
-			!formData.customer_name ||
-			!formData.customer_email ||
-			!formData.shipping_address.street ||
-			!formData.shipping_address.city
-		) {
+		if (!formData.customer_name || !formData.customer_email) {
 			error = 'Por favor completa todos los campos requeridos';
 			return;
+		}
+
+		if (isGdlCart && isGdlWhatsAppDeliveryOption(selectedShippingOption) && !formData.customer_phone) {
+			error = 'Ingresa un teléfono para coordinar la entrega por WhatsApp';
+			return;
+		}
+
+		if (isGdlCart && isGdlLocalDeliveryOption(selectedShippingOption)) {
+			if (!formData.shipping_address.street || !formData.shipping_address.city) {
+				error = 'Por favor completa la dirección de entrega en la ZMG';
+				return;
+			}
+			if (!isZmgAddress(formData.shipping_address.city, formData.shipping_address.zip_code)) {
+				error =
+					'La entrega local gratis o por WhatsApp aplica solo en la zona metropolitana de Guadalajara';
+				return;
+			}
+		} else if (!isGdlCart || !isGdlPickupOption(selectedShippingOption)) {
+			if (!formData.shipping_address.street || !formData.shipping_address.city) {
+				error = 'Por favor completa todos los campos requeridos';
+				return;
+			}
 		}
 
 		if (!selectedShippingOption) {
@@ -321,7 +432,12 @@
 					total_amount: total,
 					status: 'pending',
 					payment_status: 'pending',
-					notes: formData.notes
+					notes: isGdlCart
+						? gdlOrderNotes({
+								userNotes: formData.notes,
+								fulfillmentId: selectedShippingOption.id
+							})
+						: formData.notes
 				})
 			});
 			const orderData = await orderResponse.json();
@@ -647,6 +763,14 @@
 	<!-- Regular Checkout Form -->
 	<div class="container mx-auto px-4 py-8">
 	<h1 class="text-4xl font-bold mb-8">Finalizar Compra</h1>
+	{#if isGdlCart}
+		<div class="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-amber-900">
+			<p class="font-semibold">Pedido de acrílico en Guadalajara</p>
+			<p class="text-sm mt-1">
+				Puedes pagar y recoger en bodega, o pedir entrega local en la ZMG. Envío gratis desde {formatPrice(ZMG_FREE_SHIPPING_MIN)}.
+			</p>
+		</div>
+	{/if}
 
 	{#if cartItems.length === 0}
 		<div class="text-center py-12 bg-gray-50 rounded-lg">
@@ -695,29 +819,96 @@
 							</div>
 
 							<div>
-								<label for="phone" class="block text-sm font-semibold mb-2">Teléfono</label>
+								<label for="phone" class="block text-sm font-semibold mb-2">
+									Teléfono{isGdlCart ? ' *' : ''}
+								</label>
 								<input
 									type="tel"
 									id="phone"
 									bind:value={formData.customer_phone}
+									required={isGdlCart}
 									class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
 								/>
 							</div>
 						</div>
 					</div>
 
-					<!-- Shipping Address -->
-					<div class="bg-white rounded-lg shadow-md p-6">
-						<h2 class="text-2xl font-bold mb-4">Dirección de Envío</h2>
+					{#if isGdlCart && showShippingOptions && shippingOptions.length > 0}
+						<div class="bg-white rounded-lg shadow-md p-6">
+							<h2 class="text-2xl font-bold mb-4">Cómo quieres recibirlo</h2>
+							<div class="space-y-3">
+								{#each shippingOptions as option}
+									<label class="flex items-center p-4 border-2 rounded-lg cursor-pointer transition hover:border-blue-500 {selectedShippingOption?.id === option.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}">
+										<input
+											type="radio"
+											name="shipping"
+											value={option.id}
+											checked={selectedShippingOption?.id === option.id}
+											onchange={() => (selectedShippingOption = option)}
+											class="mr-3"
+										/>
+										<div class="flex-1">
+											<div class="flex justify-between items-start gap-3">
+												<div>
+													<p class="font-semibold">{option.name}</p>
+													<p class="text-sm text-gray-600">{option.description}</p>
+												</div>
+												<p class="font-bold text-blue-600">
+													{option.whatsappQuote ? 'Por WhatsApp' : formatPrice(option.price)}
+												</p>
+											</div>
+										</div>
+									</label>
+								{/each}
+							</div>
+						</div>
+					{/if}
 
+					<!-- Shipping Address -->
+					{#if !isGdlCart || isGdlLocalDeliveryOption(selectedShippingOption) || isGdlPickupOption(selectedShippingOption)}
+					<div class="bg-white rounded-lg shadow-md p-6">
+						<h2 class="text-2xl font-bold mb-4">
+							{isGdlPickupOption(selectedShippingOption)
+								? 'Recolección en bodega'
+								: isGdlLocalDeliveryOption(selectedShippingOption)
+									? 'Dirección de entrega en la ZMG'
+									: 'Dirección de Envío'}
+						</h2>
+
+						{#if isGdlPickupOption(selectedShippingOption)}
+							<p class="text-gray-700">
+								Después de pagar, recoge en <strong>{GDL_WAREHOUSE_LABEL}</strong>.
+							</p>
+							<div class="mt-4">
+								<label for="notes-pickup" class="block text-sm font-semibold mb-2">
+									Notas (Opcional)
+								</label>
+								<textarea
+									id="notes-pickup"
+									bind:value={formData.notes}
+									rows="3"
+									class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+								></textarea>
+							</div>
+						{:else}
 						<div class="space-y-4">
+							{#if isGdlLocalDeliveryOption(selectedShippingOption)}
+								<p class="text-sm text-gray-600">
+									Entrega en Guadalajara, Zapopan, Tlaquepaque, Tonalá, Tlajomulco y municipios de la ZMG.
+									{#if subtotal >= ZMG_FREE_SHIPPING_MIN}
+										Envío gratis en esta compra.
+									{:else}
+										Por ser menor a {formatPrice(ZMG_FREE_SHIPPING_MIN)}, coordinamos el costo por WhatsApp.
+									{/if}
+								</p>
+							{/if}
 							<div>
 								<label for="street" class="block text-sm font-semibold mb-2">Calle y Número *</label>
 								<input
 									type="text"
 									id="street"
 									bind:value={formData.shipping_address.street}
-									required
+									required={!isGdlPickupOption(selectedShippingOption)}
 									class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
 								/>
 							</div>
@@ -729,7 +920,7 @@
 										type="text"
 										id="city"
 										bind:value={formData.shipping_address.city}
-										required
+										required={!isGdlPickupOption(selectedShippingOption)}
 										class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
 									/>
 								</div>
@@ -752,7 +943,7 @@
 										type="text"
 										id="zip"
 										bind:value={formData.shipping_address.zip_code}
-										required
+										required={!isGdlPickupOption(selectedShippingOption)}
 										class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
 									/>
 								</div>
@@ -781,7 +972,7 @@
 								></textarea>
 							</div>
 
-							<!-- Load Shipping Options Button -->
+							{#if !isGdlCart}
 							<button
 								type="button"
 								onclick={loadShippingOptions}
@@ -790,11 +981,14 @@
 							>
 								{loadingShippingOptions ? 'Consultando...' : 'Consultar Opciones de Envío'}
 							</button>
+							{/if}
 						</div>
+						{/if}
 					</div>
+					{/if}
 
-					<!-- Shipping Options -->
-					{#if showShippingOptions && shippingOptions.length > 0}
+					<!-- Shipping Options (nacional) -->
+					{#if !isGdlCart && showShippingOptions && shippingOptions.length > 0}
 						<div class="bg-white rounded-lg shadow-md p-6">
 							<h2 class="text-2xl font-bold mb-4">Opciones de Envío</h2>
 							
@@ -859,18 +1053,18 @@
 						disabled={submitting || !selectedShippingOption}
 						class="w-full bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 transition disabled:bg-gray-400"
 					>
-						{submitting
-							? 'Procesando...'
-							: selectedShippingOption
-								? (isQuotationShippingOption(selectedShippingOption)
-									? 'Continuar por WhatsApp para cotizar envío'
-									: 'Pagar y Finalizar Compra')
-								: 'Selecciona envío primero'}
+						{checkoutSubmitLabel()}
 					</button>
 
 					{#if selectedShippingOption}
 						<p class="text-center text-sm text-gray-600">
-							{#if isQuotationShippingOption(selectedShippingOption)}
+							{#if isGdlPickupOption(selectedShippingOption)}
+								Pagas ahora y recoges en bodega de Zapopan.
+							{:else if selectedShippingOption.id === 'gdl-local-free'}
+								Pagas ahora; el envío local en la ZMG va incluido.
+							{:else if isGdlWhatsAppDeliveryOption(selectedShippingOption)}
+								Te enviamos a WhatsApp con tu pedido listo para coordinar la entrega local.
+							{:else if isQuotationShippingOption(selectedShippingOption)}
 								Te enviaremos a WhatsApp para cotizar el envío antes de cobrar.
 							{:else}
 								Al hacer clic en "Pagar y Finalizar Compra", se procesará tu pago de forma segura.
@@ -913,7 +1107,17 @@
 						<div class="flex justify-between">
 
 							<span class="text-gray-600">Envío:</span>
-							<span>{cartRequiresQuotation(cartItems) ? 'Por cotizar' : (selectedShippingOption ? formatPrice(shipping) : 'Pendiente')}</span>
+							<span>
+								{#if cartRequiresQuotation(cartItems) || isGdlWhatsAppDeliveryOption(selectedShippingOption)}
+									Por cotizar
+								{:else if isGdlPickupOption(selectedShippingOption)}
+									Recoger en bodega
+								{:else if selectedShippingOption}
+									{formatPrice(shipping)}
+								{:else}
+									Pendiente
+								{/if}
+							</span>
 						</div>
 						<div class="border-t pt-2 flex justify-between font-bold text-lg">
 							<span>Total:</span>

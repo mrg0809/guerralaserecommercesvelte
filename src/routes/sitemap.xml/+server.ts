@@ -5,6 +5,7 @@ const SITE_URL = 'https://guerralaser.com';
 
 const staticEntries = [
 	{ loc: `${SITE_URL}/`, priority: 1.0 },
+	{ loc: `${SITE_URL}/acrilico-gdl`, priority: 0.9 },
 	{ loc: `${SITE_URL}/categorias/maquinaria`, priority: 0.9 },
 	{ loc: `${SITE_URL}/categorias/refacciones`, priority: 0.9 },
 	{ loc: `${SITE_URL}/categorias/chillers-compresores-extractores`, priority: 0.9 },

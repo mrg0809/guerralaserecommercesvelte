@@ -8,6 +8,7 @@
 	import { supabase } from '$lib/supabaseClient';
 	import { getDisplayPrice, textMatchesSearch } from '$lib/utils';
 	import { trackPageView, trackWhatsAppContact, loadGoogleAnalytics } from '$lib/gtag';
+	import { persistAcrilicoGdlCampaign, trackAcrilicoGdlWhatsApp } from '$lib/acrilicoGdl';
 	import ReauthModal from '$lib/components/ReauthModal.svelte';
 	import CookieBanner from '$lib/components/CookieBanner.svelte';
 	import LazyGoogleMap from '$lib/components/LazyGoogleMap.svelte';
@@ -83,6 +84,9 @@ page.subscribe(($page) => {
 	isStandaloneApp = currentPath.startsWith('/mobile');
 	if (!isStandaloneApp) {
 		trackPageView(currentPath);
+	}
+	if (typeof window !== 'undefined' && currentPath.startsWith('/acrilico-gdl')) {
+		persistAcrilicoGdlCampaign($page.url.searchParams);
 	}
 });
 	
@@ -390,8 +394,11 @@ page.subscribe(($page) => {
 		const fullText = `${base}${context}`;
 		const url = `https://wa.me/${phone}?text=${encodeURIComponent(fullText)}`;
 		
-		// Rastrear evento de contacto por WhatsApp
-		trackWhatsAppContact(context || 'chat_flotante');
+		if (typeof window !== 'undefined' && window.location.pathname.startsWith('/acrilico-gdl')) {
+			trackAcrilicoGdlWhatsApp('acrilico_gdl_flotante');
+		} else {
+			trackWhatsAppContact(context || 'chat_flotante');
+		}
 		
 		if (typeof window !== 'undefined') {
 			window.open(url, '_blank', 'noopener,noreferrer');
