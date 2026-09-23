@@ -29,7 +29,8 @@
 	let categories: Category[] = $state([]);
 	let whatsappRouting = $state<WhatsappRoutingConfig>({
 		defaultPhone: DEFAULT_WHATSAPP_PHONE,
-		categoryPhoneMap: {}
+		categoryPhoneMap: {},
+		acrilicoGdlPhone: DEFAULT_WHATSAPP_PHONE
 	});
 	let productCategoryId = $state<string | null>(null);
 	let resolvedWhatsAppPhone = $state(DEFAULT_WHATSAPP_PHONE);
