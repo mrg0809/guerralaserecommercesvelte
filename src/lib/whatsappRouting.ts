@@ -6,6 +6,7 @@ export type WhatsappAgent = {
 	phone: string;
 	is_default: boolean;
 	is_active: boolean;
+	is_acrilico_gdl: boolean;
 	category_ids: string[];
 };
 
@@ -13,6 +14,8 @@ export type WhatsappRoutingConfig = {
 	defaultPhone: string;
 	/** categoryId -> phone digits */
 	categoryPhoneMap: Record<string, string>;
+	/** Número para /acrilico-gdl; si no hay asignación, es defaultPhone */
+	acrilicoGdlPhone: string;
 };
 
 type CategoryLike = {
@@ -54,7 +57,11 @@ export function buildWhatsAppRoutingConfig(agents: WhatsappAgent[]): WhatsappRou
 		}
 	}
 
-	return { defaultPhone, categoryPhoneMap };
+	const gdlAgent = active.find((a) => a.is_acrilico_gdl);
+	const acrilicoGdlPhone =
+		normalizeWhatsAppPhone(gdlAgent?.phone || '') || defaultPhone;
+
+	return { defaultPhone, categoryPhoneMap, acrilicoGdlPhone };
 }
 
 export function findCategoryBySlug(
@@ -92,6 +99,10 @@ export function resolveWhatsAppPhoneFromPath(
 	routing: WhatsappRoutingConfig,
 	productCategoryId?: string | null
 ): string {
+	if (pathname === '/acrilico-gdl' || pathname.startsWith('/acrilico-gdl/')) {
+		return routing.acrilicoGdlPhone || routing.defaultPhone;
+	}
+
 	const categoryMatch = pathname.match(/^\/categorias\/([^/?#]+)/);
 	if (categoryMatch?.[1]) {
 		const cat = findCategoryBySlug(categories, categoryMatch[1]);

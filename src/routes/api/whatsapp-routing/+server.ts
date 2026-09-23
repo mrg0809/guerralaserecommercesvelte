@@ -13,7 +13,7 @@ export const GET: RequestHandler = async () => {
 
 		const { data: agents, error } = await supabase
 			.from('whatsapp_agents')
-			.select('id, label, phone, is_default, is_active, whatsapp_agent_categories(category_id)')
+			.select('id, label, phone, is_default, is_active, is_acrilico_gdl, whatsapp_agent_categories(category_id)')
 			.eq('is_active', true);
 
 		if (error) {
@@ -21,7 +21,8 @@ export const GET: RequestHandler = async () => {
 				success: true,
 				routing: {
 					defaultPhone: DEFAULT_WHATSAPP_PHONE,
-					categoryPhoneMap: {}
+					categoryPhoneMap: {},
+					acrilicoGdlPhone: DEFAULT_WHATSAPP_PHONE
 				},
 				warning: error.message
 			});
@@ -33,6 +34,7 @@ export const GET: RequestHandler = async () => {
 			phone: a.phone,
 			is_default: !!a.is_default,
 			is_active: true,
+			is_acrilico_gdl: !!a.is_acrilico_gdl,
 			category_ids: (a.whatsapp_agent_categories || [])
 				.map((l: any) => l.category_id)
 				.filter(Boolean)
@@ -47,7 +49,8 @@ export const GET: RequestHandler = async () => {
 			success: true,
 			routing: {
 				defaultPhone: DEFAULT_WHATSAPP_PHONE,
-				categoryPhoneMap: {}
+				categoryPhoneMap: {},
+				acrilicoGdlPhone: DEFAULT_WHATSAPP_PHONE
 			},
 			warning: error?.message
 		});

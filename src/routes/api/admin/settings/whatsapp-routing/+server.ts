@@ -5,7 +5,7 @@ import { normalizeWhatsAppPhone, type WhatsappAgent } from '$lib/whatsappRouting
 async function loadAgents(supabaseAdmin: any): Promise<WhatsappAgent[]> {
 	const { data: agents, error } = await supabaseAdmin
 		.from('whatsapp_agents')
-		.select('id, label, phone, is_default, is_active, created_at')
+		.select('id, label, phone, is_default, is_active, is_acrilico_gdl, created_at')
 		.order('created_at', { ascending: true });
 
 	if (error) throw error;
@@ -29,6 +29,7 @@ async function loadAgents(supabaseAdmin: any): Promise<WhatsappAgent[]> {
 		phone: a.phone,
 		is_default: !!a.is_default,
 		is_active: a.is_active !== false,
+		is_acrilico_gdl: !!a.is_acrilico_gdl,
 		category_ids: byAgent.get(a.id) || []
 	}));
 }
@@ -72,6 +73,7 @@ export const PUT: RequestHandler = async ({ request }) => {
 			phone: string;
 			is_default: boolean;
 			is_active: boolean;
+			is_acrilico_gdl: boolean;
 			category_ids: string[];
 		}> = [];
 
@@ -82,6 +84,7 @@ export const PUT: RequestHandler = async ({ request }) => {
 			const phone = normalizeWhatsAppPhone(String(raw?.phone || ''));
 			const is_default = !!raw?.is_default;
 			const is_active = raw?.is_active !== false;
+			const is_acrilico_gdl = !!raw?.is_acrilico_gdl;
 			const category_ids = Array.isArray(raw?.category_ids)
 				? [...new Set(raw.category_ids.map((id: unknown) => String(id)).filter(Boolean))]
 				: [];
@@ -115,6 +118,7 @@ export const PUT: RequestHandler = async ({ request }) => {
 				phone,
 				is_default,
 				is_active,
+				is_acrilico_gdl,
 				category_ids
 			});
 		}
@@ -133,10 +137,18 @@ export const PUT: RequestHandler = async ({ request }) => {
 			);
 		}
 
+		const activeGdl = normalized.filter((a) => a.is_active && a.is_acrilico_gdl);
+		if (activeGdl.length > 1) {
+			return json(
+				{ success: false, error: 'Solo puede haber un número activo para /acrilico-gdl' },
+				{ status: 400 }
+			);
+		}
+
 		const sb = auth.supabaseAdmin as any;
 
 		// Desmarcar defaults actuales para poder reasignar
-		await sb.from('whatsapp_agents').update({ is_default: false }).neq('id', '00000000-0000-0000-0000-000000000000');
+		await sb.from('whatsapp_agents').update({ is_default: false, is_acrilico_gdl: false }).neq('id', '00000000-0000-0000-0000-000000000000');
 
 		const { data: existing } = await sb.from('whatsapp_agents').select('id');
 		const existingIds = new Set((existing || []).map((r: any) => r.id as string));
@@ -153,6 +165,7 @@ export const PUT: RequestHandler = async ({ request }) => {
 						phone: agent.phone,
 						is_default: agent.is_default,
 						is_active: agent.is_active,
+						is_acrilico_gdl: agent.is_acrilico_gdl,
 						updated_at: new Date().toISOString()
 					})
 					.eq('id', agentId);
@@ -164,7 +177,8 @@ export const PUT: RequestHandler = async ({ request }) => {
 						label: agent.label,
 						phone: agent.phone,
 						is_default: agent.is_default,
-						is_active: agent.is_active
+						is_active: agent.is_active,
+						is_acrilico_gdl: agent.is_acrilico_gdl
 					})
 					.select('id')
 					.single();

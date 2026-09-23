@@ -1,5 +1,5 @@
 import { formatPrice, normalizeSearchText } from '$lib/utils';
-import { DEFAULT_WHATSAPP_PHONE } from '$lib/whatsappRouting';
+import { DEFAULT_WHATSAPP_PHONE, type WhatsappRoutingConfig } from '$lib/whatsappRouting';
 import { trackAdsConversion, trackWhatsAppContact } from '$lib/gtag';
 import type { CartItem } from '$lib/types';
 
@@ -127,11 +127,38 @@ export function trackAcrilicoGdlWhatsApp(context = ACRILICO_GDL_WHATSAPP_CONTEXT
 	trackAdsConversion(AW_WHATSAPP_GDL_SEND_TO);
 }
 
-export function openAcrilicoGdlWhatsApp(message: string, context = ACRILICO_GDL_WHATSAPP_CONTEXT): void {
+let cachedGdlPhone: string | null = null;
+let gdlPhonePromise: Promise<string> | null = null;
+
+async function resolveAcrilicoGdlPhone(): Promise<string> {
+	if (cachedGdlPhone) return cachedGdlPhone;
+	if (gdlPhonePromise) return gdlPhonePromise;
+
+	gdlPhonePromise = fetch('/api/whatsapp-routing')
+		.then((r) => r.json())
+		.then((data) => {
+			const routing = data?.routing as WhatsappRoutingConfig | undefined;
+			cachedGdlPhone =
+				routing?.acrilicoGdlPhone || routing?.defaultPhone || DEFAULT_WHATSAPP_PHONE;
+			return cachedGdlPhone;
+		})
+		.catch(() => DEFAULT_WHATSAPP_PHONE)
+		.finally(() => {
+			gdlPhonePromise = null;
+		});
+
+	return gdlPhonePromise;
+}
+
+export async function openAcrilicoGdlWhatsApp(
+	message: string,
+	context = ACRILICO_GDL_WHATSAPP_CONTEXT
+): Promise<void> {
 	const campaign = campaignLineForWhatsApp();
 	const full = campaign ? `${message}\n${campaign}` : message;
 	trackAcrilicoGdlWhatsApp(context);
-	const url = `https://wa.me/${DEFAULT_WHATSAPP_PHONE}?text=${encodeURIComponent(full)}`;
+	const phone = await resolveAcrilicoGdlPhone();
+	const url = `https://wa.me/${phone}?text=${encodeURIComponent(full)}`;
 	window.open(url, '_blank', 'noopener,noreferrer');
 }
 

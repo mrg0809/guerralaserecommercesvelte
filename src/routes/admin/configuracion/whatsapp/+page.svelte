@@ -22,6 +22,7 @@
 		phone: string;
 		is_default: boolean;
 		is_active: boolean;
+		is_acrilico_gdl: boolean;
 		category_ids: string[];
 	};
 
@@ -53,6 +54,7 @@
 			phone: a.phone,
 			is_default: a.is_default,
 			is_active: a.is_active,
+			is_acrilico_gdl: !!a.is_acrilico_gdl,
 			category_ids: [...a.category_ids]
 		};
 	}
@@ -83,6 +85,7 @@
 						phone: '523334758653',
 						is_default: true,
 						is_active: true,
+						is_acrilico_gdl: false,
 						category_ids: []
 					}
 				];
@@ -103,6 +106,7 @@
 				phone: '',
 				is_default: agents.every((a) => !a.is_default),
 				is_active: true,
+				is_acrilico_gdl: false,
 				category_ids: []
 			}
 		];
@@ -125,6 +129,13 @@
 		agents = agents.map((a) => ({
 			...a,
 			is_default: a.key === key
+		}));
+	}
+
+	function setAcrilicoGdl(key: string) {
+		agents = agents.map((a) => ({
+			...a,
+			is_acrilico_gdl: a.key === key ? !a.is_acrilico_gdl : false
 		}));
 	}
 
@@ -188,6 +199,7 @@
 						phone: a.phone,
 						is_default: a.is_default,
 						is_active: a.is_active,
+						is_acrilico_gdl: a.is_acrilico_gdl,
 						category_ids: a.category_ids
 					}))
 				})
@@ -213,7 +225,8 @@
 		<p class="text-gray-600 mt-1">
 			Asigna números a categorías. Si el cliente está en una categoría (o un producto de esa
 			rama), el botón flotante enviará el mensaje a ese número. En el resto del sitio se usa el
-			número predeterminado.
+			número predeterminado. Para la landing <code class="text-sm">/acrilico-gdl</code> marca
+			un número específico; si no marcas ninguno, también se usa el predeterminado.
 		</p>
 	</div>
 
@@ -280,6 +293,14 @@
 						<label class="inline-flex items-center gap-2">
 							<input type="checkbox" bind:checked={agent.is_active} />
 							Activo
+						</label>
+						<label class="inline-flex items-center gap-2">
+							<input
+								type="checkbox"
+								checked={agent.is_acrilico_gdl}
+								onchange={() => setAcrilicoGdl(agent.key)}
+							/>
+							Landing /acrilico-gdl
 						</label>
 					</div>
 
