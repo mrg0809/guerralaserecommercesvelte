@@ -443,6 +443,21 @@
 		pushCartLine(c);
 	}
 
+	function findCandidateByExactSku(raw: string): CandidateItem | undefined {
+		const needle = raw.trim().toLowerCase();
+		if (!needle) return undefined;
+		return candidates.find((c) => (c.sku || '').trim().toLowerCase() === needle);
+	}
+
+	function onProductSearchKeydown(e: KeyboardEvent) {
+		if (e.key !== 'Enter') return;
+		e.preventDefault();
+		const match = findCandidateByExactSku(productSearch);
+		if (!match) return;
+		addToCart(match);
+		productSearch = '';
+	}
+
 	function confirmAcrylicCut(cut: AcrylicCut) {
 		const c = acrylicPickerCandidate;
 		acrylicPickerOpen = false;
@@ -927,9 +942,10 @@
 						</div>
 						<input
 							type="text"
-							placeholder="Nombre o SKU"
+							placeholder="Nombre o SKU (Enter para escanear)"
 							class="w-full border rounded-md px-3 py-2"
 							bind:value={productSearch}
+							onkeydown={onProductSearchKeydown}
 						/>
 
 						<div class="mt-3 grid grid-cols-1 gap-3">

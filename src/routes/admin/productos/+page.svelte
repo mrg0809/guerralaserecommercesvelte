@@ -3,6 +3,7 @@
 	import { supabase } from '$lib/supabaseClient';
 	import { formatPrice, generateSlug, getDisplayPrice, getDisplayStock } from '$lib/utils';
 	import { getProductImageUrl, getImageKitUrl } from '$lib/storage';
+	import { collectProductLabelItems, openProductLabelsPdf } from '$lib/productLabelPdf';
 	import type { Product, Category, ProductSpecification, Discount, Tag, ProductMedia, ProductVariant } from '$lib/types';
 
 	let products: Product[] = $state([]);
@@ -22,6 +23,7 @@
 	let shippingTypes: ShippingTypeOption[] = $state([]);
 	let selectedShippingTypeIds: string[] = $state([]);
 	let loading = $state(true);
+	let printingLabels = $state(false);
 	let showModal = $state(false);
 	let editingProduct = $state<Product | null>(null);
 	let categoryHierarchy: Record<string, string> = $state({});
@@ -1932,6 +1934,60 @@
 			alert('Error al eliminar producto: ' + error.message);
 		}
 	}
+
+	async function printLabelItems(
+		items: ReturnType<typeof collectProductLabelItems>['items'],
+		skippedWithoutSku: number
+	) {
+		if (items.length === 0) {
+			alert('No se puede imprimir: faltan SKU en el producto o sus variantes.');
+			return;
+		}
+		printingLabels = true;
+		try {
+			await openProductLabelsPdf(items, window.location.origin);
+			if (skippedWithoutSku > 0) {
+				alert(
+					`Se generaron ${items.length} etiqueta(s). Se omitieron ${skippedWithoutSku} pieza(s) sin SKU.`
+				);
+			}
+		} catch (error: any) {
+			alert(error?.message || 'No se pudo generar el PDF de etiquetas.');
+		} finally {
+			printingLabels = false;
+		}
+	}
+
+	async function printProductLabels(product: Product) {
+		const { items, skippedWithoutSku } = collectProductLabelItems(
+			product,
+			productVariantsMap[product.id] || []
+		);
+		await printLabelItems(items, skippedWithoutSku);
+	}
+
+	async function printFilteredProductLabels() {
+		const allItems: ReturnType<typeof collectProductLabelItems>['items'] = [];
+		let skippedWithoutSku = 0;
+		for (const product of filteredProducts) {
+			const result = collectProductLabelItems(product, productVariantsMap[product.id] || []);
+			allItems.push(...result.items);
+			skippedWithoutSku += result.skippedWithoutSku;
+		}
+		await printLabelItems(allItems, skippedWithoutSku);
+	}
+
+	async function printModalProductLabels() {
+		const { items, skippedWithoutSku } = collectProductLabelItems(
+			{
+				name: formData.name || editingProduct?.name || 'Producto',
+				sku: formData.sku || editingProduct?.sku,
+				base_price: formData.base_price
+			},
+			variants
+		);
+		await printLabelItems(items, skippedWithoutSku);
+	}
 </script>
 
 <svelte:head>
@@ -1941,13 +1997,21 @@
 <div class="container mx-auto px-4 py-8">
 	<div class="flex justify-between items-center mb-8">
 		<h1 class="text-4xl font-bold">Gestión de Productos</h1>
-		<div class="flex gap-4">
+		<div class="flex flex-wrap gap-4 justify-end">
 			<a
 				href="/admin"
 				class="px-6 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition"
 			>
 				← Volver
 			</a>
+			<button
+				type="button"
+				onclick={() => printFilteredProductLabels()}
+				disabled={printingLabels || filteredProducts.length === 0}
+				class="px-6 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+			>
+				{printingLabels ? 'Generando…' : 'Imprimir etiquetas filtradas'}
+			</button>
 			<a
 				href="/admin/productos/editar-precios"
 				class="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition flex items-center gap-2"
@@ -2111,6 +2175,14 @@
 								{/if}
 							</td>
 							<td class="px-4 py-3 text-right">
+								<button
+									onclick={() => printProductLabels(product)}
+									disabled={printingLabels}
+									class="text-amber-700 hover:text-amber-900 mr-3 disabled:opacity-50"
+									title="Imprimir etiquetas"
+								>
+									Etiqueta
+								</button>
 								<button
 									onclick={() => openModal(product)}
 									class="text-blue-600 hover:text-blue-800 mr-3"
@@ -3528,6 +3600,16 @@
 
 				<!-- Footer con botones -->
 				<div class="border-t bg-gray-50 px-6 py-4 flex gap-4 rounded-b-lg">
+					{#if editingProduct}
+						<button
+							type="button"
+							onclick={() => printModalProductLabels()}
+							disabled={printingLabels || uploadingImages}
+							class="px-6 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+						>
+							{printingLabels ? 'Generando…' : 'Imprimir etiquetas'}
+						</button>
+					{/if}
 					<button
 						type="button"
 						onclick={() => {
