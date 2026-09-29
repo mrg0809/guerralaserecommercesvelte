@@ -90,6 +90,13 @@
 				},
 				{
 					kind: 'link',
+					href: '/admin/etiquetas',
+					label: 'Etiquetas',
+					icon: '🏷️',
+					permission: 'view_products'
+				},
+				{
+					kind: 'link',
 					href: '/admin/importar',
 					label: 'Importar Productos',
 					icon: '📥',
