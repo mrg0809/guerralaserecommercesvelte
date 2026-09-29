@@ -1945,7 +1945,7 @@
 		}
 		printingLabels = true;
 		try {
-			await openProductLabelsPdf(items, window.location.origin);
+			await openProductLabelsPdf(items, window.location.origin, 'large');
 			if (skippedWithoutSku > 0) {
 				alert(
 					`Se generaron ${items.length} etiqueta(s). Se omitieron ${skippedWithoutSku} pieza(s) sin SKU.`
