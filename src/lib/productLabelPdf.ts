@@ -62,6 +62,59 @@ export function expandLabelCopies(item: ProductLabelItem, quantity: number): Pro
 	return Array.from({ length: n }, () => item);
 }
 
+type LogoImage = { dataUrl: string; format: 'PNG' | 'JPEG'; nw: number; nh: number };
+
+function fitRectMm(naturalW: number, naturalH: number, maxW: number, maxH: number): { w: number; h: number } {
+	if (naturalW <= 0 || naturalH <= 0) return { w: maxW, h: maxH };
+	const ratio = naturalW / naturalH;
+	let w = maxW;
+	let h = w / ratio;
+	if (h > maxH) {
+		h = maxH;
+		w = h * ratio;
+	}
+	return { w, h };
+}
+
+async function loadLogo(logoUrl = '/logorectangular.png'): Promise<LogoImage | null> {
+	try {
+		const res = await fetch(logoUrl);
+		if (!res.ok) return null;
+		const blob = await res.blob();
+		const mime = blob.type || '';
+		const format: 'PNG' | 'JPEG' = mime.includes('jpeg') || mime.includes('jpg') ? 'JPEG' : 'PNG';
+		const dataUrl = await new Promise<string>((resolve, reject) => {
+			const reader = new FileReader();
+			reader.onloadend = () => resolve(String(reader.result));
+			reader.onerror = () => reject(new Error('read'));
+			reader.readAsDataURL(blob);
+		});
+		const { nw, nh } = await new Promise<{ nw: number; nh: number }>((resolve, reject) => {
+			const img = new Image();
+			img.onload = () => resolve({ nw: img.naturalWidth || img.width, nh: img.naturalHeight || img.height });
+			img.onerror = () => reject(new Error('logo'));
+			img.src = dataUrl;
+		});
+		return { dataUrl, format, nw, nh };
+	} catch {
+		return null;
+	}
+}
+
+function drawLogo(
+	doc: jsPDF,
+	logo: LogoImage,
+	x: number,
+	y: number,
+	maxW: number,
+	maxH: number,
+	align: 'left' | 'center' = 'left'
+): void {
+	const { w, h } = fitRectMm(logo.nw, logo.nh, maxW, maxH);
+	const drawX = align === 'center' ? x + (maxW - w) / 2 : x;
+	doc.addImage(logo.dataUrl, logo.format, drawX, y, w, h);
+}
+
 function barcodePngDataUrl(sku: string): string {
 	const canvas = document.createElement('canvas');
 	JsBarcode(canvas, sku, {
@@ -85,7 +138,12 @@ async function qrPngDataUrl(origin: string, sku: string): Promise<string> {
 	});
 }
 
-async function drawLargeLabel(doc: jsPDF, item: ProductLabelItem, origin: string): Promise<void> {
+async function drawLargeLabel(
+	doc: jsPDF,
+	item: ProductLabelItem,
+	origin: string,
+	logo: LogoImage | null
+): Promise<void> {
 	const pageW = doc.internal.pageSize.getWidth();
 	const pageH = doc.internal.pageSize.getHeight();
 	const margin = 2;
@@ -118,9 +176,20 @@ async function drawLargeLabel(doc: jsPDF, item: ProductLabelItem, origin: string
 	const barcodeH = 11;
 	const barcodeY = pageH - margin - barcodeH;
 	doc.addImage(barcodePngDataUrl(item.sku), 'PNG', margin, barcodeY, contentW, barcodeH);
+
+	if (logo) {
+		const gapTop = qrY + qrSize + 0.6;
+		const maxH = Math.max(4, barcodeY - gapTop - 0.4);
+		drawLogo(doc, logo, qrX, gapTop, qrSize, maxH, 'center');
+	}
 }
 
-async function drawSmallLabel(doc: jsPDF, item: ProductLabelItem, origin: string): Promise<void> {
+async function drawSmallLabel(
+	doc: jsPDF,
+	item: ProductLabelItem,
+	origin: string,
+	logo: LogoImage | null
+): Promise<void> {
 	const pageW = doc.internal.pageSize.getWidth();
 	const pageH = doc.internal.pageSize.getHeight();
 	const margin = 1.6;
@@ -146,7 +215,12 @@ async function drawSmallLabel(doc: jsPDF, item: ProductLabelItem, origin: string
 
 	doc.setFont('helvetica', 'bold');
 	doc.setFontSize(10);
-	doc.text(formatPrice(item.price), textX, Math.min(y, pageH - margin - 1));
+	const priceMaxY = pageH - margin - (logo ? 7.2 : 1.5);
+	doc.text(formatPrice(item.price), textX, Math.min(y, priceMaxY));
+
+	if (logo) {
+		drawLogo(doc, logo, textX, pageH - margin - 6, 20, 6, 'left');
+	}
 
 	doc.addImage(await qrPngDataUrl(origin, item.sku), 'PNG', qrX, qrY, qrSize, qrSize);
 }
@@ -179,13 +253,14 @@ export async function openProductLabelsPdf(
 
 	const { w, h } = sizeForFormat(format);
 	const doc = createLabelDocument(format);
+	const logo = await loadLogo();
 	const draw = format === 'small' ? drawSmallLabel : drawLargeLabel;
 
 	for (let i = 0; i < items.length; i++) {
 		if (i > 0) {
 			doc.addPage([w, h], 'landscape');
 		}
-		await draw(doc, items[i], origin);
+		await draw(doc, items[i], origin, logo);
 	}
 
 	const blob = doc.output('blob');
